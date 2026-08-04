@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>낙장도메인 품질 체커</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+/* UI-only bits; everything else comes from the shared /style.css */
+header{border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:5;}
+header .wrap{padding:10px 16px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
+header b{margin-right:auto;font-size:16px;}
+nav button{font:inherit;background:none;border:1px solid var(--line);padding:6px 12px;border-radius:6px;cursor:pointer;}
+nav button.on{background:var(--fg);color:#fff;border-color:var(--fg);}
+.screen{display:none;} .screen.on{display:block;}
+textarea{width:100%;min-height:150px;font:inherit;padding:8px;border:1px solid var(--line);border-radius:6px;}
+input[type=text],input[type=password],select{width:100%;font:inherit;padding:7px 8px;border:1px solid var(--line);border-radius:6px;}
+label{display:block;margin:10px 0 3px;font-weight:600;}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0;}
+button.go{font:inherit;padding:8px 16px;border-radius:6px;border:1px solid var(--fg);background:var(--fg);color:#fff;cursor:pointer;}
+button.plain{font:inherit;padding:8px 14px;border-radius:6px;border:1px solid var(--line);background:#fff;cursor:pointer;}
+button:disabled{opacity:.45;cursor:default;}
+.progress{height:16px;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel);}
+.progress>span{display:block;height:100%;width:0;background:var(--buy);transition:width .3s;}
+td button{font:inherit;font-size:13px;padding:3px 8px;border:1px solid var(--line);border-radius:5px;background:#fff;cursor:pointer;}
+.checks label{display:flex;gap:8px;align-items:center;font-weight:400;margin:6px 0;}
+.checks input{width:auto;}
+.err{color:var(--reject);}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <b>낙장도메인 품질 체커</b>
+  <nav>
+    <button data-go="check" class="on">검사</button>
+    <button data-go="detail">상세</button>
+    <button data-go="settings">설정</button>
+  </nav>
+</div></header>
+
+<div class="wrap">
+
+<!-- ① 검사 화면 -->
+<section id="check" class="screen on">
+  <div class="notice" id="keyWarn" hidden></div>
+
+  <label for="raw">검사할 도메인 (줄바꿈 또는 쉼표로 구분, 한 번에 최대 1,000개)</label>
+  <textarea id="raw" placeholder="example.com&#10;another-site.co.kr, third.net"></textarea>
+  <div class="row">
+    <input type="file" id="file" accept=".txt,.csv,text/plain" style="width:auto">
+    <span class="muted">.txt / .csv 파일을 열면 위 칸에 붙습니다.</span>
+  </div>
+  <div id="preview" class="muted"></div>
+
+  <div class="row">
+    <button class="go" id="start">검사 시작</button>
+    <button class="plain" id="stop" disabled>중단</button>
+    <button class="plain" id="resume" disabled>이어서 검사</button>
+    <button class="plain" id="report">HTML 보고서 만들기</button>
+  </div>
+
+  <div class="progress"><span id="bar"></span></div>
+  <p class="muted" id="progressText">아직 시작하지 않았습니다.</p>
+
+  <table>
+    <tr><th>도메인</th><th>판정</th><th>점수</th><th>취득 상태</th><th>한줄평</th><th></th></tr>
+    <tbody id="rows"></tbody>
+  </table>
+</section>
+
+<!-- ② 상세 화면 -->
+<section id="detail" class="screen">
+  <p class="muted" id="detailHint">검사 화면의 표에서 “상세”를 누르면 근거 전체가 여기에 나옵니다.</p>
+  <div id="detailBody"></div>
+</section>
+
+<!-- ③ 설정 화면 -->
+<section id="settings" class="screen">
+  <h2>API 키</h2>
+  <div class="notice">
+    Serper와 Open PageRank, OpenRouter 키가 없으면 <b>“매입 후보”(초록) 판정이 나오지 않습니다</b> — 필수 검사가 비어서 “검토 필요”(노랑)까지만 나옵니다.
+    키는 이 컴퓨터의 <code id="cfgPath"></code> 파일에만 저장되고 밖으로 나가지 않습니다.
+    이미 저장된 키는 ●●●●로 가려서 보여 주며, 칸을 비워 두고 저장하면 기존 키가 그대로 유지됩니다.
+  </div>
+
+  <label for="k_openrouter">OpenRouter 키 (AI 분석 · 필수)</label>
+  <input type="password" id="k_openrouter" autocomplete="off">
+  <p class="muted">발급: <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a> — 로그인 후 “Create key”를 누르면 됩니다.</p>
+
+  <label for="k_serper">Serper 키 (구글 색인 검사 · 필수)</label>
+  <input type="password" id="k_serper" autocomplete="off">
+  <p class="muted">발급: <a href="https://serper.dev/api-key" target="_blank" rel="noopener">serper.dev/api-key</a> — 카드 없이 무료 2,500쿼리.</p>
+
+  <label for="k_openpagerank">Open PageRank 키 (권위 점수 · 필수)</label>
+  <input type="password" id="k_openpagerank" autocomplete="off">
+  <p class="muted">발급: <a href="https://www.domcop.com/openpagerank/" target="_blank" rel="noopener">domcop.com/openpagerank</a> — 가입하면 화면에 키가 나옵니다.</p>
+
+  <label for="k_safebrowsing">구글 세이프 브라우징 키 (선택)</label>
+  <input type="password" id="k_safebrowsing" autocomplete="off">
+  <p class="muted">발급: <a href="https://console.cloud.google.com/apis/library/safebrowsing.googleapis.com" target="_blank" rel="noopener">구글 클라우드 콘솔</a> — 절차가 길어 건너뛰어도 됩니다.</p>
+
+  <label for="k_virustotal">바이러스토탈 키 (선택)</label>
+  <input type="password" id="k_virustotal" autocomplete="off">
+  <p class="muted">발급: <a href="https://www.virustotal.com/gui/my-apikey" target="_blank" rel="noopener">virustotal.com</a> — 무료는 분당 4건이라 느립니다.</p>
+
+  <h2>AI 모델</h2>
+  <select id="model"></select>
+  <p class="muted">고른 모델이 실패하면 나머지 두 개로 자동으로 넘어가고, 어떤 모델이 답했는지 보고서에 적힙니다.</p>
+
+  <h2>속도</h2>
+  <select id="speed">
+    <option value="adaptive">빠르게 시작(분당 30건) — 웨이백이 막으면 자동으로 분당 12건으로 낮춤</option>
+    <option value="safe">처음부터 안전하게(분당 12건)</option>
+  </select>
+
+  <h2>선택 검사</h2>
+  <div class="checks">
+    <label><input type="checkbox" id="enable_safebrowsing"> 세이프 브라우징 검사 켜기</label>
+    <label><input type="checkbox" id="enable_virustotal"> 바이러스토탈 검사 켜기 (느려집니다)</label>
+    <label><input type="checkbox" id="enable_capture"> 화면 캡쳐 켜기 (표가 다 나온 뒤 사진을 찍습니다)</label>
+  </div>
+
+  <div class="row"><button class="go" id="saveCfg">설정 저장</button><span id="cfgMsg" class="muted"></span></div>
+</section>
+
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const rows = new Map();
+let source = null;
+
+/* ---------- 화면 전환 ---------- */
+document.querySelectorAll("nav button").forEach((b) => {
+  b.onclick = () => show(b.dataset.go);
+});
+function show(name) {
+  document.querySelectorAll(".screen").forEach((s) => s.classList.toggle("on", s.id === name));
+  document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("on", b.dataset.go === name));
+  window.scrollTo(0, 0);
+}
+
+/* ---------- 입력 미리보기 ---------- */
+let timer = null;
+$("raw").addEventListener("input", () => {
+  clearTimeout(timer);
+  timer = setTimeout(preview, 400);
+});
+$("file").addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => { $("raw").value = reader.result; preview(); };
+  reader.readAsText(file, "utf-8");
+});
+
+async function preview() {
+  const raw = $("raw").value.trim();
+  if (!raw) { $("preview").textContent = ""; return; }
+  const res = await fetch("/api/preview", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({raw})
+  });
+  const data = await res.json();
+  const lines = [data.notice, data.estimate.summary, "쿼터: " + data.estimate.quota.join(" · ")];
+  if (data.split_notice) lines.push(data.split_notice);
+  if (data.invalid.length) lines.push("건너뛴 입력: " + data.invalid.slice(0, 5).join(", "));
+  $("preview").innerHTML = lines.map((t) => "<div>" + escapeHtml(t) + "</div>").join("");
+}
+
+function escapeHtml(s) {
+  return String(s === undefined || s === null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+/* ---------- 검사 실행 ---------- */
+$("start").onclick = async () => {
+  const raw = $("raw").value.trim();
+  if (!raw) { alert("검사할 도메인을 넣어 주세요."); return; }
+  rows.clear(); $("rows").innerHTML = "";
+  const res = await fetch("/api/run", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({raw, use_cache: true})
+  });
+  if (!res.ok) { alert((await res.json()).detail || "시작하지 못했습니다."); return; }
+  listen();
+};
+$("stop").onclick = async () => {
+  await fetch("/api/stop", {method: "POST"});
+  $("progressText").textContent = "중단했습니다. 끝난 도메인은 저장돼 있어 ‘이어서 검사’로 이어갈 수 있습니다.";
+};
+$("resume").onclick = async () => {
+  const res = await fetch("/api/resume", {method: "POST"});
+  if (!res.ok) { alert((await res.json()).detail || "이어서 검사할 수 없습니다."); return; }
+  listen();
+};
+$("report").onclick = async () => {
+  const res = await fetch("/api/report", {method: "POST"});
+  const data = await res.json();
+  if (!res.ok) { alert(data.detail || "보고서를 만들지 못했습니다."); return; }
+  window.open(data.url, "_blank");
+};
+
+function listen() {
+  if (source) source.close();
+  source = new EventSource("/api/events");
+  source.onmessage = (e) => handle(JSON.parse(e.data));
+  source.onerror = () => { /* 서버가 스트림을 닫으면 브라우저가 알아서 다시 붙는다 */ };
+}
+
+function handle(ev) {
+  if (ev.type === "snapshot") { setRunning(ev.running); progress(ev.done, ev.total); return; }
+  if (ev.type === "start") { setRunning(true); progress(0, ev.total); return; }
+  if (ev.type === "domain_start") { $("progressText").textContent = ev.domain + " 검사 중… (" + ev.done + "/" + ev.total + ")"; return; }
+  if (ev.type === "domain_done") { addRow(ev.result, ev.cached); progress(ev.done + 1, ev.total); return; }
+  if (ev.type === "capture_start") { $("progressText").textContent = "표는 다 나왔습니다. 이제 화면 사진 " + ev.count + "개를 찍습니다…"; return; }
+  if (ev.type === "capture_done") { $("progressText").textContent = ev.domain + " 사진 " + ev.shots + "장 저장. " + (ev.note || ""); return; }
+  if (ev.type === "finished") {
+    setRunning(false);
+    $("progressText").textContent = ev.stopped ? "중단된 상태로 끝났습니다." : "모두 끝났습니다.";
+    if (source) source.close();
+    return;
+  }
+  if (ev.type === "error") {
+    setRunning(false);
+    $("progressText").innerHTML = '<span class="err">오류: ' + escapeHtml(ev.message) + "</span>";
+    if (source) source.close();
+  }
+}
+
+function setRunning(on) {
+  $("start").disabled = on; $("stop").disabled = !on; $("resume").disabled = on;
+}
+function progress(done, total) {
+  const pct = total ? Math.round((done / total) * 100) : 0;
+  $("bar").style.width = pct + "%";
+  if (total) $("progressText").textContent = done + " / " + total + "개 완료 (" + pct + "%)";
+}
+
+const TAG = {BUY: "buy", REVIEW: "review", NO_HISTORY: "review", REJECT: "reject"};
+function addRow(result, cached) {
+  if (!result) return;
+  let tr = rows.get(result.domain);
+  if (!tr) { tr = document.createElement("tr"); rows.set(result.domain, tr); $("rows").appendChild(tr); }
+  const score = result.score === null || result.score === undefined
+    ? "점수 없음"
+    : Math.round(result.score) + "점" + (result.partial_score ? "(참고치)" : "");
+  tr.innerHTML =
+    '<td data-label="도메인">' + escapeHtml(result.domain) + (cached ? ' <span class="muted">(저장분)</span>' : "") + "</td>" +
+    '<td data-label="판정"><span class="tag ' + (TAG[result.verdict] || "review") + '">' + escapeHtml(result.verdict_label) + "</span></td>" +
+    '<td class="num" data-label="점수">' + escapeHtml(score) + "</td>" +
+    '<td data-label="취득 상태">' + escapeHtml(result.acquisition) + "</td>" +
+    '<td data-label="한줄평">' + escapeHtml(result.one_liner) + "</td>" +
+    '<td><button data-domain="' + escapeHtml(result.domain) + '">상세</button></td>';
+  tr.querySelector("button").onclick = () => openDetail(result.domain);
+}
+
+async function openDetail(domain) {
+  show("detail");
+  $("detailHint").textContent = domain + " 근거를 불러오는 중…";
+  $("detailBody").innerHTML = "";
+  const res = await fetch("/api/detail/" + encodeURIComponent(domain));
+  const data = await res.json();
+  if (!res.ok) { $("detailHint").textContent = data.detail || "불러오지 못했습니다."; return; }
+  $("detailHint").textContent = "";
+  $("detailBody").innerHTML = data.html;
+}
+
+/* ---------- 설정 ---------- */
+const KEY_FIELDS = ["openrouter", "serper", "openpagerank", "safebrowsing", "virustotal"];
+async function loadConfig() {
+  const data = await (await fetch("/api/config")).json();
+  KEY_FIELDS.forEach((name) => {
+    const el = $("k_" + name);
+    el.placeholder = data.has_key[name] ? data.keys_masked[name] + " (저장돼 있음)" : "아직 없음";
+    el.value = "";
+  });
+  $("model").innerHTML = data.models.map((m) =>
+    '<option value="' + escapeHtml(m) + '"' + (m === data.model ? " selected" : "") + ">" + escapeHtml(m) + "</option>").join("");
+  $("speed").value = data.speed_mode;
+  $("enable_safebrowsing").checked = data.enable_safebrowsing;
+  $("enable_virustotal").checked = data.enable_virustotal;
+  $("enable_capture").checked = data.enable_capture;
+  $("cfgPath").textContent = data.config_path;
+  const warn = $("keyWarn");
+  if (data.missing_keys.length) {
+    warn.hidden = false;
+    warn.innerHTML = "다음 키가 없어 “매입 후보”(초록) 판정이 나오지 않습니다: <b>" + escapeHtml(data.missing_keys.join(", ")) +
+      "</b> — 설정 화면에서 넣어 주세요. (키 없이도 검사 자체는 됩니다)";
+  } else { warn.hidden = true; }
+}
+$("saveCfg").onclick = async () => {
+  const body = {
+    model: $("model").value,
+    speed_mode: $("speed").value,
+    enable_safebrowsing: $("enable_safebrowsing").checked,
+    enable_virustotal: $("enable_virustotal").checked,
+    enable_capture: $("enable_capture").checked
+  };
+  KEY_FIELDS.forEach((name) => { body[name] = $("k_" + name).value.trim(); });
+  const res = await fetch("/api/config", {
+    method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)
+  });
+  $("cfgMsg").textContent = res.ok ? "저장했습니다." : "저장하지 못했습니다.";
+  await loadConfig();
+};
+
+/* ---------- 시작 ---------- */
+loadConfig();
+fetch("/api/status").then((r) => r.json()).then((s) => {
+  if (s.running) listen();
+});
+fetch("/api/results").then((r) => r.json()).then((d) => {
+  (d.results || []).forEach((r) => addRow(r, true));
+});
+</script>
+</body>
+</html>

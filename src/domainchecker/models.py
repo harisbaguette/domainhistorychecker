@@ -165,6 +165,20 @@ class AIAnalysis(BaseModel):
     one_liner: str = ""
 
 
+class Capture(BaseModel):
+    """One Playwright screenshot of an archived page."""
+
+    label: str  # "말기" 또는 "위험 신호 시기"
+    timestamp: str
+    url: str
+    file: str  # data/ 기준 상대 경로
+
+
+class Captures(BaseModel):
+    check: CheckState = CheckState()
+    items: list[Capture] = Field(default_factory=list)
+
+
 class RuleFindings(BaseModel):
     check: CheckState = CheckState()
     doorway: bool = False
@@ -177,6 +191,7 @@ class RuleFindings(BaseModel):
     sensitive_terms: list[str] = Field(default_factory=list)
     brand_hits: list[str] = Field(default_factory=list)
     evidence: list[str] = Field(default_factory=list)
+    risk_timestamps: list[str] = Field(default_factory=list)  # 캡쳐할 위험 신호 시기
 
     @property
     def spam_operation(self) -> bool:
@@ -217,6 +232,7 @@ class DomainResult(BaseModel):
     authority: Authority = Authority()
     ai: AIAnalysis = AIAnalysis()
     rules: RuleFindings = RuleFindings()
+    captures: Captures = Captures()
     scoring: Score = Score()
 
     fatal_reasons: list[str] = Field(default_factory=list)

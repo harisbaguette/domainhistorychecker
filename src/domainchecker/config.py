@@ -33,6 +33,7 @@ class Config(BaseModel):
     speed_mode: str = "adaptive"  # "adaptive" (30/min 시작) | "safe" (12/min 고정)
     enable_safebrowsing: bool = True
     enable_virustotal: bool = False
+    enable_capture: bool = True  # 화면 캡쳐(전 검사 완료 후 후행 실행)
     max_domains: int = 1000
     max_snapshots: int = 6
     ai_input_limit: int = 40_000  # 도메인당 AI 입력 상한(문자)

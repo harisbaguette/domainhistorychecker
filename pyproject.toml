@@ -9,7 +9,13 @@ dependencies = [
     "beautifulsoup4>=4.12",
     "lxml>=5.2",
     "pydantic>=2.7",
+    "fastapi>=0.111",
+    "uvicorn>=0.30",
+    "playwright>=1.44",
 ]
+
+[project.scripts]
+domainchecker = "domainchecker.server:main"
 
 [dependency-groups]
 dev = [

@@ -66,6 +66,7 @@ def analyze(
     hidden = [s for s in usable if s.hidden_marks]
     if hidden:
         findings.hidden_text = True
+        findings.risk_timestamps.append(hidden[0].timestamp)
         findings.evidence.append(
             f"{hidden[0].timestamp[:4]}년 페이지에 숨긴 글자·링크 흔적: {hidden[0].hidden_marks[0]}"
         )
@@ -74,6 +75,7 @@ def analyze(
     for snap in real:
         if snap.external_links >= LINK_FARM_LINKS and snap.external_hosts >= LINK_FARM_HOSTS:
             findings.link_farm = True
+            findings.risk_timestamps.append(snap.timestamp)
             findings.evidence.append(
                 f"{snap.timestamp[:4]}년 페이지에 외부 사이트 링크 {snap.external_links}개"
                 f"(서로 다른 사이트 {snap.external_hosts}곳)가 깔려 있습니다."
@@ -85,6 +87,7 @@ def analyze(
         reason = doorway_reason(snap)
         if reason:
             findings.doorway = True
+            findings.risk_timestamps.append(snap.timestamp)
             findings.evidence.append(f"{snap.timestamp[:4]}년 페이지: {reason}")
             break
 

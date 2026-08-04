@@ -11,7 +11,7 @@ from pathlib import Path
 
 import httpx
 
-from . import cache
+from . import cache, capture
 from .analyze import ai as ai_analyze
 from .analyze import rules as rules_analyze
 from .analyze import scoring
@@ -115,7 +115,10 @@ class Pipeline:
                     return result
 
             gathered = await asyncio.gather(*(worker(d) for d in pending))
-            results.extend(r for r in gathered if r is not None)
+            fresh = [r for r in gathered if r is not None]
+            results.extend(fresh)
+            # 표 먼저, 사진 나중 — 캡쳐는 모든 검사가 끝난 뒤 후행으로 돈다.
+            await self.capture_phase(fresh)
         finally:
             if own_http:
                 await http.aclose()
@@ -207,6 +210,25 @@ class Pipeline:
         scoring.judge(result)
         result.finished_at = datetime.now(UTC).isoformat(timespec="seconds")
         return result
+
+    async def capture_phase(self, results: list[DomainResult]) -> None:
+        """Screenshots for every finished domain, one after another (shared limiter)."""
+        if not results or not self.config.enable_capture:
+            return
+        await self._emit("capture_start", count=len(results))
+        for result in results:
+            if self.cancel.is_set():
+                break
+            result.captures = await capture.capture_domain(
+                result, self.base, self.wayback_limiter, self.config.enable_capture
+            )
+            cache.save(result.domain, result.model_dump(mode="json"), self.base)
+            await self._emit(
+                "capture_done",
+                domain=result.domain,
+                shots=len(result.captures.items),
+                note=result.captures.check.note,
+            )
 
     def _ai_context(self, result: DomainResult) -> dict:
         history = result.wayback
