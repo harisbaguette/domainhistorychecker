@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>설치 안내 (그림 포함) — 낙장도메인 품질 체커</title>
+<style>
+:root{--fg:#1a1a1a;--muted:#666;--line:#ddd;--bg:#fff;--panel:#fafafa;
+--review-bg:#fdf6e3;}
+*{box-sizing:border-box;}
+body{margin:0;color:var(--fg);background:var(--bg);
+font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic","Apple SD Gothic Neo",sans-serif;
+font-size:15px;line-height:1.7;}
+.wrap{max-width:860px;margin:0 auto;padding:20px 16px 60px;}
+h1{font-size:22px;margin:0 0 6px;}
+h2{font-size:18px;margin:32px 0 10px;border-bottom:1px solid var(--line);padding-bottom:5px;}
+h3{font-size:15px;margin:20px 0 6px;}
+.muted{color:var(--muted);font-size:13px;}
+.notice{background:var(--review-bg);border:1px solid #e6d28a;padding:10px 12px;border-radius:6px;margin:14px 0;}
+ol{padding-left:22px;} li{margin:6px 0;}
+figure{margin:14px 0;text-align:center;}
+figure svg{max-width:100%;height:auto;border:1px solid var(--line);border-radius:8px;background:#f4f4f6;}
+figcaption{font-size:13px;color:var(--muted);margin-top:6px;}
+code{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-size:13px;}
+.step{border:1px solid var(--line);border-radius:8px;padding:4px 16px 14px;margin:12px 0;background:#fff;}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>설치 안내 — 처음 실행할 때 나오는 경고 화면 대처법</h1>
+<p>이 프로그램의 시작 파일(<code>시작.command</code> / <code>시작.bat</code>)에는
+개발자 서명(애플·마이크로소프트에 돈을 내고 받는 신분 도장)이 없습니다.
+그래서 처음 실행할 때 컴퓨터가 <b>"모르는 파일인데 정말 열까요?"</b> 하고 한 번 물어봅니다.
+이것은 서명 없는 파일이면 무조건 나오는 <b>정상 경고</b>이며, 아래 그림대로 한 번만 허용하면
+다음부터는 묻지 않습니다.</p>
+
+<div class="notice">지금 보는 이 안내서는 인터넷 연결 없이도 열립니다 —
+받은 폴더 안의 <code>docs/설치안내.html</code>을 두 번 누르면 됩니다.</div>
+
+<h2>맥(Mac)에서 — "확인되지 않은 개발자" 경고</h2>
+
+<div class="step">
+<h3>1단계. 그냥 두 번 누르면 이런 창이 뜹니다 (열기 단추가 없음)</h3>
+<figure>
+<svg viewBox="0 0 460 210" role="img" aria-label="맥 게이트키퍼 경고창 그림">
+  <rect x="70" y="15" width="320" height="180" rx="12" fill="#ececee" stroke="#c8c8cc"/>
+  <circle cx="230" cy="55" r="22" fill="#f5c518"/>
+  <text x="230" y="63" text-anchor="middle" font-size="26" font-weight="bold" fill="#7a5b00">!</text>
+  <text x="230" y="100" text-anchor="middle" font-size="12" font-weight="bold" fill="#1a1a1a">"시작.command"은(는) 확인되지 않은</text>
+  <text x="230" y="117" text-anchor="middle" font-size="12" font-weight="bold" fill="#1a1a1a">개발자가 배포했기 때문에 열 수 없습니다.</text>
+  <rect x="130" y="145" width="90" height="28" rx="7" fill="#fff" stroke="#c8c8cc"/>
+  <text x="175" y="163" text-anchor="middle" font-size="12" fill="#1a1a1a">휴지통으로 이동</text>
+  <rect x="240" y="145" width="90" height="28" rx="7" fill="#0a68f5"/>
+  <text x="285" y="163" text-anchor="middle" font-size="12" fill="#fff">취소</text>
+</svg>
+<figcaption>이 창에는 "열기" 단추가 아예 없습니다 — 당황하지 말고 <b>취소</b>를 누르세요.</figcaption>
+</figure>
+</div>
+
+<div class="step">
+<h3>2단계. 파일을 오른쪽 버튼(또는 컨트롤+클릭)으로 누르고 → "열기"</h3>
+<figure>
+<svg viewBox="0 0 460 200" role="img" aria-label="오른쪽 클릭 메뉴에서 열기를 고르는 그림">
+  <rect x="60" y="30" width="120" height="90" rx="8" fill="#fff" stroke="#c8c8cc"/>
+  <rect x="85" y="45" width="70" height="46" rx="6" fill="#e8e8ef" stroke="#c8c8cc"/>
+  <text x="120" y="73" text-anchor="middle" font-size="20">📄</text>
+  <text x="120" y="110" text-anchor="middle" font-size="11" fill="#1a1a1a">시작.command</text>
+  <text x="120" y="145" text-anchor="middle" font-size="11" fill="#666">← 오른쪽 버튼으로 클릭</text>
+  <rect x="215" y="25" width="170" height="130" rx="8" fill="#fff" stroke="#b8b8bd"/>
+  <rect x="220" y="33" width="160" height="26" rx="5" fill="#0a68f5"/>
+  <text x="232" y="50" font-size="12" fill="#fff" font-weight="bold">열기   ← 이걸 누르세요</text>
+  <text x="232" y="82" font-size="12" fill="#1a1a1a">정보 가져오기</text>
+  <text x="232" y="106" font-size="12" fill="#1a1a1a">이름 변경</text>
+  <text x="232" y="130" font-size="12" fill="#1a1a1a">휴지통으로 이동</text>
+</svg>
+<figcaption>오른쪽 버튼 메뉴에서 <b>열기</b>를 고르면, 이번에는 "열기" 단추가 있는 경고창이 나옵니다.</figcaption>
+</figure>
+</div>
+
+<div class="step">
+<h3>3단계. 이번에 나오는 창에서 "열기"를 누르면 끝</h3>
+<figure>
+<svg viewBox="0 0 460 210" role="img" aria-label="열기 단추가 있는 확인창 그림">
+  <rect x="70" y="15" width="320" height="180" rx="12" fill="#ececee" stroke="#c8c8cc"/>
+  <circle cx="230" cy="55" r="22" fill="#f5c518"/>
+  <text x="230" y="63" text-anchor="middle" font-size="26" font-weight="bold" fill="#7a5b00">!</text>
+  <text x="230" y="100" text-anchor="middle" font-size="12" fill="#1a1a1a">확인되지 않은 개발자가 배포했습니다.</text>
+  <text x="230" y="117" text-anchor="middle" font-size="12" fill="#1a1a1a">정말 열겠습니까?</text>
+  <rect x="130" y="145" width="90" height="28" rx="7" fill="#fff" stroke="#c8c8cc"/>
+  <text x="175" y="163" text-anchor="middle" font-size="12" fill="#1a1a1a">취소</text>
+  <rect x="240" y="145" width="90" height="28" rx="7" fill="#0a68f5"/>
+  <text x="285" y="163" text-anchor="middle" font-size="12" fill="#fff" font-weight="bold">열기 ←</text>
+</svg>
+<figcaption>한 번 허용하면 다음부터는 그냥 두 번 눌러도 열립니다.</figcaption>
+</figure>
+<p class="muted">그래도 안 되면: <b>시스템 설정 → 개인정보 보호 및 보안</b> 화면 아래쪽에
+"확인되지 않은 개발자…" 문구 옆의 <b>"그래도 열기"</b> 단추를 누르세요.</p>
+</div>
+
+<h2>윈도(Windows)에서 — 파란 SmartScreen 경고</h2>
+
+<div class="step">
+<h3>1단계. 시작.bat을 두 번 누르면 파란 화면이 뜰 수 있습니다</h3>
+<figure>
+<svg viewBox="0 0 460 240" role="img" aria-label="윈도 스마트스크린 경고 그림">
+  <rect x="40" y="10" width="380" height="220" rx="6" fill="#0f5ca8"/>
+  <text x="60" y="50" font-size="17" fill="#fff" font-weight="bold">Windows의 PC 보호</text>
+  <text x="60" y="80" font-size="12" fill="#dce9f7">Microsoft Defender SmartScreen에서 인식할 수 없는 앱의</text>
+  <text x="60" y="97" font-size="12" fill="#dce9f7">시작을 차단했습니다. 이 앱을 실행하면 PC가 위험에</text>
+  <text x="60" y="114" font-size="12" fill="#dce9f7">노출될 수 있습니다.</text>
+  <rect x="58" y="128" width="82" height="20" rx="3" fill="none"/>
+  <text x="60" y="143" font-size="12" fill="#9fd0ff" text-decoration="underline" font-weight="bold">추가 정보  ← ① 이 글자를 먼저 누르세요</text>
+  <rect x="290" y="180" width="110" height="32" rx="3" fill="#d8dde3"/>
+  <text x="345" y="201" text-anchor="middle" font-size="13" fill="#1a1a1a">실행 안 함</text>
+</svg>
+<figcaption>처음엔 "실행 안 함" 단추만 보입니다 — 왼쪽의 작은 <b>"추가 정보"</b> 글자를 누르세요.</figcaption>
+</figure>
+</div>
+
+<div class="step">
+<h3>2단계. "추가 정보"를 누르면 "실행" 단추가 생깁니다</h3>
+<figure>
+<svg viewBox="0 0 460 240" role="img" aria-label="추가 정보를 누른 뒤 실행 단추가 생긴 그림">
+  <rect x="40" y="10" width="380" height="220" rx="6" fill="#0f5ca8"/>
+  <text x="60" y="50" font-size="17" fill="#fff" font-weight="bold">Windows의 PC 보호</text>
+  <text x="60" y="80" font-size="12" fill="#dce9f7">앱: 시작.bat</text>
+  <text x="60" y="97" font-size="12" fill="#dce9f7">게시자: 알 수 없는 게시자</text>
+  <rect x="160" y="180" width="110" height="32" rx="3" fill="#d8dde3"/>
+  <text x="215" y="201" text-anchor="middle" font-size="13" font-weight="bold" fill="#1a1a1a">실행  ← ②</text>
+  <rect x="290" y="180" width="110" height="32" rx="3" fill="#d8dde3"/>
+  <text x="345" y="201" text-anchor="middle" font-size="13" fill="#1a1a1a">실행 안 함</text>
+</svg>
+<figcaption>새로 생긴 <b>실행</b> 단추를 누르면 검은 창이 뜨면서 설치가 이어집니다.</figcaption>
+</figure>
+</div>
+
+<h2>그다음은 자동입니다</h2>
+<ol>
+  <li>검은 창이 열리고, 파이썬 실행 도구(uv)와 필요한 프로그램을 알아서 설치합니다.</li>
+  <li>화면 사진을 찍을 브라우저를 처음 한 번 내려받습니다 (수백 MB, 몇 분 걸립니다).</li>
+  <li>웹 브라우저가 저절로 열리며 <code>http://127.0.0.1:8765/</code> 화면이 나옵니다.</li>
+</ol>
+<p>프로그램은 <b>내 컴퓨터 안에서만</b> 접속되게 잠겨 있어서 다른 사람은 들어올 수 없습니다.
+자세한 사용법은 같이 들어 있는 <code>README.md</code>를 보세요.</p>
+</div>
+</body>
+</html>
