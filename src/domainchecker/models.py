@@ -31,11 +31,22 @@ class Verdict(str, Enum):
 
 WARN_VERDICTS = (Verdict.REVIEW, Verdict.NO_HISTORY)
 
+# Labels are text-only; the UI shows verdict colour with a tinted badge instead
+# of emoji (design system rule: no emoji in rendered UI).
 VERDICT_LABEL = {
-    Verdict.BUY: "✅ 매입 후보",
-    Verdict.REVIEW: "⚠️ 검토 필요",
-    Verdict.REJECT: "❌ 제외",
-    Verdict.NO_HISTORY: "⚠️ 이력 없음(신중)",
+    Verdict.BUY: "매입 후보",
+    Verdict.REVIEW: "검토 필요",
+    Verdict.REJECT: "제외",
+    Verdict.NO_HISTORY: "이력 없음(신중)",
+}
+
+# 취득 상태를 "지금 살 수 있나" 한 축으로 접은 것. 표의 별도 열로 보여 준다.
+AVAILABILITY_LABEL = {
+    "free": "지금 등록 가능(주인 없음)",
+    "soon": "곧 등록 가능(삭제 대기)",
+    "auction": "복원·경매 절차 중",
+    "taken": "남이 등록 중(못 삼)",
+    "unknown": "확인 안 됨",
 }
 
 # Names of the checks that must all be OK before a ✅ verdict may be issued.
@@ -158,6 +169,7 @@ class AIAnalysis(BaseModel):
     topic_history: str = ""
     spam: SpamJudgement = SpamJudgement()
     transition: str = ""
+    transition_risk: bool = False  # 정상→위험 업종·언어 급변 전환이 있었나
     content_quality: str = ""
     trademark: str = ""
     trademark_risk: bool = False
@@ -222,6 +234,8 @@ class DomainResult(BaseModel):
     one_liner: str = ""
     recommended_topics: list[dict] = Field(default_factory=list)
     acquisition: str = "알 수 없음"
+    availability: str = "unknown"  # free | soon | auction | taken | unknown
+    availability_label: str = AVAILABILITY_LABEL["unknown"]
 
     wayback: WaybackHistory = WaybackHistory()
     registration: Registration = Registration()

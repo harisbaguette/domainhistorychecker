@@ -44,9 +44,11 @@ _REGISTRAR_KEYS = ("registrar", "sponsoring registrar", "등록대행자")
 
 # RDAP/EPP status -> 사용자에게 보여줄 취득 상태.
 # 비교는 영문자만 남긴 압축형으로 한다("redemptionPeriod"와 "redemption period"를 함께 잡기 위해).
+# 순서가 곧 우선순위다. redemptionPeriod와 pendingDelete가 함께 오면 아직
+# 원주인이 되찾을 수 있는 복원 기간이므로 "곧 등록 가능"으로 보여 주면 안 된다.
 _ACQUISITION = [
-    ("pendingdelete", "삭제 대기(곧 등록 가능)"),
     ("redemptionperiod", "복원 기간(경매·복원 대상)"),
+    ("pendingdelete", "삭제 대기(곧 등록 가능)"),
     ("pendingrestore", "복원 진행 중"),
     ("autorenewperiod", "자동 갱신 기간"),
     ("transferprohibited", "등록 중(이전 잠금)"),

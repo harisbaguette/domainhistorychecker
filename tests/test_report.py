@@ -82,6 +82,47 @@ def test_write_report_creates_index_and_detail_pages(sample_result, tmp_path):
     assert saved[0]["domain"] == "example.com"
 
 
+def test_unmeasured_numbers_say_so_instead_of_showing_zero(sample_result):
+    """못 잰 값을 0으로 보여 주면 '권위 0인 나쁜 도메인'으로 오해한다(심사 C4)."""
+    from domainchecker.models import Authority, IndexInfo
+
+    sample_result.authority = Authority(
+        check=CheckState(status=CheckStatus.UNCHECKED, note="권위 점수 조회에 실패했습니다.")
+    )
+    sample_result.index = IndexInfo(
+        check=CheckState(status=CheckStatus.NOT_RUN, note="Serper 키가 없습니다.")
+    )
+    judge(sample_result)
+    html = detail_fragment(sample_result)
+
+    assert "0.00 / 10" not in html
+    assert "색인 0건" not in html
+    assert html.count("못 쟀음") == 2
+    assert "권위 점수 조회에 실패했습니다." in html
+    assert "Serper 키가 없습니다." in html
+
+
+def test_plain_words_are_spelled_out_for_the_reader(sample_result):
+    """어려운 낱말은 제목·라벨에서 바로 풀어 준다(심사 C10)."""
+    judge(sample_result)
+    html = detail_fragment(sample_result)
+
+    assert "링크로 밀어주는 힘" in html
+    assert "구글에 남아 있는 페이지(색인)" in html
+    assert "다른 곳으로 넘겨보낸 비율(리다이렉트)" in html
+    assert "임시 화면이던 비중(파킹)" in html
+    labels = " ".join(label for label, _ in recheck_links("example.com"))
+    assert "다른 사이트가 건 링크" in labels and "주인 바뀐 이력" in labels
+
+    sample_result.ai.spam.verdict = "unclear"
+    assert "판단 유보(unclear)" in detail_fragment(sample_result)
+
+
+def test_index_page_states_the_score_cutoffs(sample_result):
+    judge(sample_result)
+    assert "75점부터 매입 후보" in render_index([sample_result])
+
+
 def test_report_survives_a_domain_with_no_evidence():
     from domainchecker.models import DomainResult
 

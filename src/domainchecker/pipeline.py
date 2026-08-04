@@ -21,10 +21,47 @@ from .clients.openrouter import OpenRouterClient
 from .clients.rdap import RdapClient
 from .clients.wayback import WaybackClient
 from .config import Config, data_dir
+from .report import html as report_html
 from .models import Authority, CheckState, CheckStatus, DomainResult
 from .ratelimit import AdaptiveRateLimiter
 
 EventCallback = Callable[[dict], None] | None
+
+RUN_STATE_NAME = "run_state.json"
+
+
+def run_state_path(base: Path | str) -> Path:
+    return Path(base) / RUN_STATE_NAME
+
+
+def load_run_state(base: Path | str) -> list[str]:
+    """Domains of a run that never finished, so 이어서 검사 survives a restart."""
+    path = run_state_path(base)
+    if not path.exists():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    if not isinstance(data, dict):
+        return []
+    return [str(d) for d in (data.get("domains") or []) if str(d).strip()]
+
+
+def save_run_state(base: Path | str, domains: list[str]) -> None:
+    try:
+        run_state_path(base).write_text(
+            json.dumps({"domains": domains}, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    except OSError:
+        pass  # 진행 기록을 못 남겨도 검사 자체는 계속한다
+
+
+def clear_run_state(base: Path | str) -> None:
+    try:
+        run_state_path(base).unlink(missing_ok=True)
+    except OSError:
+        pass
 
 
 class Pipeline:
@@ -69,6 +106,10 @@ class Pipeline:
         results: list[DomainResult] = []
         if not domains:
             return results
+
+        # 중단되거나 앱이 꺼져도 "이어서 검사"가 살아 있도록 목록을 남긴다.
+        self.base.mkdir(parents=True, exist_ok=True)
+        save_run_state(self.base, domains)
 
         own_http = self.http is None
         http = self.http or httpx.AsyncClient(
@@ -126,7 +167,17 @@ class Pipeline:
         order = {d: i for i, d in enumerate(domains)}
         results.sort(key=lambda r: order.get(r.domain, 0))
         self.write_results(results)
-        await self._emit("finished", stopped=self.cancel.is_set())
+        if results:
+            # 보고서는 사람이 단추를 누르지 않아도 항상 최신으로 준비해 둔다.
+            try:
+                report_html.write_report(results, self.base)
+                await self._emit("report_ready", url="/report/index.html")
+            except OSError as exc:
+                await self._emit("report_error", message=f"{type(exc).__name__}: {exc}")
+        stopped = self.cancel.is_set()
+        if not stopped:
+            clear_run_state(self.base)  # 끝까지 갔으면 이어서 할 것이 없다
+        await self._emit("finished", stopped=stopped)
         return results
 
     async def check_domain(
@@ -228,6 +279,9 @@ class Pipeline:
                 domain=result.domain,
                 shots=len(result.captures.items),
                 note=result.captures.check.note,
+                # 사진이 붙은 최신 결과를 함께 실어 보낸다. 이게 없으면 화면·메모리에
+                # 캡쳐 이전 결과만 남아 찍은 사진이 끝내 보이지 않는다.
+                result=result.model_dump(mode="json"),
             )
 
     def _ai_context(self, result: DomainResult) -> dict:

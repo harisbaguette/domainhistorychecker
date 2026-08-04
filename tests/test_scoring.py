@@ -2,8 +2,9 @@
 
 import pytest
 
-from domainchecker.analyze.scoring import compute_score, judge
+from domainchecker.analyze.scoring import availability_of, compute_score, judge
 from domainchecker.models import (
+    AVAILABILITY_LABEL,
     AIAnalysis,
     Authority,
     CheckState,
@@ -119,6 +120,51 @@ def test_rules_spam_but_ai_clean_is_conflict():
     assert any("신호 충돌" in reason for reason in result.warn_reasons)
 
 
+@pytest.mark.parametrize("verdict", ["clean", "unclear", "unknown"])
+def test_rules_spam_with_any_non_spam_ai_answer_is_conflict(verdict):
+    """AI의 '유보'를 무혐의로 읽어 ✅를 내주던 구멍(심사 A2) — 세 답 모두 충돌이다."""
+    result = judge(
+        healthy(
+            rules=RuleFindings(check=OK, doorway=True),
+            ai=AIAnalysis(check=OK, spam=SpamJudgement(verdict=verdict, confidence=0.5)),
+        )
+    )
+    assert any("신호 충돌" in reason for reason in result.warn_reasons)
+    assert result.verdict is not Verdict.BUY
+
+
+def test_transition_risk_flag_costs_points_but_prose_alone_does_not():
+    """'위험 전환은 없었습니다' 같은 문장이 감점되던 오탐(심사 B1)."""
+    safe = judge(
+        healthy(
+            ai=AIAnalysis(
+                check=OK,
+                spam=SpamJudgement(verdict="clean", confidence=0.9),
+                transition="도박·성인 같은 위험 업종으로의 전환은 없었습니다.",
+                transition_risk=False,
+            )
+        )
+    )
+    risky = judge(
+        healthy(
+            ai=AIAnalysis(
+                check=OK,
+                spam=SpamJudgement(verdict="clean", confidence=0.9),
+                transition="생활 블로그에서 도박 홍보로 넘어감",
+                transition_risk=True,
+            )
+        )
+    )
+    safe_item = next(i for i in safe.scoring.items if i.name == "transition")
+    risky_item = next(i for i in risky.scoring.items if i.name == "transition")
+
+    # 서술문에 "전환"이 들어간 것만으로는 소폭(-2)에 그치고, 위험 판정(-9)은 붙지 않는다.
+    assert safe_item.earned == pytest.approx(13.0)
+    assert "정상→위험" not in safe_item.note
+    assert risky_item.earned == pytest.approx(6.0)
+    assert "정상→위험" in risky_item.note
+
+
 def test_missing_required_check_forbids_buy():
     result = judge(
         healthy(
@@ -198,6 +244,7 @@ def test_low_score_rejects_only_when_everything_was_checked():
             check=OK,
             spam=SpamJudgement(verdict="unclear", confidence=1.0),
             transition="정상 주제에서 도박 관련으로 위험하게 바뀜",
+            transition_risk=True,  # 위험 전환은 이제 AI가 스키마 값으로 직접 답한다
         ),
         rules=RuleFindings(check=OK, parking_ratio=0.9, language_shift=True),
     )
@@ -238,6 +285,34 @@ def test_partial_score_normalises_over_confirmed_items_only():
     assert score.partial is True
     # 10(중립) + 7(권위 상한) + 3(색인) = 20 / 20 → 100
     assert score.total == pytest.approx(100.0)
+
+
+@pytest.mark.parametrize(
+    ("acquisition", "expected"),
+    [
+        ("구매 가능(미등록)", "free"),
+        ("삭제 대기(곧 등록 가능)", "soon"),
+        ("복원 기간(경매·복원 대상)", "auction"),
+        ("복원 진행 중", "auction"),
+        ("등록 중(이전 잠금)", "taken"),
+        ("자동 갱신 기간", "taken"),
+        ("알 수 없음", "unknown"),
+        ("", "unknown"),
+    ],
+)
+def test_availability_of_covers_every_branch(acquisition, expected):
+    assert availability_of(acquisition) == expected
+
+
+def test_judge_fills_the_buy_now_column():
+    result = judge(healthy(registration=Registration(check=OK, acquisition="삭제 대기(곧 등록 가능)")))
+    assert result.acquisition == "삭제 대기(곧 등록 가능)"
+    assert result.availability == "soon"
+    assert result.availability_label == AVAILABILITY_LABEL["soon"]
+
+    taken = judge(healthy(registration=Registration(check=OK, acquisition="등록 중(보류)")))
+    assert taken.availability == "taken"
+    assert taken.availability_label == AVAILABILITY_LABEL["taken"]
 
 
 def test_score_is_none_when_nothing_could_be_measured():

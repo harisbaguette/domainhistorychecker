@@ -34,10 +34,27 @@ async def test_listed_code_is_translated():
     assert result.codes == ["피싱 도메인"]
 
 
+async def test_no_nameservers_is_unchecked_not_clean():
+    """NXDOMAIN만 '없음'이다 — 답할 서버가 없는 것을 깨끗함으로 읽으면 안 된다."""
+    result = await spamhaus.check("x.com", FakeResolver(error=dns.resolver.NoNameservers()))
+    assert result.check.status is CheckStatus.UNCHECKED
+    assert result.listed is False
+    assert "미확인" in result.check.note
+
+
+async def test_no_answer_is_unchecked_not_clean():
+    result = await spamhaus.check("x.com", FakeResolver(error=dns.resolver.NoAnswer()))
+    assert result.check.status is CheckStatus.UNCHECKED
+    assert result.listed is False
+
+
 async def test_blocked_query_is_unchecked_not_clean():
     result = await spamhaus.check("bad.com", FakeResolver(answer=["127.255.255.254"]))
     assert result.check.status is CheckStatus.UNCHECKED
     assert result.listed is False
+    # 사용자가 스스로 고칠 수 있게 원인과 해결법을 적어 준다.
+    assert "공용 DNS" in result.check.note
+    assert "통신사 자동" in result.check.note
 
 
 async def test_dns_failure_is_unchecked():

@@ -206,6 +206,75 @@ async def test_second_run_uses_the_cache(config):
 
 
 @respx.mock
+async def test_report_is_ready_before_the_run_reports_finished(config):
+    """보고서 단추가 '끝났습니다' 뒤에 늦게 켜지면 사용자는 없는 줄 알고 나간다."""
+    mock_all()
+    events = []
+    await fast_pipeline(config, events).run([DOMAIN])
+
+    kinds = [e["type"] for e in events]
+    assert "report_ready" in kinds
+    assert kinds.index("report_ready") < kinds.index("finished")
+    assert kinds[-1] == "finished"
+
+
+@respx.mock
+async def test_capture_done_carries_the_updated_result(config, monkeypatch, tmp_path):
+    """캡쳐 결과를 이벤트에 안 실으면 화면·메모리에 사진 이전 결과만 남는다(심사 C1)."""
+    from domainchecker import capture as capture_module
+    from domainchecker import pipeline as pipeline_module
+    from domainchecker.models import Capture, Captures, CheckState, CheckStatus, DomainResult
+
+    async def fake_capture(result, base, limiter=None, enabled=True):
+        return Captures(
+            check=CheckState(status=CheckStatus.OK, note="1장 저장."),
+            items=[
+                Capture(
+                    label="말기",
+                    timestamp="20240601000000",
+                    url="https://web.archive.org/web/20240601000000/http://example.com/",
+                    file="captures/example.com_20240601000000.png",
+                )
+            ],
+        )
+
+    monkeypatch.setattr(capture_module, "capture_domain", fake_capture)
+    monkeypatch.setattr(pipeline_module.capture, "capture_domain", fake_capture)
+
+    events = []
+    config.enable_capture = True
+    pipeline = fast_pipeline(config, events)
+    await pipeline.capture_phase([DomainResult(domain=DOMAIN)])
+
+    done = [e for e in events if e["type"] == "capture_done"]
+    assert len(done) == 1
+    assert done[0]["shots"] == 1
+    assert done[0]["result"]["domain"] == DOMAIN
+    assert done[0]["result"]["captures"]["items"][0]["label"] == "말기"
+
+
+@respx.mock
+async def test_run_state_survives_a_stop_and_is_cleared_on_success(config, tmp_path):
+    """앱을 껐다 켜도 '이어서 검사'가 살아 있어야 한다(심사 C2)."""
+    from domainchecker.pipeline import load_run_state, run_state_path
+
+    mock_all()
+    base = tmp_path / "data"
+
+    stopped = fast_pipeline(config, [])
+    stopped.stop()  # 시작하자마자 중단 — 목록은 남아야 한다
+    await stopped.run([DOMAIN], use_cache=False)
+
+    assert run_state_path(base).exists()
+    assert load_run_state(base) == [DOMAIN]
+
+    await fast_pipeline(config, []).run([DOMAIN], use_cache=False)
+
+    assert not run_state_path(base).exists()  # 끝까지 갔으면 이어서 할 것이 없다
+    assert load_run_state(base) == []
+
+
+@respx.mock
 async def test_failed_checks_degrade_to_unchecked_and_block_buy(config):
     respx.get(url__startswith="https://web.archive.org/cdx/search/cdx").mock(
         side_effect=httpx.ConnectError("boom")

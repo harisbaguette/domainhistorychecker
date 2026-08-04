@@ -38,7 +38,10 @@ async def check(domain: str, resolver=None) -> Reputation:
         result.check = CheckState(status=CheckStatus.OK, note="블랙리스트에 없습니다.")
         return result
     except (dns.resolver.NoAnswer, dns.resolver.NoNameservers):
-        result.check = CheckState(status=CheckStatus.OK, note="블랙리스트에 없습니다.")
+        # NXDOMAIN만 "없음"이다. 답이 비었거나 응답할 서버가 없는 것은 확인이 아니다.
+        result.check = CheckState(
+            status=CheckStatus.UNCHECKED, note="블랙리스트 조회 실패 — 미확인."
+        )
         return result
     except (dns.exception.DNSException, OSError) as exc:
         result.check = CheckState(
@@ -52,7 +55,10 @@ async def check(domain: str, resolver=None) -> Reputation:
     if blocked and not listed:
         result.check = CheckState(
             status=CheckStatus.UNCHECKED,
-            note="조회가 차단되었습니다(공용 DNS 사용 또는 한도 초과) — 미확인.",
+            note=(
+                "조회가 차단되었습니다 — 컴퓨터·공유기가 구글(8.8.8.8)·클라우드플레어(1.1.1.1) 같은 "
+                "공용 DNS를 쓰면 이 검사가 막힙니다. 인터넷 설정에서 DNS를 통신사 자동으로 바꾸면 됩니다."
+            ),
         )
         return result
     if listed:

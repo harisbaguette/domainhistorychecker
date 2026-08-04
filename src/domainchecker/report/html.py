@@ -13,10 +13,10 @@ from html import escape
 from pathlib import Path
 from urllib.parse import quote
 
-from ..models import CHECK_LABEL, VERDICT_LABEL, DomainResult, Verdict
+from ..models import AVAILABILITY_LABEL, CHECK_LABEL, VERDICT_LABEL, DomainResult, Verdict
 
 DISCLAIMER = (
-    "✅는 “무위험 보증”이 아닙니다. 클로킹(검색엔진에만 다른 화면을 보여주는 수법)이나 "
+    "이 검사 결과는 “무위험 보증”이 아닙니다. 클로킹(검색엔진에만 다른 화면을 보여주는 수법)이나 "
     "해킹으로 몰래 심어진 스팸은 저장된 과거 화면만으로는 구조적으로 놓칠 수 있습니다. "
     "돈을 걸기 전에 상세 근거를 직접 눈으로 확인하세요."
 )
@@ -29,6 +29,21 @@ LIMITS = [
     "구매 가격·경매 시세와 주인이 몇 번 바뀌었는지는 다루지 않습니다.",
 ]
 
+SCORE_GUIDE = "75점부터 매입 후보(초록) · 50점 밑은 제외(빨강) · 나머지는 검토 필요(노랑)"
+
+# 어려운 낱말은 제목·라벨에서 곧바로 풀어 준다(따로 용어집을 찾아가지 않게).
+AUTHORITY_LABEL = "권위 점수(다른 사이트들이 링크로 밀어주는 힘, 0~10)"
+INDEX_LABEL = "구글에 남아 있는 페이지(색인)"
+REDIRECT_LABEL = "다른 곳으로 넘겨보낸 비율(리다이렉트)"
+PARKING_LABEL = "‘도메인 팝니다’ 임시 화면이던 비중(파킹)"
+
+SPAM_VERDICT_LABEL = {
+    "spam": "스팸으로 봄(spam)",
+    "clean": "깨끗함(clean)",
+    "unclear": "판단 유보(unclear)",
+    "unknown": "확인 안 됨(unknown)",
+}
+
 VERDICT_ORDER = [Verdict.BUY, Verdict.REVIEW, Verdict.NO_HISTORY, Verdict.REJECT]
 VERDICT_CLASS = {
     Verdict.BUY: "buy",
@@ -38,38 +53,108 @@ VERDICT_CLASS = {
 }
 
 CSS = """
-:root{--fg:#1a1a1a;--muted:#666;--line:#ddd;--bg:#fff;--panel:#fafafa;
---buy:#17803d;--buy-bg:#e7f6ec;--review:#a16207;--review-bg:#fdf6e3;--reject:#b91c1c;--reject-bg:#fdecec;}
+:root{
+/* 표면 — 종이 수첩 */
+--dw-bg:#F5F2EE; --dw-surface:#FFFFFF; --dw-surface-sunken:#F0ECE6; --dw-surface-raised:#FAF8F5;
+/* 경계 */
+--dw-border:rgba(36,30,25,0.07); --dw-border-strong:#E4DFD9;
+/* 글자 */
+--dw-text:#241E19; --dw-text-muted-aa:#6A645D; --dw-text-muted:#88837C; --dw-text-faint:#B6B1AA;
+/* 액센트 — 만년필 잉크 파랑 */
+--dw-accent:#3D79C0; --dw-accent-strong:#155DA1; --dw-accent-pressed:#004981;
+--dw-accent-bg:#ECF5FF; --dw-on-accent:#FFFFFF;
+/* 상태 — 원색은 면·테두리, 글자는 -ink */
+--dw-success:#4BB86A; --dw-success-bg:#E9FAED; --dw-success-ink:#1A6D3B;
+--dw-warning:#EAA13B; --dw-warning-bg:#FFF5E2; --dw-warning-ink:#93550F;
+--dw-error:#DF4B46; --dw-error-bg:#FFF1EF; --dw-error-ink:#A42D2B;
+/* 타임라인 막대 */
+--dw-chart-1:#2D71B7;
+/* 그림자 — glass가 이 프로젝트 시그니처 */
+--dw-shadow-1:0 1px 2px rgba(36,30,25,0.06);
+--dw-shadow-2:0 4px 12px rgba(36,30,25,0.08);
+--dw-shadow-glass:0 8px 32px rgba(0,0,0,0.04);
+/* 모서리·모션·포커스 */
+--dw-radius-control:12px; --dw-radius-card:16px; --dw-radius-pill:999px;
+--dw-ease:cubic-bezier(0.23,1,0.32,1);
+--dw-focus:0 0 0 3px rgba(61,121,192,0.34);
+--dw-font:Pretendard,"Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+/* 판정 색 별칭 — 판정 도장이 한 곳에서만 색을 받는다 */
+--buy:var(--dw-success-ink); --buy-bg:var(--dw-success-bg); --buy-line:var(--dw-success);
+--review:var(--dw-warning-ink); --review-bg:var(--dw-warning-bg); --review-line:var(--dw-warning);
+--reject:var(--dw-error-ink); --reject-bg:var(--dw-error-bg); --reject-line:var(--dw-error);
+}
 *{box-sizing:border-box;}
-body{margin:0;padding:0;color:var(--fg);background:var(--bg);
-font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic","Apple SD Gothic Neo",sans-serif;
-font-size:15px;line-height:1.6;}
-.wrap{max-width:1100px;margin:0 auto;padding:16px;}
-h1{font-size:20px;margin:0 0 4px;} h2{font-size:17px;margin:24px 0 8px;border-bottom:1px solid var(--line);padding-bottom:4px;}
-h3{font-size:15px;margin:16px 0 6px;}
-a{color:#1a4fa0;} .muted{color:var(--muted);font-size:13px;}
-.notice{background:var(--review-bg);border:1px solid #e6d28a;padding:10px 12px;border-radius:6px;margin:12px 0;}
-table{border-collapse:collapse;width:100%;font-size:14px;}
-th,td{border-bottom:1px solid var(--line);padding:7px 8px;text-align:left;vertical-align:top;}
-th{background:var(--panel);font-weight:600;white-space:nowrap;}
-td.num{text-align:right;white-space:nowrap;}
-.tag{display:inline-block;padding:1px 7px;border-radius:10px;font-size:13px;white-space:nowrap;}
-.tag.buy{background:var(--buy-bg);color:var(--buy);} .tag.review{background:var(--review-bg);color:var(--review);}
-.tag.reject{background:var(--reject-bg);color:var(--reject);}
-.bar{background:var(--panel);border:1px solid var(--line);height:14px;position:relative;}
-.bar>span{display:block;height:100%;background:#8aa;}
-.years{display:flex;gap:2px;align-items:flex-end;height:60px;margin:8px 0;}
-.years div{flex:1;background:#9ab;min-height:2px;position:relative;}
-.years div span{position:absolute;bottom:-18px;left:0;right:0;text-align:center;font-size:10px;color:var(--muted);}
-ul{margin:6px 0;padding-left:20px;} li{margin:2px 0;}
-.quote{border-left:3px solid var(--line);padding:2px 10px;margin:6px 0;color:#333;background:var(--panel);}
-.shots{display:flex;flex-wrap:wrap;gap:12px;} .shots figure{margin:0;max-width:100%;}
-.shots img{max-width:520px;width:100%;border:1px solid var(--line);}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;}
-.card{border:1px solid var(--line);border-radius:6px;padding:10px 12px;background:var(--panel);}
-@media (max-width:640px){.wrap{padding:10px;} table,thead,tbody,th,td,tr{display:block;}
-th{display:none;} td{border:none;padding:3px 0;} tr{border-bottom:1px solid var(--line);padding:8px 0;}
-td::before{content:attr(data-label) " · ";color:var(--muted);font-size:12px;}}
+html{-webkit-text-size-adjust:100%;}
+body{margin:0;padding:0;color:var(--dw-text);background:var(--dw-bg);font-family:var(--dw-font);
+font-size:16px;line-height:1.5;word-break:keep-all;overflow-wrap:break-word;}
+.wrap{max-width:1100px;margin:0 auto;padding:24px 16px 48px;}
+.wrap.reading{max-width:860px;}
+h1{font-size:25px;font-weight:900;line-height:1.25;margin:0 0 8px;letter-spacing:-0.01em;}
+h2{font-size:20px;font-weight:700;margin:32px 0 12px;}
+h3{font-size:16px;font-weight:700;margin:20px 0 8px;color:var(--dw-text-muted-aa);}
+p{margin:8px 0;}
+a{color:var(--dw-accent-strong);text-underline-offset:3px;}
+a:hover{color:var(--dw-accent-pressed);}
+:focus-visible{outline:none;box-shadow:var(--dw-focus);}
+.muted{color:var(--dw-text-muted-aa);font-size:14px;}
+.num{font-variant-numeric:tabular-nums;}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px;
+background:var(--dw-surface-sunken);padding:2px 6px;border-radius:4px;}
+ul{margin:8px 0;padding-left:20px;} li{margin:4px 0;}
+.notice{background:var(--dw-warning-bg);border:1px solid var(--dw-warning);color:var(--dw-warning-ink);
+padding:16px;border-radius:var(--dw-radius-card);margin:16px 0;}
+.notice a{color:var(--dw-warning-ink);}
+/* 표 — 흰 카드 위에 얹은 종이 */
+.table-card{background:var(--dw-surface);border:1px solid var(--dw-border);
+border-radius:var(--dw-radius-card);box-shadow:var(--dw-shadow-glass);overflow-x:auto;margin:16px 0;}
+table{border-collapse:collapse;width:100%;font-size:16px;}
+th,td{padding:12px 16px;text-align:left;vertical-align:middle;border-bottom:1px solid var(--dw-border);}
+th{background:var(--dw-surface-raised);color:var(--dw-text-muted-aa);font-size:14px;font-weight:700;white-space:nowrap;}
+tr:last-child td{border-bottom:none;}
+td.num,th.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;}
+/* 판정 도장 — 이 화면의 시그니처 순간 */
+.tag{display:inline-block;padding:4px 12px;border-radius:var(--dw-radius-pill);
+font-size:14px;font-weight:700;line-height:1.4;white-space:nowrap;border:1px solid transparent;}
+.tag.buy{background:var(--buy-bg);color:var(--buy);border-color:var(--buy-line);}
+.tag.review{background:var(--review-bg);color:var(--review);border-color:var(--review-line);}
+.tag.reject{background:var(--reject-bg);color:var(--reject);border-color:var(--reject-line);}
+/* 지금 살 수 있나 — 도장보다 한 단계 조용하게 */
+.avail{display:inline-block;padding:4px 12px;border-radius:var(--dw-radius-pill);
+font-size:14px;font-weight:500;line-height:1.4;}
+.avail.free{background:var(--dw-success-bg);color:var(--dw-success-ink);}
+.avail.soon,.avail.auction{background:var(--dw-warning-bg);color:var(--dw-warning-ink);}
+.avail.taken{background:var(--dw-surface-sunken);color:var(--dw-text-muted-aa);}
+.avail.unknown{color:var(--dw-text-muted-aa);padding-left:0;}
+.badges{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 8px;}
+.years{display:flex;gap:4px;align-items:flex-end;height:72px;margin:12px 0 32px;}
+.years div{flex:1 1 0;max-width:56px;background:var(--dw-chart-1);border-radius:4px 4px 0 0;
+min-height:3px;position:relative;}
+.years div span{position:absolute;bottom:-22px;left:0;right:0;text-align:center;
+font-size:14px;color:var(--dw-text-muted-aa);font-variant-numeric:tabular-nums;}
+.quote{border-left:3px solid var(--dw-border-strong);background:var(--dw-surface-raised);
+padding:8px 16px;margin:8px 0;color:var(--dw-text-muted-aa);
+border-radius:0 var(--dw-radius-control) var(--dw-radius-control) 0;}
+.shots{display:flex;flex-wrap:wrap;gap:16px;} .shots figure{margin:0;max-width:100%;}
+.shots img{max-width:520px;width:100%;display:block;border:1px solid var(--dw-border-strong);
+border-radius:var(--dw-radius-control);}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:16px 0;}
+.card{background:var(--dw-surface);border:1px solid var(--dw-border);border-radius:var(--dw-radius-card);
+box-shadow:var(--dw-shadow-glass);padding:16px;color:var(--dw-text-muted-aa);font-size:14px;}
+.card b{display:block;margin-top:4px;color:var(--dw-text);font-size:16px;font-weight:700;}
+@media (max-width:640px){
+.wrap{padding:16px 12px 40px;}
+.table-card{background:none;border:none;box-shadow:none;overflow:visible;}
+table,tbody,tr,td{display:block;width:100%;}
+thead,th{display:none;}
+tr:has(th){display:none;}
+tr{background:var(--dw-surface);border:1px solid var(--dw-border);border-radius:var(--dw-radius-card);
+box-shadow:var(--dw-shadow-glass);padding:12px 16px;margin-bottom:12px;}
+td{border:none;padding:4px 0;}
+tr:last-child td{border-bottom:none;}
+td.num{text-align:left;}
+td::before{content:attr(data-label);display:block;color:var(--dw-text-muted-aa);font-size:14px;}
+td:empty{display:none;}
+}
 """
 
 
@@ -81,6 +166,20 @@ def _score_text(result: DomainResult) -> str:
     if result.score is None:
         return "점수 없음"
     return f"{result.score:.0f}점" + ("(부분 점수·참고치)" if result.partial_score else "")
+
+
+def _stamp(result: DomainResult) -> str:
+    """판정 도장 — 표·상세 어디서든 같은 모양으로 찍힌다."""
+    cls = VERDICT_CLASS.get(result.verdict, "review")
+    label = result.verdict_label or VERDICT_LABEL[result.verdict]
+    return f'<span class="tag {cls}">{_t(label)}</span>'
+
+
+def _avail(result: DomainResult) -> str:
+    """지금 살 수 있나 배지 — 이 도구의 존재 이유라 판정 바로 옆에 둔다."""
+    key = result.availability if result.availability in AVAILABILITY_LABEL else "unknown"
+    label = result.availability_label or AVAILABILITY_LABEL[key]
+    return f'<span class="avail {key}">{_t(label)}</span>'
 
 
 def _list(items: list[str], empty: str = "없음") -> str:
@@ -95,9 +194,12 @@ def recheck_links(domain: str) -> list[tuple[str, str]]:
     name = quote(domain.split(".")[0])
     return [
         ("구글 색인 직접 보기 (site:)", f"https://www.google.com/search?q=site%3A{d}"),
-        ("에이치레프스 무료 백링크 검사", f"https://ahrefs.com/backlink-checker/?input={d}&mode=subdomains"),
-        ("모즈 도메인 권위(DA)", f"https://moz.com/domain-analysis?site={d}"),
-        ("후이졸로지 등록 이력", f"https://whoisology.com/{d}"),
+        (
+            "백링크(다른 사이트가 건 링크) 무료 검사 — Ahrefs",
+            f"https://ahrefs.com/backlink-checker/?input={d}&mode=subdomains",
+        ),
+        ("도메인 힘 점수 — Moz", f"https://moz.com/domain-analysis?site={d}"),
+        ("주인 바뀐 이력 — Whoisology", f"https://whoisology.com/{d}"),
         ("웨이백 전체 타임라인", f"https://web.archive.org/web/*/{d}*"),
         ("키프리스 상표 검색(한국)", "https://www.kipris.or.kr/khome/main.do"),
         ("상표 이름 구글 검색", f"https://www.google.com/search?q=%22{name}%22+%EC%83%81%ED%91%9C"),
@@ -137,7 +239,6 @@ def _captures(result: DomainResult, capture_base: str) -> str:
 
 def detail_fragment(result: DomainResult, capture_base: str = "../captures") -> str:
     """The full evidence view for one domain (no <html> wrapper)."""
-    verdict_class = VERDICT_CLASS.get(result.verdict, "review")
     registration = result.registration
     age = result.wayback.age_years
     scoring_rows = "".join(
@@ -161,8 +262,22 @@ def detail_fragment(result: DomainResult, capture_base: str = "../captures") -> 
         if result.ai.fallback_used
         else ""
     )
+    # 못 잰 값을 0으로 보여 주면 "권위가 0인 나쁜 도메인"으로 오해한다.
+    authority_value = (
+        f"{result.authority.page_rank:.2f} / 10"
+        if result.authority.check.ok
+        else "못 쟀음 — " + (result.authority.check.note or "확인하지 못했습니다.")
+    )
+    index_line = (
+        f"색인 {result.index.indexed_count}건"
+        + (" · " + _t(result.index.check.note) if result.index.check.note else "")
+        if result.index.check.ok
+        else "못 쟀음 — " + _t(result.index.check.note or "확인하지 못했습니다.")
+    )
+    spam_verdict = SPAM_VERDICT_LABEL.get(result.ai.spam.verdict, result.ai.spam.verdict)
     return f"""
-<h1>{_t(result.domain)} <span class="tag {verdict_class}">{_t(result.verdict_label)}</span></h1>
+<h1>{_t(result.domain)}</h1>
+<div class="badges">{_stamp(result)}{_avail(result)}</div>
 <p class="muted">{_t(_score_text(result))} · 취득 상태: {_t(result.acquisition)} · 검사 완료 {_t(result.finished_at[:16])}</p>
 <p>{_t(result.one_liner or "한줄평 없음")}</p>
 
@@ -170,23 +285,24 @@ def detail_fragment(result: DomainResult, capture_base: str = "../captures") -> 
 <h3>치명 사유</h3>{_list(result.fatal_reasons, "없음")}
 <h3>주의 사유</h3>{_list(result.warn_reasons, "없음")}
 <h3>점수 내역</h3>
-<table><tr><th>항목</th><th>점수</th><th>설명</th></tr>{scoring_rows}</table>
+<div class="table-card"><table><tr><th>항목</th><th class="num">점수</th><th>설명</th></tr>{scoring_rows}</table></div>
 <p class="muted">미확인 항목은 0점도 만점도 아니라 분모에서 빼고 계산합니다(그래서 부분 점수는 참고치입니다).</p>
 
 <h2>2. 나이와 등록 정보</h2>
 <div class="grid">
+  <div class="card">지금 살 수 있나<br><b>{_t(result.availability_label or AVAILABILITY_LABEL["unknown"])}</b></div>
   <div class="card">등록일<br><b>{_t(registration.created or "알 수 없음")}</b></div>
   <div class="card">만료일<br><b>{_t(registration.expires or "알 수 없음")}</b></div>
   <div class="card">저장 이력 기간<br><b>약 {age:.0f}년</b> ({_t(result.wayback.first_seen[:6])}~{_t(result.wayback.last_seen[:6])})</div>
   <div class="card">재등록(드랍) 이력<br><b>{"있음" if registration.redropped else "확인 안 됨"}</b></div>
   <div class="card">등록 자료 출처<br><b>{_t(registration.source or "없음")}</b></div>
-  <div class="card">권위 점수<br><b>{result.authority.page_rank:.2f}</b> / 10</div>
+  <div class="card">{AUTHORITY_LABEL}<br><b>{_t(authority_value)}</b></div>
 </div>
 
 <h2>3. 저장 이력 타임라인</h2>
 {_timeline(result)}
-<p class="muted">총 {result.wayback.total_captures}건 · 리다이렉트 비율 {result.wayback.redirect_ratio:.0%} ·
-파킹 비중 {result.rules.parking_ratio:.0%}</p>
+<p class="muted">총 {result.wayback.total_captures}건 · {REDIRECT_LABEL} {result.wayback.redirect_ratio:.0%} ·
+{PARKING_LABEL} {result.rules.parking_ratio:.0%}</p>
 
 <h2>4. 주제 변천과 전환 방향</h2>
 <p>{_t(result.ai.topic_history or "AI 분석 결과가 없습니다.")}</p>
@@ -201,12 +317,12 @@ def detail_fragment(result: DomainResult, capture_base: str = "../captures") -> 
 <h2>6. 신호와 근거</h2>
 <h3>운영방식 규칙이 찾은 흔적</h3>{_list(result.rules.evidence, "특별한 흔적 없음")}
 <h3>AI 스팸성 판정</h3>
-<p>{_t(result.ai.spam.verdict)} · 확신도 {result.ai.spam.confidence:.2f}</p>
+<p>{_t(spam_verdict)} · 확신도 {result.ai.spam.confidence:.2f}</p>
 {quotes or '<p class="muted">인용된 근거 없음</p>'}
 <h3>주의 표지(업종 낱말 — 그 자체로 스팸이라는 뜻은 아님)</h3>
 {_list(result.rules.sensitive_terms, "없음")}
-<h3>색인 상태</h3>
-<p>색인 {result.index.indexed_count}건 · {_t(result.index.check.note)}</p>
+<h3>{INDEX_LABEL}</h3>
+<p>{index_line}</p>
 {_list(result.index.titles[:10], "색인된 제목 없음")}
 <h3>블랙리스트</h3>
 <p>스팸하우스: {_t(result.spamhaus.check.note or "-")}<br>
@@ -225,12 +341,12 @@ def detail_fragment(result: DomainResult, capture_base: str = "../captures") -> 
 """
 
 
-def _page(title: str, body: str) -> str:
+def _page(title: str, body: str, wrap_class: str = "wrap") -> str:
     return (
         "<!doctype html><html lang=\"ko\"><head><meta charset=\"utf-8\">"
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
         f"<title>{_t(title)}</title><style>{CSS}</style></head>"
-        f'<body><div class="wrap">{body}</div></body></html>'
+        f'<body><div class="{wrap_class}">{body}</div></body></html>'
     )
 
 
@@ -240,7 +356,8 @@ def render_detail_page(result: DomainResult, capture_base: str = "../captures") 
         + f'<div class="notice">{escape(DISCLAIMER)}</div>'
         + detail_fragment(result, capture_base)
     )
-    return _page(f"{result.domain} 상세 — 낙장도메인 품질 체커", body)
+    # 글 중심 화면이라 읽기 폭(860px)으로 좁힌다.
+    return _page(f"{result.domain} 상세 — 낙장도메인 품질 체커", body, "wrap reading")
 
 
 def _safe_name(domain: str) -> str:
@@ -256,23 +373,23 @@ def render_index(results: list[DomainResult]) -> str:
         rows.sort(key=lambda r: (r.score is None, -(r.score or 0)))
         body = "".join(
             f'<tr><td data-label="도메인"><a href="{_t(_safe_name(r.domain))}.html">{_t(r.domain)}</a></td>'
-            f'<td data-label="판정"><span class="tag {VERDICT_CLASS[r.verdict]}">{_t(r.verdict_label)}</span></td>'
+            f'<td data-label="판정">{_stamp(r)}</td>'
+            f'<td data-label="지금 살 수 있나">{_avail(r)}</td>'
             f'<td class="num" data-label="점수">{_t(_score_text(r))}</td>'
-            f'<td data-label="취득 상태">{_t(r.acquisition)}</td>'
             f'<td data-label="한줄평">{_t(r.one_liner)}</td>'
             f'<td data-label="추천 주제">{_t(", ".join(t.get("topic", "") for t in r.recommended_topics[:3]))}</td></tr>'
             for r in rows
         )
         groups.append(
             f"<h2>{_t(VERDICT_LABEL[verdict])} — {len(rows)}개</h2>"
-            "<table><tr><th>도메인</th><th>판정</th><th>점수</th><th>취득 상태</th>"
-            f"<th>한줄평</th><th>추천 주제</th></tr>{body}</table>"
+            '<div class="table-card"><table><tr><th>도메인</th><th>판정</th><th>지금 살 수 있나</th>'
+            f'<th class="num">점수</th><th>한줄평</th><th>추천 주제</th></tr>{body}</table></div>'
         )
 
     missing = sorted({label for r in results for label in r.unchecked + r.not_run})
     body = (
         "<h1>낙장도메인 품질 체커 결과</h1>"
-        f'<p class="muted">도메인 {len(results)}개</p>'
+        f'<p class="muted">도메인 {len(results)}개 · {escape(SCORE_GUIDE)}</p>'
         f'<div class="notice">{escape(DISCLAIMER)}</div>'
         + "".join(groups)
         + "<h2>이 검사의 한계</h2>"

@@ -104,7 +104,7 @@ async def test_every_model_failing_is_unchecked(http):
 async def test_no_key_means_not_run():
     result = await analyze("x.com", snaps(1, 100), None)
     assert result.check.status is CheckStatus.NOT_RUN
-    assert "✅ 판정 불가" in result.check.note
+    assert "매입 후보 판정 불가" in result.check.note
 
 
 async def test_no_readable_text_is_unchecked(http):

@@ -25,7 +25,7 @@ from . import config as config_module
 from .config import MODEL_CHAIN, Config
 from .models import DomainResult
 from .normalize import MAX_DOMAINS, parse_domains
-from .pipeline import Pipeline
+from .pipeline import Pipeline, load_run_state
 from .report import html as report_html
 
 STATIC_DIR = Path(__file__).resolve().parents[2] / "static"
@@ -35,6 +35,7 @@ AI_INPUT_PRICE = 0.09
 AI_OUTPUT_PRICE = 0.18
 AI_INPUT_TOKENS = 15_000
 AI_OUTPUT_TOKENS = 1_000
+KRW_PER_USD = 1_400  # 원화 병기 기준(2026-08-04)
 
 
 class RunRequest(BaseModel):
@@ -74,10 +75,13 @@ class RunManager:
         self.results: dict[str, dict] = {}
         self.running = False
         self.error = ""
+        self.base: Path | None = None  # run_state.json 을 찾을 데이터 폴더
 
     def publish(self, event: dict) -> None:
         self.history.append(event)
-        if event.get("type") == "domain_done" and event.get("result"):
+        # capture_done도 결과를 실어 온다 — 사진이 붙은 최신본으로 갈아 끼워야
+        # 상세 화면이 방금 찍은 캡쳐를 보여 준다.
+        if event.get("type") in ("domain_done", "capture_done") and event.get("result"):
             self.results[event["result"]["domain"]] = event["result"]
         for queue in list(self.subscribers):
             queue.put_nowait(event)
@@ -119,6 +123,12 @@ class RunManager:
         if self.pipeline is not None:
             self.pipeline.stop()
 
+    def resume_domains(self) -> list[str]:
+        """이 실행의 목록, 없으면 앱을 껐다 켜기 전에 남겨 둔 목록."""
+        if self.domains:
+            return list(self.domains)
+        return load_run_state(self.base) if self.base else []
+
     def status(self) -> dict:
         done = sum(1 for e in self.history if e.get("type") == "domain_done")
         return {
@@ -128,6 +138,7 @@ class RunManager:
             "domains": self.domains,
             "error": self.error,
             "finished": self.finished,
+            "resumable": bool(self.resume_domains()),
         }
 
 
@@ -143,12 +154,14 @@ def estimate(config: Config, count: int) -> dict:
         AI_INPUT_TOKENS * AI_INPUT_PRICE + AI_OUTPUT_TOKENS * AI_OUTPUT_PRICE
     ) / 1_000_000
     quota = [
-        f"Serper 검색 {count}쿼리 (무료 2,500쿼리 한도)",
-        f"Open PageRank {math.ceil(count / 100)}회 호출 (월 3만 도메인 한도)",
-        f"AI 분석 {count}회, 예상 비용 약 ${ai_cost:.2f}",
+        f"Serper 검색 {count}번 (무료로 쓸 수 있는 횟수는 2,500번)",
+        f"Open PageRank {math.ceil(count / 100)}번 물어봄 (한 달에 도메인 3만 개까지 무료)",
+        f"AI 분석 {count}번, 드는 돈 {_money(ai_cost)}",
     ]
     if config.enable_virustotal:
-        quota.append(f"바이러스토탈 {count}건 (분당 4건 제한이라 약 {count / 4:.0f}분 추가)")
+        quota.append(
+            f"바이러스토탈 {count}개 (1분에 4개까지만 되어서 약 {count / 4:.0f}분 더 걸립니다)"
+        )
     return {
         "count": count,
         "wayback_requests": count * per_domain,
@@ -159,12 +172,19 @@ def estimate(config: Config, count: int) -> dict:
             "검사할 도메인이 없습니다."
             if count == 0
             else (
-                f"도메인 {count}개 · 표 결과는 {_minutes(table_minutes)}, 캡쳐까지 {_minutes(minutes)} 걸립니다. "
-                f"웨이백이 속도를 낮추면(429) {_minutes(slow_minutes)}까지 늘어날 수 있습니다."
+                f"도메인 {count}개 · 표 결과는 {_minutes(table_minutes)}, 사진까지 {_minutes(minutes)} 걸립니다. "
+                f"옛날 화면 보관소(웨이백)가 잠깐 막으면 {_minutes(slow_minutes)}까지 늘어날 수 있습니다."
             )
         ),
         "quota": quota,
     }
+
+
+def _money(usd: float) -> str:
+    """달러 값에 원화를 나란히 적어 준다(1달러=1,400원 기준)."""
+    if usd < 0.01:
+        return "몇 원 수준"
+    return f"약 ${usd:.2f} (약 {round(usd * KRW_PER_USD):,}원, 1달러=1,400원 기준)"
 
 
 def _minutes(value: float) -> str:
@@ -210,6 +230,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         return await call_next(request)
 
     base = data_root()
+    manager.base = base
     (base / "captures").mkdir(parents=True, exist_ok=True)
     (base / "report").mkdir(parents=True, exist_ok=True)
     app.mount("/captures", StaticFiles(directory=base / "captures"), name="captures")
@@ -303,14 +324,17 @@ def create_app(config_path: Path | None = None) -> FastAPI:
 
     @app.post("/api/resume")
     async def resume() -> dict:
-        if not manager.domains:
+        manager.base = data_root()
+        domains = manager.resume_domains()
+        if not domains:
             raise HTTPException(status_code=400, detail="이어서 검사할 목록이 없습니다.")
         config = load_config()
-        await manager.start(config, manager.domains, use_cache=True)
-        return {"started": True, "count": len(manager.domains)}
+        await manager.start(config, domains, use_cache=True)
+        return {"started": True, "count": len(domains)}
 
     @app.get("/api/status")
     async def status() -> dict:
+        manager.base = data_root()
         return manager.status()
 
     @app.get("/api/events")

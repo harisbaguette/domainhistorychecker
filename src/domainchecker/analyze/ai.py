@@ -36,6 +36,10 @@ RESPONSE_SCHEMA = {
             "required": ["verdict", "confidence", "quotes"],
         },
         "transition": {"type": "string", "description": "전환 방향(정상→정상, 정상→위험 등)"},
+        "transition_risk": {
+            "type": "boolean",
+            "description": "정상→위험 업종·언어 급변 전환이 있었으면 true",
+        },
         "content_quality": {"type": "string"},
         "trademark": {"type": "string"},
         "trademark_risk": {"type": "boolean"},
@@ -57,6 +61,7 @@ RESPONSE_SCHEMA = {
         "topic_history",
         "spam",
         "transition",
+        "transition_risk",
         "content_quality",
         "trademark",
         "trademark_risk",
@@ -137,7 +142,7 @@ async def analyze(
     if client is None or not client.api_key:
         result.check = CheckState(
             status=CheckStatus.NOT_RUN,
-            note="OpenRouter 키가 없어 AI 분석을 못 했습니다(필수 검사라 ✅ 판정 불가).",
+            note="OpenRouter 키가 없어 AI 분석을 못 했습니다(필수 검사라 매입 후보 판정 불가).",
         )
         return result
     readable = [s for s in snapshots if s.text]
@@ -160,6 +165,7 @@ async def analyze(
     result.fallback_used = fallback
     result.topic_history = str(data.get("topic_history", ""))
     result.transition = str(data.get("transition", ""))
+    result.transition_risk = bool(data.get("transition_risk", False))
     result.content_quality = str(data.get("content_quality", ""))
     result.trademark = str(data.get("trademark", ""))
     result.trademark_risk = bool(data.get("trademark_risk", False))

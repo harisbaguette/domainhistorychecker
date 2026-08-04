@@ -2,7 +2,12 @@ import httpx
 import pytest
 import respx
 
-from domainchecker.clients.rdap import RdapClient, decode_whois, parse_whois
+from domainchecker.clients.rdap import (
+    RdapClient,
+    acquisition_label,
+    decode_whois,
+    parse_whois,
+)
 from domainchecker.models import CheckStatus
 
 RDAP_JSON = {
@@ -82,6 +87,21 @@ async def test_both_sources_failing_is_unchecked(http):
     result = await RdapClient(http, whois_query=broken_whois).fetch("dead.com")
     assert result.check.status is CheckStatus.UNCHECKED
     assert "실패" in result.check.note
+
+
+def test_redemption_period_wins_over_pending_delete():
+    """두 상태가 같이 오면 아직 원주인이 되찾을 수 있는 복원 기간이다(심사 B3)."""
+    assert (
+        acquisition_label(["redemptionPeriod", "pendingDelete"], True)
+        == "복원 기간(경매·복원 대상)"
+    )
+    assert (
+        acquisition_label(["pendingDelete", "redemptionPeriod"], True)
+        == "복원 기간(경매·복원 대상)"
+    )
+    # 단독으로 오면 그대로 각자의 뜻을 지킨다
+    assert acquisition_label(["pendingDelete"], True) == "삭제 대기(곧 등록 가능)"
+    assert acquisition_label(["redemptionPeriod"], True) == "복원 기간(경매·복원 대상)"
 
 
 def test_whois_no_match_means_available():

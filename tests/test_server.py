@@ -214,6 +214,64 @@ def test_resume_without_a_previous_list_is_rejected(client):
     assert client.post("/api/resume").status_code == 400
 
 
+def test_capture_done_refreshes_the_stored_result(sample_result):
+    """캡쳐가 붙은 최신본으로 갈아 끼워야 상세 화면에 사진이 보인다(심사 C1)."""
+    manager = server.RunManager()
+    before = judge(sample_result).model_dump(mode="json")
+    manager.publish({"type": "domain_done", "domain": "example.com", "result": before})
+    assert manager.results["example.com"]["captures"]["items"] == []
+
+    after = {**before, "captures": {"check": {"status": "OK", "note": "1장 저장."}, "items": [
+        {
+            "label": "말기",
+            "timestamp": "20240601000000",
+            "url": "https://web.archive.org/web/20240601000000/http://example.com/",
+            "file": "captures/example.com_20240601000000.png",
+        }
+    ]}}
+    manager.publish({"type": "capture_done", "domain": "example.com", "shots": 1, "result": after})
+
+    assert manager.results["example.com"]["captures"]["items"][0]["label"] == "말기"
+
+
+def test_status_reports_resumable_from_the_saved_run_state(client, config_path):
+    """앱을 껐다 켜도 중단된 목록이 남아 있으면 '이어서 검사'가 살아 있어야 한다(심사 C2)."""
+    from domainchecker.pipeline import run_state_path
+
+    assert client.get("/api/status").json()["resumable"] is False
+
+    base = config_module.data_dir(config_module.load(config_path))
+    run_state_path(base).write_text(
+        json.dumps({"domains": ["example.com", "foo.net"]}, ensure_ascii=False), encoding="utf-8"
+    )
+
+    assert client.get("/api/status").json()["resumable"] is True
+
+
+def test_resume_reads_the_saved_run_state_after_a_restart(client, config_path, fake_run):
+    from domainchecker.pipeline import run_state_path
+
+    base = config_module.data_dir(config_module.load(config_path))
+    run_state_path(base).write_text(
+        json.dumps({"domains": ["example.com", "foo.net"]}, ensure_ascii=False), encoding="utf-8"
+    )
+
+    resumed = client.post("/api/resume")  # 이 서버는 아직 한 번도 검사한 적이 없다
+    assert resumed.status_code == 200
+    assert resumed.json()["count"] == 2
+    read_sse(client)
+
+
+def test_damaged_run_state_is_ignored(client, config_path):
+    from domainchecker.pipeline import run_state_path
+
+    base = config_module.data_dir(config_module.load(config_path))
+    run_state_path(base).write_text("{not json", encoding="utf-8")
+
+    assert client.get("/api/status").json()["resumable"] is False
+    assert client.post("/api/resume").status_code == 400
+
+
 def test_external_access_requires_a_password(config_path, monkeypatch):
     """비밀번호를 정했을 때만 밖에서 접속할 수 있게 잠근다(키 노출 방지)."""
     monkeypatch.setenv("DOMAINCHECKER_PASSWORD", "열쇠말")

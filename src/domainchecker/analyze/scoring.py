@@ -12,6 +12,7 @@ Verdict priority (first matching rule wins):
 from __future__ import annotations
 
 from ..models import (
+    AVAILABILITY_LABEL,
     CHECK_LABEL,
     REQUIRED_CHECKS,
     VERDICT_LABEL,
@@ -24,8 +25,6 @@ from ..models import (
 BUY_CUT = 75.0
 REJECT_CUT = 50.0
 AI_FATAL_CONFIDENCE = 0.85  # AI 단독 치명 판정에 필요한 확신도
-
-_RISK_WORDS = ("도박", "성인", "불법", "스팸", "위험", "약품", "해킹", "피싱", "사기")
 
 
 def _check_of(result: DomainResult, name: str):
@@ -154,12 +153,13 @@ def _transition_item(result: DomainResult) -> ScoreItem:
 
     points = 15.0
     notes = []
-    if ai_ok and result.ai.transition:
-        text = result.ai.transition
-        if any(word in text for word in _RISK_WORDS):
+    if ai_ok:
+        # 서술문 낱말 검색은 "위험 전환은 없었습니다"까지 감점하던 오탐원이었다.
+        # 이제 AI가 스키마로 직접 답한 boolean 하나만 본다.
+        if result.ai.transition_risk:
             points -= 9
             notes.append("정상→위험 방향 전환 소견")
-        elif "전환" in text or "변화" in text or "바뀌" in text:
+        elif any(word in result.ai.transition for word in ("전환", "변화", "바뀌")):
             points -= 2
             notes.append("주제 전환 있음(정상 범위)")
     if rules_ok:
@@ -256,7 +256,22 @@ def judge(result: DomainResult) -> DomainResult:
     if not result.recommended_topics:
         result.recommended_topics = result.ai.recommended_topics
     result.acquisition = result.registration.acquisition
+    result.availability = availability_of(result.registration.acquisition)
+    result.availability_label = AVAILABILITY_LABEL[result.availability]
     return result
+
+
+def availability_of(acquisition: str) -> str:
+    """Fold the acquisition status into one buy-now axis for the UI column."""
+    if "미등록" in acquisition:
+        return "free"
+    if "삭제 대기" in acquisition:
+        return "soon"
+    if "복원" in acquisition:
+        return "auction"
+    if "등록 중" in acquisition or "자동 갱신" in acquisition:
+        return "taken"
+    return "unknown"
 
 
 def fatal_reasons(result: DomainResult) -> list[str]:
@@ -293,8 +308,13 @@ def warn_reasons(result: DomainResult) -> list[str]:
     spam = result.ai.spam
     ai_says_spam = result.ai.check.ok and spam.verdict == "spam"
     rules_say_spam = result.rules.check.ok and result.rules.spam_operation
-    if rules_say_spam and result.ai.check.ok and spam.verdict == "clean":
-        reasons.append("신호 충돌 — 규칙 검사는 스팸 흔적을 찾았는데 AI는 정상이라고 봤습니다.")
+    # 규칙이 스팸 흔적을 찾았는데 AI가 스팸이라 답하지 않은 경우는 전부 충돌이다
+    # (clean·unclear·unknown 모두) — 유보를 무혐의로 읽어 ✅를 내주던 구멍을 막는다.
+    if rules_say_spam and result.ai.check.ok and spam.verdict != "spam":
+        reasons.append(
+            "신호 충돌 — 규칙 검사는 스팸 흔적을 찾았는데 AI는 스팸이라고 보지 않았습니다"
+            f"(AI 판정: {spam.verdict})."
+        )
     elif ai_says_spam and not rules_say_spam:
         reasons.append("신호 충돌 — AI는 스팸으로 봤지만 규칙 검사에서는 흔적을 찾지 못했습니다.")
 

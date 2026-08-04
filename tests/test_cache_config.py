@@ -42,6 +42,15 @@ def test_missing_or_damaged_config_falls_back_to_defaults(tmp_path):
     assert load(broken).model == MODEL_CHAIN[0]
 
 
+def test_model_chain_is_the_three_models_the_plan_fixed():
+    """모델 이름이 조용히 바뀌면 실행 중 404로만 드러난다 — 여기서 못 박아 둔다."""
+    assert MODEL_CHAIN == (
+        "deepseek/deepseek-v4-flash-0731",
+        "deepseek/deepseek-v4-flash",
+        "deepseek/deepseek-v3.2",
+    )
+
+
 def test_model_chain_puts_the_chosen_model_first():
     config = Config(model=MODEL_CHAIN[2])
     chain = config.model_chain()

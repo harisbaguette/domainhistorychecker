@@ -12,9 +12,11 @@ CONFIG_DIR = Path.home() / ".domainchecker"
 CONFIG_PATH = CONFIG_DIR / "config.json"
 
 # AI model fallback chain, fixed by PLAN §3.
+# 2026-08-04 live probe: "deepseek-v4-flash-latest" is not a real OpenRouter id
+# (400) — the un-suffixed "deepseek-v4-flash" is, so the middle rung uses that.
 MODEL_CHAIN = (
     "deepseek/deepseek-v4-flash-0731",
-    "deepseek/deepseek-v4-flash-latest",
+    "deepseek/deepseek-v4-flash",
     "deepseek/deepseek-v3.2",
 )
 
