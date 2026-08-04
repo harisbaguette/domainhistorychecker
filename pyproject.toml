@@ -1,0 +1,31 @@
+[project]
+name = "domainchecker"
+version = "0.1.0"
+description = "낙장도메인 품질 체커 — 백엔드 코어"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.27",
+    "dnspython>=2.6",
+    "beautifulsoup4>=4.12",
+    "lxml>=5.2",
+    "pydantic>=2.7",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "respx>=0.21",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/domainchecker"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["src"]
