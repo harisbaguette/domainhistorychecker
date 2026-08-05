@@ -70,8 +70,8 @@ CSS = """
 /* 타임라인 막대 */
 --dw-chart-1:#2D71B7;
 /* 그림자 — glass가 이 프로젝트 시그니처 */
---dw-shadow-1:0 1px 2px rgba(36,30,25,0.06);
---dw-shadow-2:0 4px 12px rgba(36,30,25,0.08);
+--dw-shadow-1:0 2px 8px rgba(0,0,0,0.04);
+--dw-shadow-2:0 8px 16px rgba(0,0,0,0.06);
 --dw-shadow-glass:0 8px 32px rgba(0,0,0,0.04);
 /* 모서리·모션·포커스 */
 --dw-radius-control:12px; --dw-radius-card:16px; --dw-radius-pill:999px;

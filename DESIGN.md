@@ -31,7 +31,7 @@ DW `tokens.css`의 라이트 값을 복사해 쓴다(이 도구는 로컬 단독
   - error `#DF4B46` / bg `#FFF1EF` / ink `#A42D2B`
   - info = 액센트와 동일(파랑 하나만 채도색)
 - 타임라인 막대: `--dw-chart-1 #2D71B7` 한 색만(계열이 하나뿐이므로).
-- 그림자: `--dw-shadow-1` / `--dw-shadow-2` / 시그니처 `--dw-shadow-glass 0 8px 32px rgba(0,0,0,0.04)`
+- 그림자: `--dw-shadow-1 0 2px 8px rgba(0,0,0,0.04)` / `--dw-shadow-2 0 8px 16px rgba(0,0,0,0.06)` / 시그니처 `--dw-shadow-glass 0 8px 32px rgba(0,0,0,0.04)`
 - 모서리: control 12 / card 16 / pill 999 (DW 값 계승 — 종이 수첩 컨셉의 근거 있는 라운드)
 - 간격: 4/8/12/16/24/32/48
 - 모션: `--dw-ease cubic-bezier(0.23,1,0.32,1)`, 150/200/300ms. `ease-in`·`linear`·scale(0) 등장 금지.
@@ -51,6 +51,8 @@ DW `tokens.css`의 라이트 값을 복사해 쓴다(이 도구는 로컬 단독
 | 최대 폭 | 440px(모바일 앱) | 표 화면 1100px, 상세 글 860px | 수백 행 표 도구 — 440px에 표를 우겨넣으면 정보가 죽는다. 375px 반응형(카드형 행 변환)은 유지 |
 | 아이콘 | lucide-react | 아이콘 없음(텍스트+색 배지) | React 없는 정적 HTML. 임의 SVG 창작 금지 원칙 준수를 위해 아이콘 자체를 쓰지 않는 쪽 선택 |
 | 이모지 | 금지 | 금지(기존 ✅⚠️❌🖼️ 전부 제거) | DW·ECC 공통 규칙 |
+| 토큰 이름 | `--dw-ring` / `--dw-font-body` | `--dw-focus` / `--dw-font` | 값은 DW와 동일. 1층 primitive 없이 semantic만 복사한 단층 세트라 짧은 별칭 사용 |
+| 다크 테마 | 라이트+다크 | 라이트만 | 로컬 단독 실행 도구, 화면 3개. 다크 값 복사는 유지 부담만 늘어 미채택 |
 
 ## 6. 컴포넌트 규격
 
