@@ -1,0 +1,75 @@
+/* icon | text. The action column is left implicit so an alert without one keeps
+   its right padding instead of paying for an empty track. */
+.dw-alert {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: var(--dw-space-1) var(--dw-space-3);
+  padding: var(--dw-space-4);
+  border-radius: var(--dw-radius-card);
+  font-size: var(--dw-size-body);
+  line-height: var(--dw-leading-body);
+}
+
+.dw-alert-icon {
+  grid-column: 1;
+  grid-row: 1;
+  flex-shrink: 0;
+  /* Nudged to sit on the first line of text rather than the box edge. */
+  margin-top: 2px;
+}
+
+.dw-alert-title,
+.dw-alert-description {
+  grid-column: 2;
+  margin: 0;
+  min-width: 0;
+}
+
+.dw-alert-title {
+  font-weight: var(--dw-weight-bold);
+}
+
+.dw-alert-action {
+  grid-column: 3;
+  grid-row: 1;
+  align-self: center;
+}
+
+/* Face colours come in pairs: the tinted -bg carries text in the darker -ink,
+   while the raw state colour is left for the icon. */
+.dw-alert[data-variant='info'] {
+  background: var(--dw-info-bg);
+  color: var(--dw-info-ink);
+}
+
+.dw-alert[data-variant='info'] .dw-alert-icon {
+  color: var(--dw-info);
+}
+
+.dw-alert[data-variant='success'] {
+  background: var(--dw-success-bg);
+  color: var(--dw-success-ink);
+}
+
+.dw-alert[data-variant='success'] .dw-alert-icon {
+  color: var(--dw-success);
+}
+
+.dw-alert[data-variant='warning'] {
+  background: var(--dw-warning-bg);
+  color: var(--dw-warning-ink);
+}
+
+.dw-alert[data-variant='warning'] .dw-alert-icon {
+  color: var(--dw-warning);
+}
+
+.dw-alert[data-variant='error'] {
+  background: var(--dw-error-bg);
+  color: var(--dw-error-ink);
+}
+
+.dw-alert[data-variant='error'] .dw-alert-icon {
+  color: var(--dw-error);
+}

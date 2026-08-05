@@ -1,0 +1,37 @@
+.dw-textarea {
+  width: 100%;
+  min-height: 88px;
+  padding: var(--dw-space-3) var(--dw-space-4);
+  background: var(--dw-surface-raised);
+  color: var(--dw-text);
+  border: 1.5px solid var(--dw-border-strong);
+  border-radius: var(--dw-radius-control);
+  font-family: var(--dw-font-body);
+  font-size: var(--dw-size-body);
+  line-height: var(--dw-leading-body);
+  resize: vertical;
+  outline: none;
+  transition:
+    border-color var(--dw-duration-fast) var(--dw-ease),
+    background-color var(--dw-duration-fast) var(--dw-ease);
+}
+
+.dw-textarea:focus {
+  background: var(--dw-surface);
+  border-color: var(--dw-accent);
+}
+
+.dw-textarea:focus-visible {
+  box-shadow: var(--dw-ring);
+}
+
+.dw-textarea[aria-invalid='true'] {
+  border-color: var(--dw-error);
+  background: var(--dw-error-bg);
+}
+
+.dw-textarea:disabled {
+  background: var(--dw-surface-sunken);
+  color: var(--dw-text-faint);
+  cursor: not-allowed;
+}

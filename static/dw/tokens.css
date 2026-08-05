@@ -1,0 +1,308 @@
+/* ==========================================================================
+   DW Design System — tokens.css
+   1층 primitive(원시값) + 2층 semantic(역할). 컴포넌트는 semantic만 참조한다.
+   값의 근거는 DESIGN.md 4장.
+
+   색은 전부 OKLCH에서 설계했다(2026-08-04 전면 재정립) — 램프마다 L을 등간격으로
+   깔고, chroma를 한 가족으로 묶고, 어두운 단은 차가운 쪽 밝은 단은 따뜻한 쪽으로
+   hue를 미세하게 흘렸다. 아래 값은 그 설계의 sRGB 출력이다.
+   simplify: 파일에 적히는 값은 hex를 유지한다. 런타임 색공간 전환(oklch() 문법)은
+   구형 웹뷰 대비 이득이 없어 미루고, 설계는 OKLCH로 하되 출력만 hex로 내린다.
+
+   실측 모델: WCAG 2.x 상대휘도 대비 / CIEDE2000 / 색각이상은 Machado 2009
+   severity 1.0. 아래 주석의 모든 수치는 이 모델로 잰 값이다.
+   ========================================================================== */
+
+/* @font-face 는 styles/base.css 로 옮겼다. 토큰 파일은 값만 담아야,
+   doweek 처럼 글꼴을 자기 경로(/fonts/)로 이미 얹은 앱이 이 파일을 그대로
+   @import 해도 같은 글꼴을 두 번 내려받지 않는다. */
+
+:root {
+  /* ── 1층 primitive · 종이(warm neutral) ───────────────────────
+     쿨그레이(slate)를 버리고 따뜻한 종이 언더톤으로 갔다. 컨셉이 "종이 수첩"인데
+     파란 언더톤 회색은 기술 대시보드의 색이라 컨셉과 어긋났다.
+     OKLCH 설계: L 0.880~1.000 단조 사다리, C 0.0045→0.0113(어두울수록 살짝 진하게),
+     h 78°→63°(어두운 단은 차가운 쪽으로 흘림). 카드만 순백을 남겼다 —
+     따뜻한 책상 위에 흰 종이가 놓인 그림이고, 잉크 대비 여유도 가장 크다.
+     명도 사다리는 단조롭게 정렬했다: raised > bg > sunken > border > outer.
+     (예전 slate 값에서는 sunken 이 bg 보다 미세하게 밝아 층이 뒤집혀 있었다 —
+     실측치는 DESIGN.md 4.2에 남겼다) */
+  --dw-paper-0: #FFFFFF;
+  --dw-paper-25: #FAF8F5;
+  --dw-paper-50: #F5F2EE;
+  --dw-paper-100: #F0ECE6;
+  --dw-paper-200: #E4DFD9;
+  --dw-paper-300: #DDD6D0;
+
+  /* ── 1층 primitive · 잉크(text) ──────────────────────────────
+     네이비블랙에서 웜블랙(세피아 차콜)으로. 따뜻한 종이 위에서 차가운
+     검정은 인쇄물이 아니라 화면처럼 보인다. OKLCH L 0.240/0.507/0.612/0.763,
+     C 0.011~0.013, h 62°~77°.
+     600·500 은 흰 카드뿐 아니라 종이 배경(paper-50)·가라앉은 면(paper-100)·
+     입력칸(paper-25) 위에도 얹히므로 네 면 전부에서 바닥선을 잰다.
+     600 = 5.84 / 5.24 / 4.97 / 5.51 (본문 4.5 통과)
+     500 = 3.76 / 3.37 / 3.20 / 3.55 (비문장 3 통과)
+     900 = 16.47 / 14.76 / 14.00 / 15.54
+     경계선 알파도 순검정 대신 잉크색을 흘려 종이 톤을 깨지 않는다. */
+  --dw-ink-900: #241E19;
+  --dw-ink-600: #6A645D;
+  --dw-ink-500: #88837C;
+  --dw-ink-400: #B6B1AA;
+  --dw-ink-alpha-06: rgba(36, 30, 25, 0.07);
+  --dw-ink-alpha-35: rgba(0, 0, 0, 0.35);
+
+  /* ── 1층 primitive · 잉크 파랑(brand blue) ─────────────────────
+     만년필 잉크(muted sapphire / Prussian)에서 왔다. Tailwind blue-500/600 은
+     h≈260° · C 0.19~0.22 의 형광 파랑이라 "2026년에 파랑은 안 보인다"는 말이
+     나오는 그 색이다. 여기서는 h 250~254° · C 0.113~0.129 로 채도를 40% 낮추고
+     한 단 더 깊게 내렸다(500·600·700 = C 0.127 / 0.129 / 0.113) — 종이에 눌러 쓴 잉크의 무게.
+     흰 글자 대비: 600 = 6.75, 700 = 9.25. 500 은 흰 카드 대비 4.47(면·아이콘용). */
+  --dw-blue-50: #ECF5FF;
+  --dw-blue-500: #3D79C0;
+  --dw-blue-600: #155DA1;
+  --dw-blue-700: #004981;
+  --dw-blue-alpha-10: rgba(61, 121, 192, 0.12);
+  --dw-blue-alpha-32: rgba(61, 121, 192, 0.34);
+
+  /* ── 1층 primitive · 상태 4색 + 글자용 진한 짝 ──────────────────
+     ECC 기본값(Tailwind green/amber/red-500)은 원색이라 새 가족 옆에
+     서면 혼자 형광으로 튄다. hue 정체성(초록·호박·빨강)은 그대로 두고 chroma만
+     11~21%(초록 -21 · 호박 -14 · 빨강 -11) 낮춰 무게를 맞췄다. DESIGN.md 4.3에 근거를 적었다.
+     -ink 는 -bg 위 · 흰 카드 위 · 종이 배경 위 전부 4.5:1 이상(최저 5.31).
+     원색 자체는 흰 배경 대비 3:1 을 못 넘긴다(초록 2.51 · 호박 2.17). 원색이 닿는
+     자리는 alert 아이콘(aria-hidden, 옆에 -ink 글자가 늘 붙는다)과 avatar 점
+     (surface 링을 두른 장식)뿐이라 WCAG 1.4.11 대상이 아니다 — 초록·호박은 hue
+     정체성을 지키는 한 흰 배경에서 3:1 에 닿을 수 없어 의도적으로 남긴 타협이다. */
+  --dw-green-500: #4BB86A;
+  --dw-green-50: #E9FAED;
+  --dw-green-700: #1A6D3B;
+  --dw-amber-500: #EAA13B;
+  --dw-amber-50: #FFF5E2;
+  --dw-amber-700: #93550F;
+  --dw-red-500: #DF4B46;
+  --dw-red-50: #FFF1EF;
+  --dw-red-700: #A42D2B;
+
+  /* ── 1층 primitive · 분류 잉크(categorical ink) ────────────────
+     차트 색과 하는 일이 다르다. 차트 색은 넓은 면으로 칠해져 배경 대비 3:1만
+     넘기면 되지만, 분류 잉크는 (a) 7px 점, (b) 흰 글자를 얹는 채워진 칩,
+     (c) 옅은 틴트 위 글자 — 세 자리에 같은 값 하나로 들어간다. 그래서 전부
+     흰색 대비 5:1 이상으로 깊게 잡았다(대비는 대칭이라 이 한 조건이 세 자리를
+     모두 통과시킨다). 파랑·주황은 이미 있는 값을 그대로 다시 쓴다.
+     여섯 칸을 OKLCH L 0.470~0.511 한 띠에 세우고 hue만 벌렸다 — 그래서 어느
+     칸도 혼자 무겁거나 가볍지 않다. */
+  --dw-teal-600: #006F6C;
+  --dw-magenta-600: #982667;
+  --dw-violet-600: #753CA9;
+  --dw-olive-600: #586B2B;
+
+  /* ── 1층 primitive · 외부 브랜드 고정색 ──────────────────────── */
+  /* 유튜브 공식 빨강. 원색은 흰 글자 대비 4.0:1 뿐이라 글자가 닿는 자리에는
+     같은 브랜드의 짙은 빨강(youtube-700, 5.89:1)을 쓴다. */
+  --dw-youtube-500: #FF0000;
+  --dw-youtube-700: #CC0000;
+
+  /* ── 2층 semantic · 표면과 잉크 ──────────────────────────────── */
+  --dw-bg: var(--dw-paper-50);
+  --dw-bg-outer: var(--dw-paper-300);
+  --dw-surface: var(--dw-paper-0);
+  --dw-surface-sunken: var(--dw-paper-100);
+  --dw-surface-raised: var(--dw-paper-25);
+  --dw-border: var(--dw-ink-alpha-06);
+  --dw-border-strong: var(--dw-paper-200);
+  --dw-scrim: var(--dw-ink-alpha-35);
+
+  --dw-text: var(--dw-ink-900);
+  /* 본문급 보조 문구(라벨·헬프텍스트·빈 화면 설명)용. 네 면 최저 4.97:1 */
+  --dw-text-muted-aa: var(--dw-ink-600);
+  /* 메타·비활성 표시용. 최저 3.20:1 — 문장 본문에 쓰지 말 것(DESIGN.md 접근성 절) */
+  --dw-text-muted: var(--dw-ink-500);
+  --dw-text-faint: var(--dw-ink-400);
+
+  /* ── 2층 semantic · 액센트 ───────────────────────────────────── */
+  --dw-accent: var(--dw-blue-500);
+  --dw-accent-strong: var(--dw-blue-600);
+  /* 눌린 상태. -strong 이 이미 '흰 글자를 얹는 기본 채움'이라 더 짙은 단이 필요하다 */
+  --dw-accent-pressed: var(--dw-blue-700);
+  --dw-accent-bg: var(--dw-blue-50);
+  --dw-accent-soft: var(--dw-blue-alpha-10);
+  --dw-on-accent: var(--dw-paper-0);
+
+  /* ── 2층 semantic · 상태 ─────────────────────────────────────── */
+  /* -bg 위에 얹는 글자는 반드시 -ink 를 쓴다(원색은 4.5:1을 못 넘긴다) */
+  --dw-success: var(--dw-green-500);
+  --dw-success-bg: var(--dw-green-50);
+  --dw-success-ink: var(--dw-green-700);
+  --dw-warning: var(--dw-amber-500);
+  --dw-warning-bg: var(--dw-amber-50);
+  --dw-warning-ink: var(--dw-amber-700);
+  --dw-error: var(--dw-red-500);
+  --dw-error-bg: var(--dw-red-50);
+  --dw-error-ink: var(--dw-red-700);
+  --dw-info: var(--dw-blue-500);
+  --dw-info-bg: var(--dw-blue-50);
+  --dw-info-ink: var(--dw-blue-600);
+
+  /* ── 2층 semantic · chart series (fixed order, never cycled) ──── */
+  /* Ink blue leads; the rest are re-derived from the same OKLCH formula as the
+     categorical inks, one lightness band higher (L 0.495-0.634) because charts
+     are filled areas, not text. The five sit on a deliberate lightness ladder
+     so they still separate in greyscale print. Measured on both light surfaces
+     (white card and paper background): every slot >= 3.17:1, worst adjacent CVD
+     deltaE2000 16.4 (>= 8), worst normal-vision deltaE2000 24.3 (>= 15),
+     smallest greyscale gap 2.26 OKLCH-L points (was 1.01 before). */
+  --dw-chart-1: #2D71B7;
+  --dw-chart-2: #BD7928;
+  --dw-chart-3: #008F87;
+  --dw-chart-4: #AA2653;
+  --dw-chart-5: #778E45;
+
+  /* ── 2층 semantic · 분류 잉크 6칸 (고정 순서, 돌려쓰지 않는다) ──
+     쓰임: 할 일 분류(업무·회사·일상), 프로젝트 정체성, 필터 탭.
+     계약 두 가지 —
+     ① 1~3번은 '색만으로 뜻을 나르는' 자리에 쓴다(글자 없는 점만 찍히는 목록 등).
+        세 색끼리 색각이상 분리도를 최우선으로 맞췄다: 최악 dE2000 16.2 (기준 8).
+     ② 4~6번은 항상 글자 이름이 함께 붙는 자리(필터 탭)에만 쓴다. 6색을 한 줄에
+        늘어놓으면 붙어 있는 칸끼리 최악 dE2000 11.9 로 서 있지만, 여섯 색
+        전부를 색각이상에서 갈라놓는 것은 이 밝기 폭에서 불가능하다(전조합 최악은
+        1-5 deutan = 1.3). 그래서 4~6번은 색이 뜻의 유일한 단서가 되면 안 된다.
+     흰색 대비: 6.75 / 6.02 / 5.92 / 7.48 / 7.06 / 5.91. 종이 배경(paper-50) 대비도
+     전부 5.30 이상이고, 자기 8% 틴트 위 글자로 써도 전부 5.28 이상이라 어느
+     자리에 올려도 본문 바닥선을 지킨다.
+     2번(회사)은 완료 초록과 확실히 갈린다: success 원색과 dE2000 31.6(색각이상에서도
+     최악 32.6), success-ink 와 16.7.
+     상태 4색 중 info 와 1번이 같은 값인 것은 브랜드 파랑과 info 를 한 값으로
+     묶기로 한 결정(DESIGN.md 4.2)의 연장이라 의도된 겹침이다. */
+  --dw-cat-1: var(--dw-blue-600);
+  --dw-cat-2: var(--dw-teal-600);
+  --dw-cat-3: var(--dw-amber-700);
+  --dw-cat-4: var(--dw-magenta-600);
+  --dw-cat-5: var(--dw-violet-600);
+  --dw-cat-6: var(--dw-olive-600);
+
+  /* ── 2층 semantic · 외부 브랜드 ──────────────────────────────── */
+  --dw-brand-youtube: var(--dw-youtube-500);
+  --dw-brand-youtube-ink: var(--dw-youtube-700);
+
+  /* ── 타이포 ──────────────────────────────────────────────────── */
+  --dw-font-display: 'MemomentKkukkukk', 'Pretendard', 'Apple SD Gothic Neo', system-ui, sans-serif;
+  --dw-font-body: 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', -apple-system,
+    BlinkMacSystemFont, system-ui, 'Segoe UI', sans-serif;
+
+  /* 프로즈 3단(ratio 1.25) — 위계는 크기가 아니라 웨이트로 만든다 */
+  --dw-size-body: 1rem;       /* 16px */
+  --dw-size-title: 1.25rem;   /* 20px */
+  --dw-size-display: 1.5625rem; /* 25px */
+  /* 비프로즈 전용(뱃지·캡션). 문장을 담지 않는다 */
+  --dw-size-micro: 0.875rem;  /* 14px */
+
+  --dw-weight-regular: 400;
+  --dw-weight-bold: 700;
+  --dw-weight-black: 900;
+
+  --dw-leading-tight: 1.15;
+  --dw-leading-body: 1.5;
+  --dw-tracking-display: -0.01em;
+
+  /* ── 간격(4pt 기반) ──────────────────────────────────────────── */
+  --dw-space-1: 4px;
+  --dw-space-2: 8px;
+  --dw-space-3: 12px;
+  --dw-space-4: 16px;
+  --dw-space-6: 24px;
+  --dw-space-8: 32px;
+  --dw-space-12: 48px;
+
+  /* ── 모서리 ──────────────────────────────────────────────────── */
+  --dw-radius-control: 12px;
+  --dw-radius-card: 16px;
+  --dw-radius-modal: 24px;
+  --dw-radius-pill: 999px;
+
+  /* ── 그림자(doweek soft shadow 계승 + 시그니처) ──────────────── */
+  --dw-shadow-1: 0 2px 8px rgba(0, 0, 0, 0.04);
+  --dw-shadow-2: 0 8px 16px rgba(0, 0, 0, 0.06);
+  /* 시그니처 토큰: 종이가 책상에서 살짝 떠 있는 넓고 옅은 그림자 */
+  --dw-shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.04);
+
+  /* ── 포커스 ──────────────────────────────────────────────────── */
+  --dw-ring: 0 0 0 3px var(--dw-blue-alpha-32);
+  --dw-ring-offset: 2px;
+
+  /* ── 모션 ────────────────────────────────────────────────────── */
+  --dw-ease: cubic-bezier(0.23, 1, 0.32, 1);
+  --dw-duration-fast: 150ms;
+  --dw-duration-base: 200ms;
+  --dw-duration-slow: 300ms;
+
+  /* ── 치수 ────────────────────────────────────────────────────── */
+  --dw-tap: 44px;
+  --dw-control-height: 48px;
+  --dw-app-max-width: 440px;
+}
+
+/* 다크는 구조만 준비한 기초값이다(라이트가 기본·정본). 화면 단위 실사용 검증 전.
+   라이트를 뒤집은 것이 아니라 같은 OKLCH 공식으로 다시 유도했다 — 종이 hue(h 56~74°)
+   와 잉크 파랑 hue(h 252~254°)를 그대로 들고 명도만 어두운 쪽 사다리에 다시 깔았다.
+   그래서 다크의 '어두운 종이'도 파란 회색이 아니라 따뜻한 회색이다. */
+[data-theme="dark"] {
+  --dw-paper-0: #25221F;
+  --dw-paper-25: #2D2926;
+  --dw-paper-50: #171412;
+  --dw-paper-100: #322E2A;
+  --dw-paper-200: #433F3A;
+  --dw-paper-300: #0E0C0A;
+
+  --dw-ink-900: #EDEBE7;
+  --dw-ink-600: #B9B5AF;
+  --dw-ink-500: #9F9B94;
+  --dw-ink-400: #807B75;
+  --dw-ink-alpha-06: rgba(255, 255, 255, 0.08);
+  --dw-ink-alpha-35: rgba(0, 0, 0, 0.6);
+
+  --dw-blue-50: #1F3247;
+  --dw-blue-500: #6AA1E4;
+  /* 다크에서는 '강한 파랑'이 더 밝은 쪽이다 — 어두운 배경 위 글자·버튼 대비를 위해 */
+  --dw-blue-600: #91C0F8;
+  --dw-blue-700: #B7D7FF;
+  --dw-blue-alpha-10: rgba(106, 161, 228, 0.16);
+  --dw-blue-alpha-32: rgba(106, 161, 228, 0.38);
+
+  --dw-green-50: #16321F;
+  --dw-green-700: #87D89E;
+  --dw-amber-50: #3B290C;
+  --dw-amber-700: #F7C066;
+  --dw-red-50: #46221F;
+  --dw-red-700: #F7988F;
+
+  --dw-on-accent: #0E0C0A;
+
+  /* 분류 잉크는 어두운 면 위에서 밝은 쪽으로 뒤집는다. 어두운 카드(paper-0)
+     대비 5.42~5.86:1 로 여섯 칸의 잉크 무게를 라이트와 같게 맞췄다(OKLCH L
+     0.680~0.700 한 띠). 1·3번은 primitive 별칭(blue-600·amber-700)을 그대로 쓰면
+     다크에서 너무 밝은 파스텔이 되어 나머지 넷과 무게가 어긋나므로, 이 층에서만
+     값을 직접 준다. 1~3번 최악 CVD dE2000 15.5, 이웃 최악 11.2. */
+  --dw-teal-600: #53ABA5;
+  --dw-magenta-600: #D879A8;
+  --dw-violet-600: #AE85DC;
+  --dw-olive-600: #90A569;
+  --dw-cat-1: #679BDB;
+  --dw-cat-3: #CD8F57;
+
+  /* 유튜브 짙은 빨강은 어두운 배경에서 가라앉으므로 밝은 쪽으로 바꾼다
+     (어두운 카드 대비 6.03:1). 라이트의 브랜드 원색·짙은 빨강은 손대지 않는다. */
+  --dw-youtube-700: #F07F77;
+
+  /* Same five hues re-stepped for the dark surfaces, not a flip: lightness
+     ladder L 0.609-0.720, worst adjacent CVD deltaE2000 14.8, every slot
+     >= 3.84:1 against both the dark card and the dark background. */
+  --dw-chart-1: #5590D0;
+  --dw-chart-2: #CF8E52;
+  --dw-chart-3: #41A8A0;
+  --dw-chart-4: #CA5675;
+  --dw-chart-5: #98AF6B;
+
+  --dw-shadow-1: 0 2px 8px rgba(0, 0, 0, 0.35);
+  --dw-shadow-2: 0 8px 16px rgba(0, 0, 0, 0.45);
+  --dw-shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.5);
+}

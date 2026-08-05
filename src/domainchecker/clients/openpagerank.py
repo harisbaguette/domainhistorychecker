@@ -17,7 +17,7 @@ async def fetch_batch(
     if not api_key:
         state = CheckState(
             status=CheckStatus.NOT_RUN,
-            note="Open PageRank 키가 없어 권위 점수를 못 봤습니다(필수 검사라 ✅ 판정 불가).",
+            note="Open PageRank 키가 없어 권위 점수를 못 봤습니다(필수 검사라 매입 후보 판정 불가).",
         )
         return {d: Authority(check=state) for d in domains}
 

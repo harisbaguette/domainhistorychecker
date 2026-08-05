@@ -1,0 +1,74 @@
+.dw-card {
+  display: block;
+  padding: var(--dw-space-4);
+  background: var(--dw-surface);
+  border-radius: var(--dw-radius-card);
+  color: var(--dw-text);
+}
+
+.dw-card[data-size='sm'] {
+  padding: var(--dw-space-3);
+}
+
+.dw-card[data-elevation='flat'] {
+  background: var(--dw-surface-sunken);
+  box-shadow: none;
+}
+
+.dw-card[data-elevation='raised'] {
+  box-shadow: var(--dw-shadow-1);
+}
+
+/* 시그니처: 넓고 옅은 그림자 — 종이가 책상 위에 살짝 떠 있는 느낌 */
+.dw-card[data-elevation='float'] {
+  box-shadow: var(--dw-shadow-glass);
+}
+
+/* 제목·설명은 왼쪽 열에 쌓이고 action 은 오른쪽 열로 간다.
+   오른쪽 열은 명시하지 않는다 — action 이 없을 때 빈 열 간격이 생기지 않도록,
+   CardAction 이 있을 때만 암묵 열이 만들어지게 둔다. */
+.dw-card-header {
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: start;
+  gap: var(--dw-space-1) var(--dw-space-3);
+  margin-bottom: var(--dw-space-2);
+}
+
+.dw-card-title {
+  grid-column: 1;
+  margin: 0;
+  font-family: var(--dw-font-display);
+  font-size: var(--dw-size-title);
+  font-weight: var(--dw-weight-black);
+  line-height: var(--dw-leading-tight);
+  letter-spacing: var(--dw-tracking-display);
+  color: var(--dw-text);
+}
+
+.dw-card-description {
+  grid-column: 1;
+  margin: 0;
+  font-size: var(--dw-size-body);
+  line-height: var(--dw-leading-body);
+  color: var(--dw-text-muted-aa);
+}
+
+.dw-card-action {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
+}
+
+.dw-card-content {
+  font-size: var(--dw-size-body);
+  line-height: var(--dw-leading-body);
+  color: var(--dw-text-muted-aa);
+}
+
+.dw-card-footer {
+  display: flex;
+  align-items: center;
+  gap: var(--dw-space-2);
+  margin-top: var(--dw-space-3);
+}

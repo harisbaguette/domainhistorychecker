@@ -1,0 +1,243 @@
+/* ==========================================================================
+   낙장도메인 품질 체커 — 이 앱만의 레이아웃
+   DW 부품(static/dw/)이 덮지 못하는 것만 여기 둔다. 색·모서리·그림자·간격은
+   전부 var(--dw-*) 로만 쓴다(hex 직접 사용 0).
+   화면(static/index.html)과 보고서(report/html.py)가 함께 쓴다.
+   ========================================================================== */
+
+:root {
+  /* 손글씨 디스플레이 폰트(MemomentKkukkukk)는 재배포 라이선스 미확인이라 가져오지
+     않았다. 본문 폰트로 덮어써서 base.css 의 @font-face 가 아예 요청되지 않게 한다
+     — 원본 base.css 는 고치지 않는다. */
+  --dw-font-display: var(--dw-font-body);
+}
+
+/* ── 페이지 골격 ─────────────────────────────────────────────────── */
+.app-page {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: var(--dw-space-6) var(--dw-space-4) var(--dw-space-12);
+}
+
+/* 글 중심 화면(상세 보고서)은 읽기 폭으로 좁힌다 */
+.app-page[data-reading] {
+  max-width: 860px;
+}
+
+/* ── 프로즈 — base.css 가 margin 을 0 으로 지운 자리를 이 앱 기준으로 채운다.
+   :where() 로 감싸 힘을 0 으로 두었다. 그래서 이 규칙은 맨 민무늬 태그에만 걸리고,
+   DW 부품 클래스(.dw-card-title 등)가 얹히는 순간 언제나 부품 쪽이 이긴다. ── */
+:where(.app-prose) h1 {
+  margin: 0 0 var(--dw-space-2);
+}
+
+:where(.app-prose) h2 {
+  margin: var(--dw-space-8) 0 var(--dw-space-3);
+  font-weight: var(--dw-weight-bold);
+}
+
+:where(.app-prose) h3 {
+  margin: var(--dw-space-4) 0 var(--dw-space-2);
+  font-weight: var(--dw-weight-bold);
+  color: var(--dw-text-muted-aa);
+}
+
+:where(.app-prose) p {
+  margin: var(--dw-space-2) 0;
+}
+
+:where(.app-prose) ul {
+  margin: var(--dw-space-2) 0;
+  padding-left: var(--dw-space-6);
+}
+
+:where(.app-prose) li {
+  margin: var(--dw-space-1) 0;
+}
+
+:where(.app-prose) a:hover {
+  color: var(--dw-accent-pressed);
+}
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--dw-size-micro);
+  background: var(--dw-surface-sunken);
+  padding: 2px var(--dw-space-1);
+  border-radius: var(--dw-space-1);
+}
+
+/* 보조 문구 — 본문 바닥선(4.97:1)을 지키는 muted-aa 만 쓴다 */
+.muted {
+  color: var(--dw-text-muted-aa);
+  font-size: var(--dw-size-micro);
+}
+
+/* ── 안내 상자 — DW alert 는 여백을 안 갖는다. 글 흐름 안에 놓일 때만 띄운다 ── */
+:where(.app-prose) .dw-alert {
+  margin: var(--dw-space-4) 0;
+}
+
+/* ── 표를 담는 종이 — DW 카드에서 안쪽 여백만 걷어낸 것 ────────────── */
+.dw-card[data-table-card] {
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--dw-border);
+  margin: var(--dw-space-4) 0;
+}
+
+/* 문장 열은 접어도, 숫자 열은 접지 않는다 — 점수가 여러 줄로 쪼개지면 못 읽는다.
+   넘치면 페이지가 아니라 표 틀(.dw-table-frame)이 옆으로 움직인다. */
+.dw-table[data-wrap] .dw-table-cell[data-align='end'] {
+  white-space: nowrap;
+}
+
+/* ── 배지 줄 · 카드 격자 ─────────────────────────────────────────── */
+.app-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--dw-space-2);
+  align-items: center;
+  margin: 0 0 var(--dw-space-2);
+}
+
+.app-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--dw-space-3);
+  margin: var(--dw-space-4) 0;
+}
+
+/* ── 저장 이력 타임라인 — 계열이 하나뿐이라 chart-1 한 색만 쓴다 ──── */
+.app-years {
+  display: flex;
+  gap: var(--dw-space-1);
+  align-items: flex-end;
+  height: 72px;
+  margin: var(--dw-space-3) 0 var(--dw-space-8);
+}
+
+.app-years div {
+  flex: 1 1 0;
+  max-width: 56px;
+  min-height: 3px;
+  position: relative;
+  background: var(--dw-chart-1);
+  border-radius: var(--dw-space-1) var(--dw-space-1) 0 0;
+}
+
+.app-years div span {
+  position: absolute;
+  bottom: -22px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: var(--dw-size-micro);
+  color: var(--dw-text-muted-aa);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── AI 가 인용한 문장 ───────────────────────────────────────────── */
+.app-quote {
+  border-left: 3px solid var(--dw-border-strong);
+  background: var(--dw-surface-raised);
+  padding: var(--dw-space-2) var(--dw-space-4);
+  margin: var(--dw-space-2) 0;
+  color: var(--dw-text-muted-aa);
+  border-radius: 0 var(--dw-radius-control) var(--dw-radius-control) 0;
+}
+
+/* ── 웨이백 화면 사진 ────────────────────────────────────────────── */
+.app-shots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--dw-space-4);
+}
+
+.app-shots figure {
+  margin: 0;
+  max-width: 100%;
+}
+
+.app-shots img {
+  max-width: 520px;
+  width: 100%;
+  border: 1px solid var(--dw-border-strong);
+  border-radius: var(--dw-radius-control);
+}
+
+/* ── 좁은 화면(375px 기준) — 표를 한 줄씩 카드로 접는다 ───────────── */
+@media (max-width: 640px) {
+  .app-page {
+    padding: var(--dw-space-4) var(--dw-space-3) var(--dw-space-8);
+  }
+
+  /* 좁은 화면에서 안내 상자의 단추가 옆에 붙으면 글이 한 낱말씩 쪼개진다.
+     단추를 글 아래 줄로 내린다. */
+  .dw-alert-action {
+    grid-column: 2;
+    grid-row: auto;  /* 설명이 몇 줄이든 그 아래 줄로 흘러간다 */
+    align-self: start;
+    justify-self: start;
+    margin-top: var(--dw-space-2);
+  }
+
+  .dw-card[data-table-card] {
+    background: none;
+    border: none;
+    box-shadow: none;
+    overflow: visible;
+  }
+
+  .dw-table-frame {
+    overflow-x: visible;
+  }
+
+  .dw-table,
+  .dw-table-body,
+  .dw-table-row,
+  .dw-table-cell {
+    display: block;
+    width: 100%;
+  }
+
+  .dw-table-header {
+    display: none;
+  }
+
+  .dw-table-row {
+    background: var(--dw-surface);
+    border: 1px solid var(--dw-border);
+    border-radius: var(--dw-radius-card);
+    box-shadow: var(--dw-shadow-glass);
+    padding: var(--dw-space-3) var(--dw-space-4);
+    margin-bottom: var(--dw-space-3);
+  }
+
+  .dw-table-cell {
+    border: none;
+    padding: var(--dw-space-1) 0;
+    white-space: normal;
+    word-break: keep-all;
+  }
+
+  .dw-table-cell[data-align='end'] {
+    text-align: left;
+  }
+
+  /* 머리글 줄이 사라지므로 각 칸이 자기 이름을 데리고 다닌다 */
+  .dw-table-cell::before {
+    content: attr(data-label);
+    display: block;
+    color: var(--dw-text-muted-aa);
+    font-size: var(--dw-size-micro);
+  }
+
+  .dw-table-cell:empty {
+    display: none;
+  }
+
+  .app-shots img {
+    max-width: 100%;
+  }
+}

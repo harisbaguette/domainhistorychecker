@@ -1,0 +1,54 @@
+.dw-collapsible-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--dw-space-3);
+  width: 100%;
+  min-height: var(--dw-tap);
+  padding: var(--dw-space-2) 0;
+  color: var(--dw-text);
+  /* The heading tag Accordion wraps this in carries the handwriting font —
+     the trigger states its own so the title never inherits it. */
+  font-family: var(--dw-font-body);
+  font-size: var(--dw-size-body);
+  font-weight: var(--dw-weight-bold);
+  letter-spacing: normal;
+  text-align: left;
+}
+
+.dw-collapsible-trigger:disabled {
+  color: var(--dw-text-faint);
+  cursor: not-allowed;
+}
+
+.dw-collapsible-chevron {
+  flex-shrink: 0;
+  color: var(--dw-text-muted-aa);
+  transition: transform var(--dw-duration-slow) var(--dw-ease);
+}
+
+.dw-collapsible[data-open='true'] .dw-collapsible-chevron {
+  transform: rotate(180deg);
+}
+
+/* 0fr → 1fr animates a height nobody had to measure */
+.dw-collapsible-region {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--dw-duration-slow) var(--dw-ease);
+}
+
+.dw-collapsible[data-open='true'] .dw-collapsible-region {
+  grid-template-rows: 1fr;
+}
+
+.dw-collapsible-content {
+  min-height: 0;
+  overflow: hidden;
+  font-size: var(--dw-size-body);
+  line-height: var(--dw-leading-body);
+}
+
+.dw-collapsible[data-open='true'] .dw-collapsible-content {
+  padding-bottom: var(--dw-space-3);
+}

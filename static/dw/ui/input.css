@@ -1,0 +1,37 @@
+.dw-input {
+  width: 100%;
+  min-height: var(--dw-control-height);
+  padding: var(--dw-space-3) var(--dw-space-4);
+  background: var(--dw-surface-raised);
+  color: var(--dw-text);
+  border: 1.5px solid var(--dw-border-strong);
+  border-radius: var(--dw-radius-control);
+  font-family: var(--dw-font-body);
+  /* 16px 아래로 내려가면 모바일 사파리가 화면을 확대한다 */
+  font-size: var(--dw-size-body);
+  line-height: var(--dw-leading-body);
+  outline: none;
+  transition:
+    border-color var(--dw-duration-fast) var(--dw-ease),
+    background-color var(--dw-duration-fast) var(--dw-ease);
+}
+
+.dw-input:focus {
+  background: var(--dw-surface);
+  border-color: var(--dw-accent);
+}
+
+.dw-input:focus-visible {
+  box-shadow: var(--dw-ring);
+}
+
+.dw-input[aria-invalid='true'] {
+  border-color: var(--dw-error);
+  background: var(--dw-error-bg);
+}
+
+.dw-input:disabled {
+  background: var(--dw-surface-sunken);
+  color: var(--dw-text-faint);
+  cursor: not-allowed;
+}

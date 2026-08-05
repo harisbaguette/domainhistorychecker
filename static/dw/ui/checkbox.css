@@ -1,0 +1,88 @@
+.dw-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dw-space-3);
+  min-height: var(--dw-tap);
+  cursor: pointer;
+  color: var(--dw-text);
+  font-size: var(--dw-size-body);
+}
+
+.dw-checkbox-box {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+}
+
+.dw-checkbox-input {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  appearance: none;
+  background: var(--dw-surface);
+  border: 1.5px solid var(--dw-border-strong);
+  border-radius: 7px;
+  cursor: pointer;
+  outline: none;
+  transition:
+    background-color var(--dw-duration-fast) var(--dw-ease),
+    border-color var(--dw-duration-fast) var(--dw-ease);
+}
+
+.dw-checkbox-input:checked,
+.dw-checkbox-input:indeterminate {
+  background: var(--dw-accent);
+  border-color: var(--dw-accent);
+}
+
+.dw-checkbox-input:focus-visible {
+  box-shadow: var(--dw-ring);
+}
+
+.dw-checkbox-input:disabled {
+  background: var(--dw-surface-sunken);
+  border-color: var(--dw-border);
+  cursor: not-allowed;
+}
+
+.dw-checkbox-mark {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  color: var(--dw-on-accent);
+  opacity: 0;
+  transform: scale(0.8);
+  pointer-events: none;
+  transition:
+    opacity var(--dw-duration-fast) var(--dw-ease),
+    transform var(--dw-duration-fast) var(--dw-ease);
+}
+
+.dw-checkbox-input:checked + .dw-checkbox-mark {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* "일부만 골랐다"는 체크가 아니라 가로 막대다 — 뜻이 다르면 모양도 달라야 한다 */
+.dw-checkbox-input:indeterminate + .dw-checkbox-mark {
+  opacity: 0;
+}
+
+.dw-checkbox-box:has(.dw-checkbox-input:indeterminate)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 55%;
+  height: 2px;
+  margin: auto;
+  background: var(--dw-on-accent);
+  border-radius: var(--dw-radius-pill);
+  pointer-events: none;
+}
+
+.dw-checkbox:has(.dw-checkbox-input:disabled) {
+  color: var(--dw-text-faint);
+  cursor: not-allowed;
+}

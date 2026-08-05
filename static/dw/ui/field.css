@@ -1,0 +1,105 @@
+.dw-field {
+  display: flex;
+  flex-direction: column;
+}
+
+.dw-field-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* The label sits beside the control, so it drops the gap it keeps when stacked. */
+.dw-field[data-orientation='horizontal'] {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--dw-space-4);
+}
+
+.dw-field[data-orientation='horizontal'] > .dw-field-label {
+  margin-bottom: 0;
+}
+
+.dw-field[data-orientation='horizontal'] > .dw-field-content {
+  flex: 1;
+}
+
+/* Stacked on a phone, side by side once the row has somewhere to go. */
+@media (min-width: 480px) {
+  .dw-field[data-orientation='responsive'] {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--dw-space-4);
+  }
+
+  .dw-field[data-orientation='responsive'] > .dw-field-label {
+    margin-bottom: 0;
+  }
+
+  .dw-field[data-orientation='responsive'] > .dw-field-content {
+    flex: 1;
+  }
+}
+
+.dw-field-title {
+  font-size: var(--dw-size-body);
+  font-weight: var(--dw-weight-bold);
+  color: var(--dw-text);
+}
+
+.dw-field-description {
+  margin-top: var(--dw-space-2);
+  font-size: var(--dw-size-micro);
+  line-height: var(--dw-leading-body);
+  color: var(--dw-text-muted-aa);
+}
+
+/* Error text sits on the page background, so it uses the readable ink pair. */
+.dw-field-error {
+  margin-top: var(--dw-space-2);
+  font-size: var(--dw-size-micro);
+  line-height: var(--dw-leading-body);
+  font-weight: var(--dw-weight-bold);
+  color: var(--dw-error-ink);
+}
+
+/* base.css strips list markers from every classed list; a run of errors wants
+   them back, otherwise the second line reads as a new sentence. The tag is in
+   the selector to match that reset's weight. */
+ul.dw-field-error-list {
+  padding-left: var(--dw-space-4);
+  list-style: disc;
+}
+
+.dw-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dw-space-6);
+}
+
+.dw-field-set {
+  display: flex;
+  flex-direction: column;
+  /* a fieldset arrives with a browser frame and inline-size quirks of its own */
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.dw-field-legend {
+  padding: 0;
+  margin-bottom: var(--dw-space-2);
+  font-size: var(--dw-size-body);
+  font-weight: var(--dw-weight-bold);
+  color: var(--dw-text);
+}
+
+/* the quieter one, for when the group name is only a label above a few boxes */
+.dw-field-legend[data-variant='label'] {
+  font-size: var(--dw-size-micro);
+}
+
+.dw-field-separator {
+  margin: var(--dw-space-2) 0;
+}

@@ -1,0 +1,164 @@
+.dw-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--dw-space-2);
+  min-height: var(--dw-tap);
+  padding: 0 var(--dw-space-4);
+  border-radius: var(--dw-radius-control);
+  font-family: var(--dw-font-body);
+  font-size: var(--dw-size-body);
+  font-weight: var(--dw-weight-bold);
+  line-height: 1;
+  white-space: nowrap;
+  border: 1.5px solid transparent;
+  transition:
+    background-color var(--dw-duration-fast) var(--dw-ease),
+    color var(--dw-duration-fast) var(--dw-ease),
+    border-color var(--dw-duration-fast) var(--dw-ease),
+    transform var(--dw-duration-fast) var(--dw-ease);
+}
+
+/* 아래 variant 규칙과 같은 힘으로는 밀리므로 [data-variant] 를 붙여 항상 이긴다 */
+.dw-button[data-variant]:disabled {
+  background: var(--dw-surface-sunken);
+  color: var(--dw-text-faint);
+  border-color: transparent;
+  cursor: not-allowed;
+}
+
+.dw-button:not(:disabled):active {
+  transform: scale(0.97);
+}
+
+/* 배경은 accent 가 아니라 accent-strong — 흰 글자 대비 5.2:1을 맞추기 위해 */
+.dw-button[data-variant='primary'] {
+  background: var(--dw-accent-strong);
+  color: var(--dw-on-accent);
+}
+
+.dw-button[data-variant='secondary'] {
+  background: var(--dw-surface);
+  color: var(--dw-text);
+  border-color: var(--dw-border-strong);
+}
+
+.dw-button[data-variant='ghost'] {
+  background: transparent;
+  color: var(--dw-text-muted-aa);
+}
+
+.dw-button[data-variant='danger'] {
+  background: var(--dw-error-ink);
+  color: var(--dw-on-accent);
+}
+
+/* hover 는 마우스가 있는 기기에서만 — 터치에서 상태가 눌러붙는 것을 막는다 */
+@media (hover: hover) and (pointer: fine) {
+  .dw-button[data-variant='primary']:not(:disabled):hover {
+    filter: brightness(0.94);
+  }
+
+  .dw-button[data-variant='secondary']:not(:disabled):hover {
+    background: var(--dw-surface-sunken);
+  }
+
+  .dw-button[data-variant='ghost']:not(:disabled):hover {
+    background: var(--dw-surface-sunken);
+    color: var(--dw-text);
+  }
+
+  .dw-button[data-variant='danger']:not(:disabled):hover {
+    filter: brightness(0.94);
+  }
+}
+
+.dw-button[data-size='sm'] {
+  min-height: 36px;
+  padding: 0 var(--dw-space-3);
+  font-size: var(--dw-size-micro);
+}
+
+.dw-button[data-size='lg'] {
+  min-height: 52px;
+  padding: 0 var(--dw-space-6);
+}
+
+.dw-button[data-icon] {
+  width: var(--dw-tap);
+  padding: 0;
+  border-radius: var(--dw-radius-pill);
+}
+
+.dw-button[data-icon][data-size='sm'] {
+  width: 36px;
+}
+
+.dw-button[data-icon][data-size='lg'] {
+  width: 52px;
+}
+
+.dw-button[data-block] {
+  display: flex;
+  width: 100%;
+}
+
+/* 손가락으로 누르는 기기에서는 작은 버튼도 44px 아래로 내려가지 않는다 */
+@media (pointer: coarse) {
+  .dw-button[data-size='sm'] {
+    min-height: var(--dw-tap);
+  }
+
+  .dw-button[data-icon][data-size='sm'] {
+    width: var(--dw-tap);
+  }
+}
+
+/* a bordered button for the row where a filled one would shout */
+.dw-button[data-variant='outline'] {
+  background: transparent;
+  border-color: var(--dw-border-strong);
+  color: var(--dw-text);
+}
+
+@media (hover: hover) {
+  .dw-button[data-variant='outline']:not(:disabled):hover {
+    background: var(--dw-surface-sunken);
+  }
+}
+
+/* a link that happens to be a button: underlined, no box, no padding */
+.dw-button[data-variant='link'] {
+  min-height: auto;
+  padding: 0;
+  background: transparent;
+  border-color: transparent;
+  color: var(--dw-accent-strong);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.dw-button[data-variant='link']:not(:disabled):active {
+  transform: none;
+}
+
+/* a link rendered as a button keeps the look but not the underline */
+a.dw-button:not([data-variant='link']) {
+  text-decoration: none;
+}
+
+a.dw-button[aria-disabled='true'] {
+  background: var(--dw-surface-sunken);
+  color: var(--dw-text-faint);
+  border-color: transparent;
+  pointer-events: none;
+}
+
+/* while it works the press does nothing, and the row must not jump */
+.dw-button[data-loading] {
+  cursor: progress;
+}
+
+.dw-button-spinner {
+  flex-shrink: 0;
+}

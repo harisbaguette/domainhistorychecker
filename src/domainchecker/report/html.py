@@ -46,117 +46,85 @@ SPAM_VERDICT_LABEL = {
 }
 
 VERDICT_ORDER = [Verdict.BUY, Verdict.REVIEW, Verdict.NO_HISTORY, Verdict.REJECT]
-VERDICT_CLASS = {
-    Verdict.BUY: "buy",
-    Verdict.REVIEW: "review",
-    Verdict.NO_HISTORY: "review",
-    Verdict.REJECT: "reject",
+# DW badge 의 tone 이름. 색은 tokens.css 한 곳에서만 나온다.
+VERDICT_TONE = {
+    Verdict.BUY: "success",
+    Verdict.REVIEW: "warning",
+    Verdict.NO_HISTORY: "warning",
+    Verdict.REJECT: "error",
+}
+AVAILABILITY_TONE = {
+    "free": "success",
+    "soon": "warning",
+    "auction": "warning",
+    "taken": "neutral",
+    "unknown": "neutral",
 }
 
-CSS = """
-:root{
-/* 표면 — 종이 수첩 */
---dw-bg:#F5F2EE; --dw-surface:#FFFFFF; --dw-surface-sunken:#F0ECE6; --dw-surface-raised:#FAF8F5;
-/* 경계 */
---dw-border:rgba(36,30,25,0.07); --dw-border-strong:#E4DFD9;
-/* 글자 */
---dw-text:#241E19; --dw-text-muted-aa:#6A645D; --dw-text-muted:#88837C; --dw-text-faint:#B6B1AA;
-/* 액센트 — 만년필 잉크 파랑 */
---dw-accent:#3D79C0; --dw-accent-strong:#155DA1; --dw-accent-pressed:#004981;
---dw-accent-bg:#ECF5FF; --dw-on-accent:#FFFFFF;
-/* 상태 — 원색은 면·테두리, 글자는 -ink */
---dw-success:#4BB86A; --dw-success-bg:#E9FAED; --dw-success-ink:#1A6D3B;
---dw-warning:#EAA13B; --dw-warning-bg:#FFF5E2; --dw-warning-ink:#93550F;
---dw-error:#DF4B46; --dw-error-bg:#FFF1EF; --dw-error-ink:#A42D2B;
-/* 타임라인 막대 */
---dw-chart-1:#2D71B7;
-/* 그림자 — glass가 이 프로젝트 시그니처 */
---dw-shadow-1:0 2px 8px rgba(0,0,0,0.04);
---dw-shadow-2:0 8px 16px rgba(0,0,0,0.06);
---dw-shadow-glass:0 8px 32px rgba(0,0,0,0.04);
-/* 모서리·모션·포커스 */
---dw-radius-control:12px; --dw-radius-card:16px; --dw-radius-pill:999px;
---dw-ease:cubic-bezier(0.23,1,0.32,1);
---dw-focus:0 0 0 3px rgba(61,121,192,0.34);
---dw-font:Pretendard,"Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
-/* 판정 색 별칭 — 판정 도장이 한 곳에서만 색을 받는다 */
---buy:var(--dw-success-ink); --buy-bg:var(--dw-success-bg); --buy-line:var(--dw-success);
---review:var(--dw-warning-ink); --review-bg:var(--dw-warning-bg); --review-line:var(--dw-warning);
---reject:var(--dw-error-ink); --reject-bg:var(--dw-error-bg); --reject-line:var(--dw-error);
-}
-*{box-sizing:border-box;}
-html{-webkit-text-size-adjust:100%;}
-body{margin:0;padding:0;color:var(--dw-text);background:var(--dw-bg);font-family:var(--dw-font);
-font-size:16px;line-height:1.5;word-break:keep-all;overflow-wrap:break-word;}
-.wrap{max-width:1100px;margin:0 auto;padding:24px 16px 48px;}
-.wrap.reading{max-width:860px;}
-h1{font-size:25px;font-weight:900;line-height:1.25;margin:0 0 8px;letter-spacing:-0.01em;}
-h2{font-size:20px;font-weight:700;margin:32px 0 12px;}
-h3{font-size:16px;font-weight:700;margin:20px 0 8px;color:var(--dw-text-muted-aa);}
-p{margin:8px 0;}
-a{color:var(--dw-accent-strong);text-underline-offset:3px;}
-a:hover{color:var(--dw-accent-pressed);}
-:focus-visible{outline:none;box-shadow:var(--dw-focus);}
-.muted{color:var(--dw-text-muted-aa);font-size:14px;}
-.num{font-variant-numeric:tabular-nums;}
-code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px;
-background:var(--dw-surface-sunken);padding:2px 6px;border-radius:4px;}
-ul{margin:8px 0;padding-left:20px;} li{margin:4px 0;}
-.notice{background:var(--dw-warning-bg);border:1px solid var(--dw-warning);color:var(--dw-warning-ink);
-padding:16px;border-radius:var(--dw-radius-card);margin:16px 0;}
-.notice a{color:var(--dw-warning-ink);}
-/* 표 — 흰 카드 위에 얹은 종이 */
-.table-card{background:var(--dw-surface);border:1px solid var(--dw-border);
-border-radius:var(--dw-radius-card);box-shadow:var(--dw-shadow-glass);overflow-x:auto;margin:16px 0;}
-table{border-collapse:collapse;width:100%;font-size:16px;}
-th,td{padding:12px 16px;text-align:left;vertical-align:middle;border-bottom:1px solid var(--dw-border);}
-th{background:var(--dw-surface-raised);color:var(--dw-text-muted-aa);font-size:14px;font-weight:700;white-space:nowrap;}
-tr:last-child td{border-bottom:none;}
-td.num,th.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;}
-/* 판정 도장 — 이 화면의 시그니처 순간 */
-.tag{display:inline-block;padding:4px 12px;border-radius:var(--dw-radius-pill);
-font-size:14px;font-weight:700;line-height:1.4;white-space:nowrap;border:1px solid transparent;}
-.tag.buy{background:var(--buy-bg);color:var(--buy);border-color:var(--buy-line);}
-.tag.review{background:var(--review-bg);color:var(--review);border-color:var(--review-line);}
-.tag.reject{background:var(--reject-bg);color:var(--reject);border-color:var(--reject-line);}
-/* 지금 살 수 있나 — 도장보다 한 단계 조용하게 */
-.avail{display:inline-block;padding:4px 12px;border-radius:var(--dw-radius-pill);
-font-size:14px;font-weight:500;line-height:1.4;}
-.avail.free{background:var(--dw-success-bg);color:var(--dw-success-ink);}
-.avail.soon,.avail.auction{background:var(--dw-warning-bg);color:var(--dw-warning-ink);}
-.avail.taken{background:var(--dw-surface-sunken);color:var(--dw-text-muted-aa);}
-.avail.unknown{color:var(--dw-text-muted-aa);padding-left:0;}
-.badges{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 8px;}
-.years{display:flex;gap:4px;align-items:flex-end;height:72px;margin:12px 0 32px;}
-.years div{flex:1 1 0;max-width:56px;background:var(--dw-chart-1);border-radius:4px 4px 0 0;
-min-height:3px;position:relative;}
-.years div span{position:absolute;bottom:-22px;left:0;right:0;text-align:center;
-font-size:14px;color:var(--dw-text-muted-aa);font-variant-numeric:tabular-nums;}
-.quote{border-left:3px solid var(--dw-border-strong);background:var(--dw-surface-raised);
-padding:8px 16px;margin:8px 0;color:var(--dw-text-muted-aa);
-border-radius:0 var(--dw-radius-control) var(--dw-radius-control) 0;}
-.shots{display:flex;flex-wrap:wrap;gap:16px;} .shots figure{margin:0;max-width:100%;}
-.shots img{max-width:520px;width:100%;display:block;border:1px solid var(--dw-border-strong);
-border-radius:var(--dw-radius-control);}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:16px 0;}
-.card{background:var(--dw-surface);border:1px solid var(--dw-border);border-radius:var(--dw-radius-card);
-box-shadow:var(--dw-shadow-glass);padding:16px;color:var(--dw-text-muted-aa);font-size:14px;}
-.card b{display:block;margin-top:4px;color:var(--dw-text);font-size:16px;font-weight:700;}
-@media (max-width:640px){
-.wrap{padding:16px 12px 40px;}
-.table-card{background:none;border:none;box-shadow:none;overflow:visible;}
-table,tbody,tr,td{display:block;width:100%;}
-thead,th{display:none;}
-tr:has(th){display:none;}
-tr{background:var(--dw-surface);border:1px solid var(--dw-border);border-radius:var(--dw-radius-card);
-box-shadow:var(--dw-shadow-glass);padding:12px 16px;margin-bottom:12px;}
-td{border:none;padding:4px 0;}
-tr:last-child td{border-bottom:none;}
-td.num{text-align:left;}
-td::before{content:attr(data-label);display:block;color:var(--dw-text-muted-aa);font-size:14px;}
-td:empty{display:none;}
-}
-"""
+# ── 스타일시트 — DW 정본 복사본을 합쳐서 만든다 ────────────────────────────
+# 값을 이 파일에 베껴 두지 않는다. static/dw/ 아래 원본을 순서대로 읽어 잇고,
+# 이 앱만의 레이아웃(static/app.css)을 맨 뒤에 얹는다. 서버는 이것을 /style.css 로
+# 내려주고, 보고서 HTML 은 같은 내용을 <style> 로 끼워 넣는다 — zip 을 풀어 파일로
+# 열어도 모양이 나와야 하므로.
+STATIC_DIR = Path(__file__).resolve().parents[3] / "static"
+DW_DIR = STATIC_DIR / "dw"
+
+
+def _read_css(path: Path) -> str:
+    """없거나 못 읽는 파일은 조용히 건너뛴다 — 스타일이 빠져도 앱은 살아 있어야 한다."""
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+
+def build_stylesheet() -> str:
+    parts = [_read_css(DW_DIR / "tokens.css"), _read_css(DW_DIR / "base.css")]
+    ui_dir = DW_DIR / "ui"
+    if ui_dir.is_dir():
+        parts += [_read_css(one) for one in sorted(ui_dir.glob("*.css"))]
+    parts.append(_read_css(STATIC_DIR / "app.css"))
+    joined = "\n".join(part for part in parts if part.strip())
+    if not joined:
+        return "/* static/dw 를 찾지 못해 스타일 없이 보여 줍니다. */"
+    # 이 스타일은 보고서 HTML 한 장 한 장에 통째로 들어간다(파일 하나만 떼어
+    # 보내도 모양이 나오게). 그래서 설명 주석과 빈 줄은 빼고 담는다 — 원본
+    # static/dw/*.css 는 주석까지 그대로 남아 있다.
+    joined = re.sub(r"/\*.*?\*/", "", joined, flags=re.S)
+    return re.sub(r"[ \t]*\n[ \t\n]*", "\n", joined).strip()
+
+
+CSS = build_stylesheet()
+
+# lucide 아이콘(ISC) 원본 path 를 그대로 인라인한다 — DW 부품이 아이콘 자리를 전제로
+# 만들어졌고, 이 앱에는 번들러가 없어 lucide-react 를 못 쓴다.
+ICON_WARNING = (
+    '<svg class="dw-alert-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" '
+    'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+    'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+    '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/>'
+    '<path d="M12 9v4"/><path d="M12 17h.01"/></svg>'
+)
+
+
+def _alert(text: str, variant: str = "warning") -> str:
+    """DW alert — 아이콘 한 칸 + 설명 한 칸."""
+    return (
+        f'<div class="dw-alert" data-variant="{variant}" role="status">{ICON_WARNING}'
+        f'<p class="dw-alert-description">{text}</p></div>'
+    )
+
+
+def _table(head: str, body: str, wrap: bool = True) -> str:
+    """DW table 한 벌. 표는 흰 종이(dw-card) 위에 얹고, 좁아지면 카드로 접힌다."""
+    return (
+        '<div class="dw-card" data-elevation="float" data-table-card>'
+        '<div class="dw-table-frame" tabindex="0">'
+        f'<table class="dw-table"{" data-wrap" if wrap else ""}>'
+        f'<thead class="dw-table-header"><tr class="dw-table-row">{head}</tr></thead>'
+        f'<tbody class="dw-table-body">{body}</tbody>'
+        "</table></div></div>"
+    )
 
 
 def _t(value) -> str:
@@ -179,17 +147,20 @@ def _score_text(result: DomainResult) -> str:
 
 
 def _stamp(result: DomainResult) -> str:
-    """판정 도장 — 표·상세 어디서든 같은 모양으로 찍힌다."""
-    cls = VERDICT_CLASS.get(result.verdict, "review")
+    """판정 도장 — 표·상세 어디서든 같은 모양으로 찍힌다. 채운 배지라 가장 크게 읽힌다."""
+    tone = VERDICT_TONE.get(result.verdict, "warning")
     label = result.verdict_label or VERDICT_LABEL[result.verdict]
-    return f'<span class="tag {cls}">{_t(label)}</span>'
+    return f'<span class="dw-badge" data-tone="{tone}">{_t(label)}</span>'
 
 
 def _avail(result: DomainResult) -> str:
-    """지금 살 수 있나 배지 — 이 도구의 존재 이유라 판정 바로 옆에 둔다."""
+    """지금 살 수 있나 배지 — 이 도구의 존재 이유라 판정 바로 옆에 둔다.
+    도장보다 한 단계 조용하도록 면을 걷어낸 outline(모르는 것은 테두리도 없는 ghost)."""
     key = result.availability if result.availability in AVAILABILITY_LABEL else "unknown"
     label = result.availability_label or AVAILABILITY_LABEL[key]
-    return f'<span class="avail {key}">{_t(label)}</span>'
+    tone = AVAILABILITY_TONE.get(key, "neutral")
+    variant = "ghost" if key == "unknown" else "outline"
+    return f'<span class="dw-badge" data-tone="{tone}" data-variant="{variant}">{_t(label)}</span>'
 
 
 def _list(items: list[str], empty: str = "없음") -> str:
@@ -231,7 +202,7 @@ def _timeline(result: DomainResult) -> str:
         if result.wayback.gap_years
         else ""
     )
-    return f'<div class="years">{bars}</div>{gaps}'
+    return f'<div class="app-years">{bars}</div>{gaps}'
 
 
 def _captures(result: DomainResult, capture_base: str) -> str:
@@ -244,7 +215,7 @@ def _captures(result: DomainResult, capture_base: str) -> str:
         f'(<a href="{_t(shot.url)}" target="_blank" rel="noopener">원본 보기</a>)</figcaption></figure>'
         for shot in result.captures.items
     )
-    return f'<div class="shots">{figures}</div>'
+    return f'<div class="app-shots">{figures}</div>'
 
 
 def detail_fragment(result: DomainResult, capture_base: str = "../captures") -> str:
@@ -252,17 +223,18 @@ def detail_fragment(result: DomainResult, capture_base: str = "../captures") -> 
     registration = result.registration
     age = result.wayback.age_years
     scoring_rows = "".join(
-        f"<tr><td data-label=\"항목\">{_t(item.label)}</td>"
-        f'<td class="num" data-label="점수">'
+        '<tr class="dw-table-row">'
+        f'<td class="dw-table-cell" data-label="항목">{_t(item.label)}</td>'
+        f'<td class="dw-table-cell" data-align="end" data-label="점수">'
         + (f"{item.earned:.1f} / {item.max_points}" if item.earned is not None else "미확인(분모 제외)")
-        + f'</td><td data-label="설명">{_t(item.note)}</td></tr>'
+        + f'</td><td class="dw-table-cell" data-label="설명">{_t(item.note)}</td></tr>'
         for item in result.scoring.items
     )
     topics = "".join(
         f"<li><b>{_t(t.get('topic'))}</b> — {_t(t.get('reason'))}</li>"
         for t in result.recommended_topics
     )
-    quotes = "".join(f'<blockquote class="quote">{_t(q)}</blockquote>' for q in result.ai.spam.quotes)
+    quotes = "".join(f'<blockquote class="app-quote">{_t(q)}</blockquote>' for q in result.ai.spam.quotes)
     links = "".join(
         f'<li><a href="{_t(url)}" target="_blank" rel="noopener">{_t(label)}</a></li>'
         for label, url in recheck_links(result.domain)
@@ -285,9 +257,32 @@ def detail_fragment(result: DomainResult, capture_base: str = "../captures") -> 
         else "못 쟀음 — " + _t(result.index.check.note or "확인하지 못했습니다.")
     )
     spam_verdict = SPAM_VERDICT_LABEL.get(result.ai.spam.verdict, result.ai.spam.verdict)
+    scoring_head = (
+        '<th class="dw-table-head" scope="col">항목</th>'
+        '<th class="dw-table-head" scope="col" data-align="end">점수</th>'
+        '<th class="dw-table-head" scope="col">설명</th>'
+    )
+    facts = [
+        ("지금 살 수 있나", _t(result.availability_label or AVAILABILITY_LABEL["unknown"])),
+        ("등록일", _t(registration.created or "알 수 없음")),
+        ("만료일", _t(registration.expires or "알 수 없음")),
+        (
+            "저장 이력 기간",
+            f"약 {age:.0f}년 ({_t(result.wayback.first_seen[:6])}~{_t(result.wayback.last_seen[:6])})",
+        ),
+        ("재등록(드랍) 이력", "있음" if registration.redropped else "확인 안 됨"),
+        ("등록 자료 출처", _t(registration.source or "없음")),
+        (AUTHORITY_LABEL, _t(authority_value)),
+    ]
+    fact_cards = "".join(
+        '<div class="dw-card" data-elevation="float" data-size="sm">'
+        f'<p class="dw-card-description">{label}</p>'
+        f'<p class="dw-card-title">{value}</p></div>'
+        for label, value in facts
+    )
     return f"""
 <h1>{_t(result.domain)}</h1>
-<div class="badges">{_stamp(result)}{_avail(result)}</div>
+<div class="app-badges">{_stamp(result)}{_avail(result)}</div>
 <p class="muted">{_t(_score_text(result))} · 취득 상태: {_t(result.acquisition)} · 검사 끝난 때 {_t(_when(result.finished_at))}</p>
 <p>{_t(result.one_liner or "한줄평 없음")}</p>
 
@@ -295,19 +290,11 @@ def detail_fragment(result: DomainResult, capture_base: str = "../captures") -> 
 <h3>사면 안 되는 이유</h3>{_list(result.fatal_reasons, "없음")}
 <h3>조심할 이유</h3>{_list(result.warn_reasons, "없음")}
 <h3>점수 내역</h3>
-<div class="table-card"><table><tr><th>항목</th><th class="num">점수</th><th>설명</th></tr>{scoring_rows}</table></div>
+{_table(scoring_head, scoring_rows)}
 <p class="muted">미확인 항목은 0점도 만점도 아니라 분모에서 빼고 계산합니다(그래서 부분 점수는 참고치입니다).</p>
 
 <h2>2. 나이와 등록 정보</h2>
-<div class="grid">
-  <div class="card">지금 살 수 있나<br><b>{_t(result.availability_label or AVAILABILITY_LABEL["unknown"])}</b></div>
-  <div class="card">등록일<br><b>{_t(registration.created or "알 수 없음")}</b></div>
-  <div class="card">만료일<br><b>{_t(registration.expires or "알 수 없음")}</b></div>
-  <div class="card">저장 이력 기간<br><b>약 {age:.0f}년</b> ({_t(result.wayback.first_seen[:6])}~{_t(result.wayback.last_seen[:6])})</div>
-  <div class="card">재등록(드랍) 이력<br><b>{"있음" if registration.redropped else "확인 안 됨"}</b></div>
-  <div class="card">등록 자료 출처<br><b>{_t(registration.source or "없음")}</b></div>
-  <div class="card">{AUTHORITY_LABEL}<br><b>{_t(authority_value)}</b></div>
-</div>
+<div class="app-grid">{fact_cards}</div>
 
 <h2>3. 저장 이력 타임라인</h2>
 {_timeline(result)}
@@ -351,23 +338,24 @@ def detail_fragment(result: DomainResult, capture_base: str = "../captures") -> 
 """
 
 
-def _page(title: str, body: str, wrap_class: str = "wrap") -> str:
+def _page(title: str, body: str, reading: bool = False) -> str:
     return (
         "<!doctype html><html lang=\"ko\"><head><meta charset=\"utf-8\">"
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
         f"<title>{_t(title)}</title><style>{CSS}</style></head>"
-        f'<body><div class="{wrap_class}">{body}</div></body></html>'
+        f'<body><div class="app-page app-prose"{" data-reading" if reading else ""}>'
+        f"{body}</div></body></html>"
     )
 
 
 def render_detail_page(result: DomainResult, capture_base: str = "../captures") -> str:
     body = (
         '<p><a href="index.html">← 전체 목록으로</a></p>'
-        + f'<div class="notice">{escape(DISCLAIMER)}</div>'
+        + _alert(escape(DISCLAIMER))
         + detail_fragment(result, capture_base)
     )
     # 글 중심 화면이라 읽기 폭(860px)으로 좁힌다.
-    return _page(f"{result.domain} 상세 — 낙장도메인 품질 체커", body, "wrap reading")
+    return _page(f"{result.domain} 상세 — 낙장도메인 품질 체커", body, reading=True)
 
 
 def _safe_name(domain: str) -> str:
@@ -382,18 +370,27 @@ def render_index(results: list[DomainResult]) -> str:
             continue
         rows.sort(key=lambda r: (r.score is None, -(r.score or 0)))
         body = "".join(
-            f'<tr><td data-label="도메인"><a href="{_t(_safe_name(r.domain))}.html">{_t(r.domain)}</a></td>'
-            f'<td data-label="판정">{_stamp(r)}</td>'
-            f'<td data-label="지금 살 수 있나">{_avail(r)}</td>'
-            f'<td class="num" data-label="점수">{_t(_score_text(r))}</td>'
-            f'<td data-label="한줄평">{_t(r.one_liner)}</td>'
-            f'<td data-label="추천 주제">{_t(", ".join(t.get("topic", "") for t in r.recommended_topics[:3]))}</td></tr>'
+            '<tr class="dw-table-row">'
+            f'<td class="dw-table-cell" data-label="도메인">'
+            f'<a href="{_t(_safe_name(r.domain))}.html">{_t(r.domain)}</a></td>'
+            f'<td class="dw-table-cell" data-label="판정">{_stamp(r)}</td>'
+            f'<td class="dw-table-cell" data-label="지금 살 수 있나">{_avail(r)}</td>'
+            f'<td class="dw-table-cell" data-align="end" data-label="점수">{_t(_score_text(r))}</td>'
+            f'<td class="dw-table-cell" data-label="한줄평">{_t(r.one_liner)}</td>'
+            f'<td class="dw-table-cell" data-label="추천 주제">'
+            f'{_t(", ".join(t.get("topic", "") for t in r.recommended_topics[:3]))}</td></tr>'
             for r in rows
         )
+        head = (
+            '<th class="dw-table-head" scope="col">도메인</th>'
+            '<th class="dw-table-head" scope="col">판정</th>'
+            '<th class="dw-table-head" scope="col">지금 살 수 있나</th>'
+            '<th class="dw-table-head" scope="col" data-align="end">점수</th>'
+            '<th class="dw-table-head" scope="col">한줄평</th>'
+            '<th class="dw-table-head" scope="col">추천 주제</th>'
+        )
         groups.append(
-            f"<h2>{_t(VERDICT_LABEL[verdict])} — {len(rows)}개</h2>"
-            '<div class="table-card"><table><tr><th>도메인</th><th>판정</th><th>지금 살 수 있나</th>'
-            f'<th class="num">점수</th><th>한줄평</th><th>추천 주제</th></tr>{body}</table></div>'
+            f"<h2>{_t(VERDICT_LABEL[verdict])} — {len(rows)}개</h2>{_table(head, body)}"
         )
 
     # 합집합만 적으면 "AI 분석 못 함"이라 써 놓고 옆 표에는 AI 한줄평이 보여 모순으로 읽힌다.
@@ -406,7 +403,7 @@ def render_index(results: list[DomainResult]) -> str:
     body = (
         "<h1>낙장도메인 품질 체커 결과</h1>"
         f'<p class="muted">도메인 {len(results)}개 · {escape(SCORE_GUIDE)}</p>'
-        f'<div class="notice">{escape(DISCLAIMER)}</div>'
+        + _alert(escape(DISCLAIMER))
         + "".join(groups)
         + "<h2>이 검사의 한계</h2>"
         + _list(LIMITS)

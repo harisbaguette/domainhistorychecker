@@ -35,7 +35,11 @@ def test_ui_page_and_shared_style_are_served(client):
 
     css = client.get("/style.css")
     assert css.status_code == 200
-    assert "--buy" in css.text  # 판정색이 한 곳에서 나온다
+    # 색은 DW 토큰 한 곳에서만 나오고, 모양은 DW 부품 원본을 그대로 쓴다
+    assert "--dw-success-ink" in css.text
+    assert ".dw-badge" in css.text
+    assert ".dw-button" in css.text
+    assert ".app-years" in css.text  # 이 앱만의 레이아웃도 같이 실린다
 
 
 def test_preview_normalizes_input_and_estimates(client):

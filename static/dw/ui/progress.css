@@ -1,0 +1,70 @@
+.dw-progress {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  gap: var(--dw-space-1) var(--dw-space-2);
+  width: 100%;
+}
+
+.dw-progress-label {
+  font-size: var(--dw-size-micro);
+  color: var(--dw-text-muted-aa);
+}
+
+.dw-progress-value {
+  justify-self: end;
+  font-size: var(--dw-size-micro);
+  font-weight: var(--dw-weight-bold);
+  color: var(--dw-text);
+}
+
+.dw-progress-track {
+  position: relative;
+  /* The rail always takes the whole width, whether or not a label sits above. */
+  grid-column: 1 / -1;
+  width: 100%;
+  height: 8px;
+  overflow: hidden;
+  border-radius: var(--dw-radius-pill);
+  /* The empty part of the rail has to be seen on the app background too, and
+     that background is the same tone as surface-sunken. Same reason the
+     skeleton uses this token. */
+  background: var(--dw-border-strong);
+}
+
+.dw-progress-indicator {
+  height: 100%;
+  border-radius: var(--dw-radius-pill);
+  background: var(--dw-accent);
+  transition: width var(--dw-duration-slow) var(--dw-ease);
+}
+
+/* Unknown duration: a short bar sweeps across instead of filling up. */
+.dw-progress-indicator[data-indeterminate='true'] {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 40%;
+  height: auto;
+  animation: dw-progress-sweep 1200ms var(--dw-ease) infinite;
+}
+
+@keyframes dw-progress-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(250%);
+  }
+}
+
+/* base.css cuts every animation short for this setting, which would park the
+   shuttle off the right edge. A still stripe says "working" without moving. */
+@media (prefers-reduced-motion: reduce) {
+  .dw-progress-indicator[data-indeterminate='true'] {
+    animation: none;
+    left: 30%;
+  }
+}

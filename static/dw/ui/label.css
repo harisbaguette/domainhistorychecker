@@ -1,0 +1,26 @@
+.dw-label {
+  display: flex;
+  align-items: center;
+  gap: var(--dw-space-2);
+  margin-bottom: var(--dw-space-2);
+  font-size: var(--dw-size-body);
+  font-weight: var(--dw-weight-bold);
+  color: var(--dw-text);
+  cursor: pointer;
+}
+
+.dw-label-required {
+  padding: 2px var(--dw-space-2);
+  border-radius: var(--dw-radius-pill);
+  background: var(--dw-accent-bg);
+  color: var(--dw-accent-strong);
+  font-size: var(--dw-size-micro);
+  font-weight: var(--dw-weight-bold);
+}
+
+.dw-label-hint {
+  margin-left: auto;
+  font-size: var(--dw-size-micro);
+  font-weight: var(--dw-weight-regular);
+  color: var(--dw-text-muted-aa);
+}

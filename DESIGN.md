@@ -17,51 +17,74 @@ DW의 종이 수첩 컨셉을 그대로 잇는다: 따뜻한 종이 배경 위 �
 판정(매입 후보/검토 필요/제외)이 틴트 면+진한 잉크 글자의 둥근 도장으로 찍힌다.
 `--dw-shadow-glass`(떠 있는 종이 그림자)를 카드에 써서 DW 두 번째 시그니처도 잇는다.
 
-## 3. 토큰 (DW 값 그대로 — hex 직접 사용 금지, 전부 CSS 변수로)
+## 3. 정본 준수 방식 — DW 부품 CSS를 원본 그대로 가져다 쓴다
 
-DW `tokens.css`의 라이트 값을 복사해 쓴다(이 도구는 로컬 단독 실행이라 Z: 참조 불가, 값 복사가 정본 준수 방식).
+값을 베끼지 않는다. DW 정본 파일을 **한 글자도 고치지 않고 복사**해 `static/dw/` 에 두고 그대로 불러 쓴다.
+DW가 갱신되면 같은 자리에 다시 덮어쓰면 끝이다(복사 방법은 `static/dw/README.md`).
 
-- 표면: `--dw-bg #F5F2EE` / `--dw-surface #FFFFFF` / `--dw-surface-sunken #F0ECE6` / `--dw-surface-raised #FAF8F5`
-- 경계: `--dw-border rgba(36,30,25,0.07)` / `--dw-border-strong #E4DFD9`
-- 글자: `--dw-text #241E19` / `--dw-text-muted-aa #6A645D`(보조 문장) / `--dw-text-muted #88837C`(메타만, 문장 금지) / `--dw-text-faint #B6B1AA`
-- 액센트(잉크 파랑): `--dw-accent #3D79C0` / `--dw-accent-strong #155DA1`(버튼 바탕·흰 글자) / `--dw-accent-pressed #004981` / `--dw-accent-bg #ECF5FF` / `--dw-on-accent #FFFFFF`
-- 상태(원색은 면·아이콘만, 글자는 반드시 -ink):
-  - success `#4BB86A` / bg `#E9FAED` / ink `#1A6D3B`
-  - warning `#EAA13B` / bg `#FFF5E2` / ink `#93550F`
-  - error `#DF4B46` / bg `#FFF1EF` / ink `#A42D2B`
-  - info = 액센트와 동일(파랑 하나만 채도색)
-- 타임라인 막대: `--dw-chart-1 #2D71B7` 한 색만(계열이 하나뿐이므로).
-- 그림자: `--dw-shadow-1 0 2px 8px rgba(0,0,0,0.04)` / `--dw-shadow-2 0 8px 16px rgba(0,0,0,0.06)` / 시그니처 `--dw-shadow-glass 0 8px 32px rgba(0,0,0,0.04)`
-- 모서리: control 12 / card 16 / pill 999 (DW 값 계승 — 종이 수첩 컨셉의 근거 있는 라운드)
-- 간격: 4/8/12/16/24/32/48
-- 모션: `--dw-ease cubic-bezier(0.23,1,0.32,1)`, 150/200/300ms. `ease-in`·`linear`·scale(0) 등장 금지.
-- 포커스: `0 0 0 3px rgba(61,121,192,0.34)` — 절대 제거 금지.
+```
+static/dw/tokens.css      ← Z:\Doweek\design-system\tokens\tokens.css   (편집 금지)
+static/dw/base.css        ← Z:\Doweek\design-system\styles\base.css     (편집 금지)
+static/dw/ui/<이름>.css   ← Z:\Doweek\design-system\ui\<이름>\<이름>.css (편집 금지, 이 앱이 쓰는 15종만)
+static/app.css            ← 이 앱만의 레이아웃(DW 부품이 덮지 못하는 것만). 이 프로젝트 소유
+```
+
+`src/domainchecker/report/html.py` 가 위 파일들을 `tokens → base → ui/*(이름순) → app.css` 순서로 읽어
+하나로 잇고(설명 주석은 빼고), 서버는 그것을 `/style.css` 로 내려준다. 화면과 보고서가 같은 CSS를 쓴다.
+보고서 HTML은 같은 내용을 `<style>` 로 통째로 끼워 넣는다 — zip을 풀어 파일 하나만 열어도 모양이 나와야 하고,
+한 장만 떼어 남에게 보내는 일도 있기 때문이다.
+
+**규칙**: 마크업은 DW 부품 클래스(`dw-*`)와 `data-*` 속성으로만 쓰고, 색·모서리·그림자·간격은 `var(--dw-*)` 로만
+쓴다. hex 직접 사용 0. 토큰 이름도 DW 원본 그대로다(`--dw-ring`, `--dw-font-body`, `--dw-space-*` …).
+
+가져다 쓴 DW 부품 15종:
+`alert` `badge` `button` `card` `checkbox` `collapsible` `empty-state` `field` `input` `label`
+`native-select` `progress` `table` `tabs` `textarea`. 안 쓰는 45종은 zip 무게 때문에 복사하지 않았다.
 
 ## 4. 타이포
 
-- 본문: `Pretendard, Apple SD Gothic Neo, Malgun Gothic, system-ui` — 16px, 줄간격 1.5, `word-break: keep-all`.
+- 본문: `--dw-font-body`(Pretendard → Apple SD Gothic Neo → Malgun Gothic → system-ui) — 16px, 줄간격 1.5, `word-break: keep-all`.
 - 크기 3단(1.25): 16 / 20 / 25px. 위계는 크기보다 **웨이트**(400/700/900). 뱃지·메타 전용 14px(문장 금지).
-- 손글씨 디스플레이 폰트(MemomentKkukkukk)는 **넣지 않는다** — 재배포 라이선스가 미확인(DW NOTICE.md)이고
-  이 도구는 zip으로 배포된다. 라이선스 확정 전까지 앱 제목은 Pretendard 900으로 쓴다. `simplify:` 라이선스 확인 후 추가 검토.
+- 손글씨 디스플레이 폰트(MemomentKkukkukk)는 **넣지 않는다** — 재배포 라이선스 미확인(DW `assets/fonts/NOTICE.md`).
+  `base.css` 의 `@font-face` 는 원본 그대로 두되, `static/app.css` 에서 `--dw-font-display: var(--dw-font-body)` 로
+  덮어썼다. 그래서 어떤 요소도 그 글꼴을 요구하지 않고, 없는 woff 를 받으러 가지도 않는다(실측: `document.fonts`
+  에서 `MemomentKkukkukk: unloaded`, 404 0건). `simplify:` 라이선스 확인되면 이 한 줄만 지우면 살아난다.
 
 ## 5. DW에서 달리 정한 것 (근거 명시)
 
 | 항목 | DW | 이 프로젝트 | 근거 |
 |---|---|---|---|
 | 최대 폭 | 440px(모바일 앱) | 표 화면 1100px, 상세 글 860px | 수백 행 표 도구 — 440px에 표를 우겨넣으면 정보가 죽는다. 375px 반응형(카드형 행 변환)은 유지 |
-| 아이콘 | lucide-react | 아이콘 없음(텍스트+색 배지) | React 없는 정적 HTML. 임의 SVG 창작 금지 원칙 준수를 위해 아이콘 자체를 쓰지 않는 쪽 선택 |
-| 이모지 | 금지 | 금지(기존 ✅⚠️❌🖼️ 전부 제거) | DW·ECC 공통 규칙 |
-| 토큰 이름 | `--dw-ring` / `--dw-font-body` | `--dw-focus` / `--dw-font` | 값은 DW와 동일. 1층 primitive 없이 semantic만 복사한 단층 세트라 짧은 별칭 사용 |
-| 다크 테마 | 라이트+다크 | 라이트만 | 로컬 단독 실행 도구, 화면 3개. 다크 값 복사는 유지 부담만 늘어 미채택 |
+| 부품 쓰는 법 | React 컴포넌트(jsx) | 같은 CSS + 손으로 쓴 HTML | 빌드 도구(node·vite) 없이 파이썬만으로 zip 배포한다. DW 부품 CSS는 클래스+`data-*` 방식의 순수 CSS라 React 없이 그대로 붙는다. jsx는 마크업 구조를 읽는 참고용으로만 열었다 |
+| 상태 있는 부품 | React 상태 | 20줄 안쪽 바닐라 JS | `tabs`(고른 칸 표시·화살표 이동·`--dw-tabs-index`)와 `collapsible`(펴짐 표시·`inert`)만 손으로 배선했다. 나머지는 CSS만으로 동작 |
+| 아이콘 | `lucide-react` | lucide 원본 path를 인라인 SVG로 | 번들러가 없다. 임의 창작이 아니라 lucide(ISC) 원본 path 그대로. 쓰는 것: 경고·안내(alert), 체크(checkbox), 아래꺾쇠(collapsible·native-select), 받은편지함(empty-state) |
+| 이모지 | 금지 | 금지 | DW·ECC 공통 규칙 |
+| 다크 테마 | 라이트+다크 | 라이트만 나온다 | `tokens.css` 를 통째로 복사해 다크 값도 함께 실려 있지만, 이 앱은 `data-theme` 을 설정하지 않아 항상 라이트다. 굳이 지우지 않는다 — 지우면 원본과 달라진다 |
 
-## 6. 컴포넌트 규격
+## 6. 화면 요소와 DW 부품 대응
 
-- **판정 도장(시그니처)**: pill, 틴트 배경 + `-ink` 글자 + 같은 계열 1px 테두리. 매입 후보=success / 검토 필요·이력 없음=warning / 제외=error. 14px bold.
-- **"지금 살 수 있나" 배지**: free=success 틴트 / soon·auction=warning 틴트 / taken=sunken 면+muted-aa 글자 / unknown=muted-aa 글자. 표의 독립 열 — 이 도구의 존재 이유(살 수 있는 도메인 찾기)라 판정 바로 옆.
-- **주요 버튼 1개/화면**: 검사 시작(accent-strong 바탕+흰 글자, 48px 높이). 나머지는 테두리 버튼(surface)·ghost.
-- **진행률**: accent 채움, sunken 바탕. 검사 끝나면 "보고서 보기" 버튼이 자동으로 나타난다(report_ready 이벤트).
-- **표**: 흰 카드 위, 헤더 raised 면, 행 경계 `--dw-border`. 640px 이하에서 카드형 행.
-- **접근성 바닥**: 본문 대비 4.5:1+, 터치 44px+, 가로 스크롤 0, `:focus-visible` 링 유지.
+| 화면 요소 | DW 부품 | 쓰는 법 |
+|---|---|---|
+| 상단 화면 이동(검사·상세·설정) | `tabs` | `data-variant="segmented"` — 고른 칸으로 알약이 미끄러진다 |
+| 안내·경고 상자 | `alert` | 키 없음·면책 = `warning`, 입력 미리보기 = `info` |
+| 판정 도장(시그니처) | `badge` | 채운 배지. 매입 후보=`success` / 검토 필요·이력 없음=`warning` / 제외=`error` |
+| "지금 살 수 있나" | `badge` | 도장보다 한 단계 조용하게 — `data-variant="outline"`(모르는 것은 `ghost`) |
+| 입력 카드·표 종이·요약 타일 | `card` | `data-elevation="float"`(시그니처 그림자). 표를 담을 때만 `data-table-card` 로 안쪽 여백을 없앤다 |
+| 결과 표·점수 내역 | `table` | `data-wrap`(문장 열은 접힘) + 숫자 열 `data-align="end"`. 640px 이하는 한 줄씩 카드로 접힌다 |
+| 도메인 붙여넣기 칸 | `textarea` | |
+| API 키 칸 | `input` + `field` + `label` | |
+| 모델·속도 고르기 | `native-select` | 폰에서 기본 휠이 뜨도록 브라우저 것을 그대로 |
+| 선택 검사 3개 | `checkbox` | |
+| 진행률 | `progress` | `role="progressbar"` + 진행 문구를 `aria-labelledby` 로 가리킨다 |
+| 결과 없음 | `empty-state` | |
+| 그림으로 보는 발급 순서 | `collapsible` | 접힌 동안 `inert` — 눈에도 안 보이고 Tab 으로도 안 들어간다 |
+| 주요 버튼 1개/화면 | `button` | 검사 시작·설정 저장만 `data-variant="primary" data-size="lg"`. 나머지는 `secondary`, 표 안은 `data-size="sm"` |
+
+DW 부품이 덮지 못해 `static/app.css` 에 남긴 것: 페이지 폭·프로즈 여백, 표 카드의 여백 제거와 640px 카드 접기,
+저장 이력 타임라인 막대(`--dw-chart-1` 한 색), AI 인용 문장, 웨이백 사진 배치, 요약 타일 격자.
+`static/index.html` 의 `<style>` 에 남긴 것: 건너뛰기 링크, 위 띠, 화면 전환, 버튼 줄, 파일 고르기 칸, 발급 순서 삽화.
+
+- **접근성 바닥**: 본문 대비 4.5:1+, 터치 44px+(주요 버튼 52px), 가로 스크롤 0, `:focus-visible` 링 유지.
 
 ## 7. 카피 규칙
 

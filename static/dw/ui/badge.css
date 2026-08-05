@@ -1,0 +1,55 @@
+.dw-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dw-space-1);
+  padding: 3px var(--dw-space-2);
+  border-radius: var(--dw-radius-pill);
+  font-size: var(--dw-size-micro);
+  font-weight: var(--dw-weight-bold);
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.dw-badge[data-tone='neutral'] {
+  background: var(--dw-surface-sunken);
+  color: var(--dw-text-muted-aa);
+}
+
+.dw-badge[data-tone='accent'] {
+  background: var(--dw-accent-bg);
+  color: var(--dw-accent-strong);
+}
+
+.dw-badge[data-tone='success'] {
+  background: var(--dw-success-bg);
+  color: var(--dw-success-ink);
+}
+
+.dw-badge[data-tone='warning'] {
+  background: var(--dw-warning-bg);
+  color: var(--dw-warning-ink);
+}
+
+.dw-badge[data-tone='error'] {
+  background: var(--dw-error-bg);
+  color: var(--dw-error-ink);
+}
+
+/* 세기 낮춘 표현들 — 색(tone)은 그대로 두고 면만 걷어낸다.
+   그래서 tone 규칙보다 뒤에 와야 배경을 덮는다. currentColor 를 쓰면
+   테두리가 언제나 그 tone 의 글자색과 같아진다. */
+.dw-badge[data-variant='outline'] {
+  background: transparent;
+  border: 1px solid currentColor;
+}
+
+.dw-badge[data-variant='ghost'] {
+  background: transparent;
+}
+
+.dw-badge[data-variant='link'] {
+  padding-inline: 0;
+  background: transparent;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
