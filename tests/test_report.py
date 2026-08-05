@@ -24,6 +24,18 @@ def test_detail_fragment_holds_every_required_section(sample_result):
     assert "홈베이킹" in html  # 추천 주제
 
 
+def test_detail_speaks_plainly_about_time_and_reasons(sample_result):
+    """도구를 쓰는 사람은 비개발자다 — 기계 표기(T)와 한자말은 화면에 남기지 않는다."""
+    sample_result.finished_at = "2026-08-05T11:42:07.123456"
+    judge(sample_result)
+    html = detail_fragment(sample_result)
+
+    assert "2026년 8월 5일 11:42" in html
+    assert "2026-08-05T11:42" not in html
+    assert "사면 안 되는 이유" in html and "조심할 이유" in html
+    assert "치명 사유" not in html
+
+
 def test_detail_escapes_injected_html(sample_result):
     sample_result.ai.one_liner = '<script>alert("x")</script>'
     judge(sample_result)
@@ -67,6 +79,33 @@ def test_index_groups_by_verdict_and_warns(sample_result):
     assert "무위험 보증" in html
     assert sample_result.verdict_label in html
     assert "이 검사의 한계" in html
+
+
+def test_index_marks_partial_misses_with_a_count(sample_result):
+    """한 도메인만 실패한 검사를 전부 실패처럼 적으면 옆 표의 결과와 모순으로 읽힌다."""
+    judge(sample_result)
+    other = sample_result.model_copy(deep=True)
+    other.domain = "second.com"
+    other.unchecked = []
+    other.not_run = []
+    sample_result.unchecked = ["AI 분석"]
+    sample_result.not_run = ["권위 점수"]
+
+    html = render_index([sample_result, other])
+
+    assert "AI 분석 — 도메인 2개 중 1개에서" in html
+    assert "권위 점수 — 도메인 2개 중 1개에서" in html
+
+
+def test_index_lists_an_all_domain_miss_without_a_count(sample_result):
+    judge(sample_result)
+    sample_result.unchecked = ["AI 분석"]
+    sample_result.not_run = []
+
+    html = render_index([sample_result])
+
+    assert "AI 분석" in html
+    assert "AI 분석 — 도메인" not in html
 
 
 def test_write_report_creates_index_and_detail_pages(sample_result, tmp_path):

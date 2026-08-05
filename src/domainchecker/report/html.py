@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections import Counter
 from html import escape
 from pathlib import Path
 from urllib.parse import quote
@@ -162,6 +163,15 @@ def _t(value) -> str:
     return escape(str(value if value is not None else ""))
 
 
+def _when(stamp: str) -> str:
+    """2026-08-05T11:42… → 2026년 8월 5일 11:42. 기계 표기를 사람이 읽는 말로."""
+    match = re.match(r"(\d{4})-(\d{2})-(\d{2})T(\d{2}:\d{2})", stamp or "")
+    if not match:
+        return stamp or "-"
+    year, month, day, clock = match.groups()
+    return f"{year}년 {int(month)}월 {int(day)}일 {clock}"
+
+
 def _score_text(result: DomainResult) -> str:
     if result.score is None:
         return "점수 없음"
@@ -278,12 +288,12 @@ def detail_fragment(result: DomainResult, capture_base: str = "../captures") -> 
     return f"""
 <h1>{_t(result.domain)}</h1>
 <div class="badges">{_stamp(result)}{_avail(result)}</div>
-<p class="muted">{_t(_score_text(result))} · 취득 상태: {_t(result.acquisition)} · 검사 완료 {_t(result.finished_at[:16])}</p>
+<p class="muted">{_t(_score_text(result))} · 취득 상태: {_t(result.acquisition)} · 검사 끝난 때 {_t(_when(result.finished_at))}</p>
 <p>{_t(result.one_liner or "한줄평 없음")}</p>
 
 <h2>1. 왜 이렇게 판정했나</h2>
-<h3>치명 사유</h3>{_list(result.fatal_reasons, "없음")}
-<h3>주의 사유</h3>{_list(result.warn_reasons, "없음")}
+<h3>사면 안 되는 이유</h3>{_list(result.fatal_reasons, "없음")}
+<h3>조심할 이유</h3>{_list(result.warn_reasons, "없음")}
 <h3>점수 내역</h3>
 <div class="table-card"><table><tr><th>항목</th><th class="num">점수</th><th>설명</th></tr>{scoring_rows}</table></div>
 <p class="muted">미확인 항목은 0점도 만점도 아니라 분모에서 빼고 계산합니다(그래서 부분 점수는 참고치입니다).</p>
@@ -386,7 +396,13 @@ def render_index(results: list[DomainResult]) -> str:
             f'<th class="num">점수</th><th>한줄평</th><th>추천 주제</th></tr>{body}</table></div>'
         )
 
-    missing = sorted({label for r in results for label in r.unchecked + r.not_run})
+    # 합집합만 적으면 "AI 분석 못 함"이라 써 놓고 옆 표에는 AI 한줄평이 보여 모순으로 읽힌다.
+    # 몇 개 도메인에서 못 했는지 함께 적어 준다.
+    counts = Counter(label for r in results for label in set(r.unchecked + r.not_run))
+    missing = [
+        label if hit == len(results) else f"{label} — 도메인 {len(results)}개 중 {hit}개에서"
+        for label, hit in sorted(counts.items())
+    ]
     body = (
         "<h1>낙장도메인 품질 체커 결과</h1>"
         f'<p class="muted">도메인 {len(results)}개 · {escape(SCORE_GUIDE)}</p>'
