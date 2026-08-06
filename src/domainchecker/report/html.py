@@ -436,12 +436,17 @@ def detail_fragment(result: DomainResult, capture_base: str = "../captures") -> 
 
 def _page(title: str, bar: str, body: str, action: str = "") -> str:
     """DW 블록 app-shell-mobile 그대로 — 붙어 있는 제목 줄 + 가운데만 구르는 본문.
-    보고서에는 화면을 옮길 곳이 없으므로 탭 줄만 없다."""
+    보고서에는 화면을 옮길 곳이 없으므로 탭 줄만 없다.
+
+    모양 규칙은 같은 폴더의 style.css 를 가리킨다. 예전에는 페이지마다 통째로
+    끼워 넣었는데, 도메인 1,000개면 페이지 1,001장 × 50KB = 약 78MB 가 되어
+    메일에 붙지 않았다. 보고서는 언제나 폴더 한 벌로 나가므로 한 장만 두면 된다.
+    """
     slot = f'<div class="dw-block-shell-action">{action}</div>' if action else ""
     return (
         '<!doctype html><html lang="ko"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'
-        f"<title>{_t(title)}</title><style>{CSS}</style></head>"
+        f'<title>{_t(title)}</title><link rel="stylesheet" href="style.css"></head>'
         '<body><div class="dw-block-shell"><header class="dw-block-shell-bar">'
         f'<h1 class="dw-block-shell-title">{_t(bar)}</h1>{slot}</header>'
         f'<main class="dw-block-shell-body"><div class="dw-prose">{body}</div>'
@@ -529,6 +534,8 @@ def write_report(results: list[DomainResult], base: Path | str) -> Path:
     """Write data/report/index.html plus one page per domain; returns the index."""
     out_dir = Path(base) / "report"
     out_dir.mkdir(parents=True, exist_ok=True)
+    # 모양 규칙 한 장. 페이지마다 통째로 끼워 넣으면 도메인 1,000개에 약 78MB 가 된다.
+    (out_dir / "style.css").write_text(CSS, encoding="utf-8")
     keep = {"index.html"}
     for result in results:
         name = f"{_safe_name(result.domain)}.html"

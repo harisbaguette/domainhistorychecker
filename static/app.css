@@ -129,6 +129,18 @@ body {
   margin: var(--dw-space-6) 0 var(--dw-space-2);
 }
 
+/* 검사가 도는 동안에는 진행률이 화면 맨 위에 붙는다 — 목록을 내려다보는 중에도
+   몇 개 남았는지·멈추려면 어디를 눌러야 하는지가 늘 보여야 한다. */
+.app-progress-row[data-running] {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin-top: 0;
+  padding: var(--dw-space-2) 0;
+  background: var(--dw-bg);
+  box-shadow: 0 var(--dw-space-2) var(--dw-space-2) calc(-1 * var(--dw-space-2)) var(--dw-border);
+}
+
 /* ── 파일 고르기 — DW 에 짝이 되는 부품이 없어 기본 칸을 토큰으로 입힌다 ── */
 .app-file {
   font-size: var(--dw-size-body);

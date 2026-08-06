@@ -673,6 +673,9 @@ function handle(ev) {
 function setRunning(on) {
   $("start").disabled = on; $("stop").disabled = !on;
   $("resume").disabled = on || !resumable;
+  // 도는 동안에는 진행률 줄이 화면 맨 위에 붙어 따라다닌다
+  const row = document.querySelector(".app-progress-row");
+  if (on) row.dataset.running = "true"; else delete row.dataset.running;
 }
 /* 검사 중간에 화면을 다시 열면 그 시점부터 다시 잰다(예전 것까지 세면 시간이 틀린다). */
 function markStart(done) {
