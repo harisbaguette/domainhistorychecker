@@ -220,29 +220,25 @@ a.dw-list-item {
 /* ── 저장 이력 타임라인 — 계열이 하나뿐이라 chart-1 한 색만 쓴다 ──── */
 .app-years {
   display: flex;
-  gap: var(--dw-space-1);
+  gap: 2px;
   align-items: flex-end;
-  height: 72px;
-  margin: var(--dw-space-3) 0 var(--dw-space-8);
+  height: 60px;
+  margin: var(--dw-space-3) 0 var(--dw-space-1);
 }
 
 .app-years div {
   flex: 1 1 0;
   max-width: 56px;
   min-height: 3px;
-  position: relative;
   background: var(--dw-chart-1);
   border-radius: var(--dw-space-1) var(--dw-space-1) 0 0;
 }
 
-.app-years div span {
-  position: absolute;
-  bottom: -22px;
-  left: 0;
-  right: 0;
-  text-align: center;
-  font-size: var(--dw-size-micro);
-  color: var(--dw-text-muted-aa);
+/* 해는 양 끝에만 적는다 — 막대마다 적으면 폰 폭에서 글자가 서로 겹쳐 못 읽는다 */
+.app-years-scale {
+  display: flex;
+  justify-content: space-between;
+  margin: 0 0 var(--dw-space-4);
   font-variant-numeric: tabular-nums;
 }
 

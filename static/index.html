@@ -397,8 +397,11 @@ const ICON_INFO = ICON('<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><pa
 const ICON_CHEVRON = ICON('<path d="m9 18 6-6-6-6"/>', 20, "");
 
 /* ---------- 화면 전환 (DW app-shell-mobile 탭 줄) ---------- */
-/* 제목 줄은 지금 보고 있는 화면의 이름을 든다 — 화면마다 제목 하나(DW 규칙). */
+/* 제목 줄은 지금 보고 있는 화면의 이름을 든다 — 화면마다 제목 하나(DW 규칙).
+   상세는 열어 놓은 도메인 이름이 곧 제목이다. 제목 줄은 붙어 있어서 아래로 굴러도
+   안 사라지므로, 근거를 읽는 내내 어느 도메인 이야기인지 위에 남아 있다. */
 const SCREEN_TITLE = {check: "낙장도메인 검사", detail: "상세 근거", settings: "설정"};
+let detailTitle = SCREEN_TITLE.detail;
 const navTabs = [...document.querySelectorAll(".dw-block-shell-tab")];
 navTabs.forEach((b) => { b.onclick = () => show(b.dataset.go); });
 function show(name) {
@@ -408,7 +411,8 @@ function show(name) {
     if (on) { b.dataset.current = "true"; b.setAttribute("aria-current", "page"); }
     else { delete b.dataset.current; b.removeAttribute("aria-current"); }
   });
-  $("shellTitle").textContent = SCREEN_TITLE[name] || SCREEN_TITLE.check;
+  $("shellTitle").textContent =
+    name === "detail" ? detailTitle : (SCREEN_TITLE[name] || SCREEN_TITLE.check);
   // 구르는 것은 페이지가 아니라 뼈대의 가운데 칸이다
   $("main").scrollTop = 0;
 }
@@ -634,8 +638,9 @@ function addRow(result, cached) {
 }
 
 async function openDetail(domain) {
+  detailTitle = domain;
   show("detail");
-  $("detailHint").textContent = domain + " 근거를 불러오는 중…";
+  $("detailHint").textContent = "근거를 불러오는 중…";
   $("detailBody").innerHTML = "";
   const res = await fetch("/api/detail/" + encodeURIComponent(domain));
   const data = await res.json();

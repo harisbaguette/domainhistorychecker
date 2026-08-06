@@ -221,17 +221,24 @@ def _timeline(result: DomainResult) -> str:
     if not counts:
         return '<p class="muted">저장된 이력이 없습니다.</p>'
     top = max(counts.values())
+    years = sorted(counts)
+    # 폰 폭에서는 막대가 20px 아래로 내려간다 — 막대마다 해를 적으면 글자가 서로 겹쳐
+    # 읽을 수 없다. 그래서 해는 양 끝에만 적고, 막대 하나하나는 마우스를 올리면 알려 준다.
     bars = "".join(
-        f'<div style="height:{max(4, int(counts[y] / top * 56))}px" title="{_t(y)}년 {counts[y]}건">'
-        f"<span>{_t(y[2:])}</span></div>"
-        for y in sorted(counts)
+        f'<div style="height:{max(4, int(counts[y] / top * 56))}px" '
+        f'title="{_t(y)}년 {counts[y]}건"></div>'
+        for y in years
+    )
+    scale = (
+        f'<p class="app-years-scale muted"><span>{_t(years[0])}년</span>'
+        f"<span>{_t(years[-1])}년</span></p>"
     )
     gaps = (
         f'<p class="muted">기록이 비어 있는 해: {", ".join(str(g) for g in result.wayback.gap_years)}</p>'
         if result.wayback.gap_years
         else ""
     )
-    return f'<div class="app-years">{bars}</div>{gaps}'
+    return f'<div class="app-years">{bars}</div>{scale}{gaps}'
 
 
 def _captures(result: DomainResult, capture_base: str) -> str:
@@ -313,8 +320,9 @@ def detail_fragment(result: DomainResult, capture_base: str = "../captures") -> 
         f'<p class="dw-card-title">{value}</p></div>'
         for label, value in facts
     )
+    # 도메인 이름은 제목 줄(dw-block-shell-title)이 든다 — 붙어 있어서 굴러도 안 사라진다.
+    # 여기서 한 번 더 적으면 한 페이지에 h1 이 둘이 되고 첫 화면을 한 줄 낭비한다.
     return f"""
-<h1>{_t(result.domain)}</h1>
 <div class="app-badges">{_stamp(result)}{_avail(result)}</div>
 <p class="muted">{_t(_score_text(result))} · 취득 상태: {_t(result.acquisition)} · 검사 끝난 때 {_t(_when(result.finished_at))}</p>
 <p>{_t(result.one_liner or "한줄평 없음")}</p>
@@ -390,7 +398,7 @@ def render_detail_page(result: DomainResult, capture_base: str = "../captures") 
     back = (
         '<a class="dw-button" data-variant="ghost" data-size="sm" href="index.html">전체 목록으로</a>'
     )
-    return _page(f"{result.domain} 상세 — 낙장도메인 품질 체커", "상세 근거", body, action=back)
+    return _page(f"{result.domain} 상세 — 낙장도메인 품질 체커", result.domain, body, action=back)
 
 
 def _safe_name(domain: str) -> str:

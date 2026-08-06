@@ -92,7 +92,9 @@ static/app.css              ← 이 앱만의 레이아웃(DW 부품·블록이 
 | 주요 버튼 1개/화면 | `button` | 검사 시작·설정 저장만 `data-variant="primary" data-size="lg" data-block`(폭을 다 쓴다). 나머지는 `secondary` |
 | 보조 버튼 줄(중단·이어서·지우기) | `button-group` | 셋을 이어 붙인 한 줄, `data-size="sm"`(손가락 기기에서는 DW가 알아서 44px로 키운다) |
 
-DW 부품·블록이 덮지 못해 `static/app.css` 에 남긴 것: 프로즈 여백, 저장 이력 타임라인 막대(`--dw-chart-1` 한 색),
+DW 부품·블록이 덮지 못해 `static/app.css` 에 남긴 것: 프로즈 여백,
+저장 이력 타임라인 막대(`--dw-chart-1` 한 색 · 해는 양 끝에만 적는다 — 폰 폭에서 막대가 20px 밑으로 내려가
+막대마다 해를 적으면 글자가 겹쳐 못 읽는다),
 AI 인용 문장, 웨이백 사진 배치, 요약 타일 세로 쌓기, 파일 고르기 칸, 발급 순서 삽화, 건너뛰기 링크, 화면 전환,
 그리고 두 가지 자리 보정 — 목록 한 줄의 도메인 줄바꿈(`.app-domain`)과 점수를 본문 잉크로 세우기(`.app-score`).
 `static/index.html` 의 `<style>` 에 남긴 것: `[hidden]` 한 줄뿐이다.
