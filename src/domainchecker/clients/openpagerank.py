@@ -5,6 +5,7 @@ from __future__ import annotations
 import httpx
 
 from ..models import Authority, CheckState, CheckStatus
+from . import http_reason
 
 URL = "https://openpagerank.com/api/v1.0/getPageRank"
 BATCH = 100
@@ -13,7 +14,7 @@ BATCH = 100
 async def fetch_batch(
     domains: list[str], api_key: str, http: httpx.AsyncClient
 ) -> dict[str, Authority]:
-    """Return one Authority per requested domain (never raises)."""
+    """Return one Authority per requested domain; malformed answers degrade to 미확인."""
     if not api_key:
         state = CheckState(
             status=CheckStatus.NOT_RUN,
@@ -42,22 +43,35 @@ async def _one_call(chunk: list[str], api_key: str, http: httpx.AsyncClient) -> 
     except httpx.HTTPError:
         return failed("권위 점수 조회 접속 실패.")
     if response.status_code != 200:
-        return failed(f"권위 점수 응답 오류({response.status_code}).")
+        return failed("권위 점수를 못 받았습니다 — " + http_reason(response.status_code))
     try:
         data = response.json()
     except ValueError:
         return failed("권위 점수 응답 해석 실패.")
 
+    if not isinstance(data, dict):
+        return failed("권위 점수 응답 형식이 올바르지 않습니다.")
+
     out = failed("응답에 해당 도메인이 없습니다.")
-    for row in data.get("response") or []:
+    rows = data.get("response")
+    if not isinstance(rows, list):
+        return out
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
         domain = str(row.get("domain", "")).lower()
         if domain not in out:
             continue
-        if int(row.get("status_code", 0)) != 200:
+        try:
+            row_status = int(row.get("status_code", 0))
+        except (TypeError, ValueError):
+            row_status = 0
+        if row_status != 200:
             out[domain] = Authority(
+                has_data=False,
                 check=CheckState(
                     status=CheckStatus.OK, note="권위 점수 자료가 없습니다(신규·무링크로 추정)."
-                )
+                ),
             )
             continue
         try:

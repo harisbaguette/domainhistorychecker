@@ -53,6 +53,8 @@ AVAILABILITY_LABEL = {
 REQUIRED_CHECKS = ("wayback", "registration", "spamhaus", "index", "ai", "authority")
 OPTIONAL_CHECKS = ("safebrowsing", "virustotal")
 
+# 미확인·미실시 목록에 이름을 올릴 검사 전부. 여기 빠지면 "검사를 못 했다"는 사실이
+# 화면 어디에도 안 나와, 못 한 것이 "깨끗함"으로 읽힌다(rules 가 그랬다).
 CHECK_LABEL = {
     "wayback": "과거 이력(웨이백)",
     "registration": "등록 정보",
@@ -60,6 +62,7 @@ CHECK_LABEL = {
     "index": "구글 색인",
     "ai": "AI 분석",
     "authority": "권위 점수",
+    "rules": "운영방식 규칙 검사",
     "safebrowsing": "세이프 브라우징",
     "virustotal": "바이러스토탈",
 }
@@ -148,6 +151,8 @@ class Authority(BaseModel):
     check: CheckState = CheckState()
     page_rank: float = 0.0  # 0~10
     rank: int | None = None
+    # False면 "자료가 없음"이지 "권위가 0"이 아니다 — 화면에 0.00을 찍으면 안 된다.
+    has_data: bool = True
 
 
 class MalwareScan(BaseModel):

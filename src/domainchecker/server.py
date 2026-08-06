@@ -219,8 +219,10 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         """외부 접속 모드에서만 켜지는 접속 비밀번호(키 노출 방지 · PLAN §3)."""
         password = os.environ.get("DOMAINCHECKER_PASSWORD", "")
         if password:
-            header = request.headers.get("authorization", "")
-            expected = "Basic " + base64.b64encode(f"domainchecker:{password}".encode()).decode()
+            # 바이트로 견준다 — 아스키가 아닌 글자가 헤더에 오면 문자열 비교는
+            # TypeError 로 터져서, 인증 없는 요청 하나로 500 을 낼 수 있다.
+            header = request.headers.get("authorization", "").encode("utf-8", "replace")
+            expected = b"Basic " + base64.b64encode(f"domainchecker:{password}".encode())
             if not secrets.compare_digest(header, expected):
                 return Response(
                     "접속 비밀번호가 필요합니다.",

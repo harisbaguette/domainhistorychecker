@@ -5,6 +5,7 @@ from __future__ import annotations
 import httpx
 
 from ..models import CheckState, CheckStatus, Reputation
+from . import http_reason
 
 URL = "https://safebrowsing.googleapis.com/v4/threatMatches:find"
 
@@ -39,7 +40,8 @@ async def check(domain: str, api_key: str, http: httpx.AsyncClient) -> Reputatio
         return result
     if response.status_code != 200:
         result.check = CheckState(
-            status=CheckStatus.UNCHECKED, note=f"세이프 브라우징 응답 오류({response.status_code})."
+            status=CheckStatus.UNCHECKED,
+            note="세이프 브라우징 검사를 못 했습니다 — " + http_reason(response.status_code),
         )
         return result
     try:

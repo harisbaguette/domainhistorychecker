@@ -41,6 +41,7 @@ class Config(BaseModel):
     ai_input_limit: int = 40_000  # 도메인당 AI 입력 상한(문자)
     snapshot_text_limit: int = 6_000
     concurrency: int = 4
+    cache_days: int = 7  # 저장분을 며칠까지 믿을지(0이면 무기한). 지나면 자동으로 다시 검사
     data_dir: str = ""  # 비우면 프로젝트 ./data
 
     @property
@@ -83,7 +84,11 @@ def load(path: Path | None = None) -> Config:
 
 
 def save(config: Config, path: Path | None = None) -> Path:
-    """Write config with owner-only permissions (it holds API keys)."""
+    """Write the config file, asking for owner-only permissions (it holds API keys).
+
+    `chmod` is a no-op on Windows, so the file is only as private as the user
+    profile folder there — PLAN §3 already assumes plain local storage.
+    """
     target = Path(path) if path else CONFIG_PATH
     target.parent.mkdir(parents=True, exist_ok=True)
     tmp = target.with_suffix(".json.tmp")

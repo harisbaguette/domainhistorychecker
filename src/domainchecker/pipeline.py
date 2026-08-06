@@ -62,6 +62,24 @@ def clear_run_state(base: Path | str) -> None:
         run_state_path(base).unlink(missing_ok=True)
 
 
+def is_stale(payload: dict, max_days: int) -> bool:
+    """오래된 저장분은 다시 검사한다.
+
+    "지금 등록 가능(주인 없음)" 같은 답은 하루만 지나도 뒤집힌다 — 묵은 답을
+    오늘 것처럼 보여 주면 이미 남이 사 간 도메인을 사러 가게 만든다.
+    """
+    if max_days <= 0:
+        return False
+    stamp = str(payload.get("finished_at") or "")
+    try:
+        finished = datetime.fromisoformat(stamp)
+    except ValueError:
+        return True  # 언제 검사했는지 모르는 저장분은 믿지 않는다
+    if finished.tzinfo is None:
+        finished = finished.replace(tzinfo=UTC)
+    return (datetime.now(UTC) - finished).days >= max_days
+
+
 class Pipeline:
     """Runs every check for a list of domains and writes results.json."""
 
@@ -85,6 +103,7 @@ class Pipeline:
         self.cancel = asyncio.Event()
         self._done = 0
         self._total = 0
+        self._failed: list[str] = []
 
     async def _emit(self, event_type: str, **payload) -> None:
         if self.on_event is None:
@@ -118,21 +137,23 @@ class Pipeline:
         try:
             await self._emit("start", domains=domains)
             pending = []
+            reused: list[DomainResult] = []
             for domain in domains:
                 cached = cache.load(domain, self.base) if use_cache else None
-                if cached:
+                if cached and not is_stale(cached, self.config.cache_days):
                     try:
-                        results.append(DomainResult.model_validate(cached))
+                        found = DomainResult.model_validate(cached)
+                    except ValueError:
+                        found = None  # 캐시가 깨졌으면 그냥 다시 검사한다
+                    if found is not None:
+                        results.append(found)
+                        reused.append(found)
                         self._done += 1
                         await self._emit("domain_done", domain=domain, cached=True, result=cached)
                         continue
-                    except ValueError:
-                        pass  # 캐시가 깨졌으면 그냥 다시 검사한다
                 pending.append(domain)
 
-            authority = await openpagerank.fetch_batch(
-                pending, self.config.keys.openpagerank, http
-            )
+            authority = await self._authority_for(pending, http)
             semaphore = asyncio.Semaphore(max(1, self.config.concurrency))
 
             async def worker(domain: str) -> DomainResult | None:
@@ -153,11 +174,23 @@ class Pipeline:
                     )
                     return result
 
-            gathered = await asyncio.gather(*(worker(d) for d in pending))
-            fresh = [r for r in gathered if r is not None]
+            # 한 도메인이 터져도 나머지 결과와 보고서까지 잃지 않는다.
+            gathered = await asyncio.gather(
+                *(worker(d) for d in pending), return_exceptions=True
+            )
+            fresh: list[DomainResult] = []
+            for domain, item in zip(pending, gathered, strict=True):
+                if isinstance(item, BaseException):
+                    message = f"{domain}: {type(item).__name__}: {item}"
+                    self._failed.append(message)
+                    self._done += 1
+                    await self._emit("domain_failed", domain=domain, message=message)
+                elif item is not None:
+                    fresh.append(item)
             results.extend(fresh)
             # 표 먼저, 사진 나중 — 캡쳐는 모든 검사가 끝난 뒤 후행으로 돈다.
-            await self.capture_phase(fresh)
+            # 이어서 검사로 되살린 결과에 사진이 없으면 그것도 함께 찍는다.
+            await self.capture_phase(fresh + [r for r in reused if not r.captures.items])
         finally:
             if own_http:
                 await http.aclose()
@@ -175,8 +208,21 @@ class Pipeline:
         stopped = self.cancel.is_set()
         if not stopped:
             clear_run_state(self.base)  # 끝까지 갔으면 이어서 할 것이 없다
-        await self._emit("finished", stopped=stopped)
+        await self._emit("finished", stopped=stopped, failed=list(self._failed))
         return results
+
+    async def _authority_for(
+        self, pending: list[str], http: httpx.AsyncClient
+    ) -> dict[str, Authority]:
+        """권위 점수 한 번에 조회. 여기서 터지면 검사가 통째로 죽으므로 반드시 삼킨다."""
+        try:
+            return await openpagerank.fetch_batch(pending, self.config.keys.openpagerank, http)
+        except Exception as exc:  # noqa: BLE001 — 어떤 응답이 와도 나머지 검사는 계속한다
+            state = CheckState(
+                status=CheckStatus.UNCHECKED,
+                note=f"권위 점수 조회에 실패했습니다({type(exc).__name__}).",
+            )
+            return {d: Authority(check=state) for d in pending}
 
     async def check_domain(
         self, domain: str, http: httpx.AsyncClient, authority: Authority | None = None

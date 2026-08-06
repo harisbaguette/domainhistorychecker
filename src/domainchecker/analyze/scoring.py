@@ -35,6 +35,7 @@ def _check_of(result: DomainResult, name: str):
         "index": result.index.check,
         "ai": result.ai.check,
         "authority": result.authority.check,
+        "rules": result.rules.check,
         "safebrowsing": result.safebrowsing.check,
         "virustotal": result.virustotal.check,
     }[name]
@@ -304,6 +305,20 @@ def warn_reasons(result: DomainResult) -> list[str]:
         check = _check_of(result, name)
         if not check.ok:
             reasons.append(f"필수 검사 미확인 — {CHECK_LABEL[name]}: {check.note or '확인하지 못했습니다.'}")
+
+    # 점수가 기준 밑인데 필수 검사가 비어 "제외"로 확정하지 못한 경우. 이 말을 빼면
+    # 16점짜리가 "사면 안 되는 이유: 없음"인 노란 도장으로 나가, 화면에 적어 둔
+    # "50점 밑은 제외"와 정반대로 읽힌다.
+    if (
+        result.scoring.computable
+        and result.score is not None
+        and result.score < REJECT_CUT
+        and not all(_check_of(result, n).ok for n in REQUIRED_CHECKS)
+    ):
+        reasons.append(
+            f"점수 {result.score:.0f}점으로 기준(50점) 미만입니다 — "
+            "필수 검사가 비어 '제외'로 확정하지 못했을 뿐, 사실상 제외 대상입니다."
+        )
 
     spam = result.ai.spam
     ai_says_spam = result.ai.check.ok and spam.verdict == "spam"

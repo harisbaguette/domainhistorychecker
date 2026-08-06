@@ -6,6 +6,8 @@ import json
 
 import httpx
 
+from . import http_reason
+
 URL = "https://openrouter.ai/api/v1/chat/completions"
 
 
@@ -65,7 +67,7 @@ class OpenRouterClient:
                 problems.append(f"{model}: 접속 실패({type(exc).__name__})")
                 continue
             if response.status_code != 200:
-                problems.append(f"{model}: 응답 오류({response.status_code})")
+                problems.append(f"{model}: {http_reason(response.status_code)}")
                 continue
             try:
                 payload = response.json()

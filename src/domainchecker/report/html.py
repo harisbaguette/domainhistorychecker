@@ -7,6 +7,7 @@ drift apart.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 from collections import Counter
@@ -14,7 +15,14 @@ from html import escape
 from pathlib import Path
 from urllib.parse import quote
 
-from ..models import AVAILABILITY_LABEL, CHECK_LABEL, VERDICT_LABEL, DomainResult, Verdict
+from ..models import (
+    AVAILABILITY_LABEL,
+    CHECK_LABEL,
+    VERDICT_LABEL,
+    CheckStatus,
+    DomainResult,
+    Verdict,
+)
 
 DISCLAIMER = (
     "이 검사 결과는 “무위험 보증”이 아닙니다. 클로킹(검색엔진에만 다른 화면을 보여주는 수법)이나 "
@@ -192,6 +200,17 @@ def _avail(result: DomainResult) -> str:
     return f'<span class="dw-badge" data-tone="{tone}" data-variant="{variant}">{_t(label)}</span>'
 
 
+def _check_line(check) -> str:
+    """검사 한 줄. 안 돌린 검사를 '-' 로 두면 '깨끗함'으로 읽힌다 — 안 했다고 적는다."""
+    if check.note:
+        return _t(check.note)
+    if check.status is CheckStatus.NOT_RUN:
+        return "검사하지 않았습니다(키가 없거나 꺼 둠) — 깨끗하다는 뜻이 아닙니다."
+    if check.status is CheckStatus.UNCHECKED:
+        return "검사했지만 답을 못 받았습니다 — 깨끗하다는 뜻이 아닙니다."
+    return "이상 없음."
+
+
 def _list(items: list[str], empty: str = "없음") -> str:
     if not items:
         return f'<p class="muted">{escape(empty)}</p>'
@@ -290,11 +309,15 @@ def detail_fragment(result: DomainResult, capture_base: str = "../captures") -> 
         else ""
     )
     # 못 잰 값을 0으로 보여 주면 "권위가 0인 나쁜 도메인"으로 오해한다.
-    authority_value = (
-        f"{result.authority.page_rank:.2f} / 10"
-        if result.authority.check.ok
-        else "못 쟀음 — " + (result.authority.check.note or "확인하지 못했습니다.")
-    )
+    # 조회는 됐지만 자료가 없는 경우(has_data=False)도 숫자가 아니라 말로 적는다.
+    if not result.authority.check.ok:
+        authority_value = "못 쟀음 — " + (result.authority.check.note or "확인하지 못했습니다.")
+    elif not result.authority.has_data:
+        authority_value = "자료 없음 — " + (
+            result.authority.check.note or "권위 점수 자료가 없습니다."
+        )
+    else:
+        authority_value = f"{result.authority.page_rank:.2f} / 10"
     index_line = (
         f"색인 {result.index.indexed_count}건"
         + (" · " + _t(result.index.check.note) if result.index.check.note else "")
@@ -302,6 +325,14 @@ def detail_fragment(result: DomainResult, capture_base: str = "../captures") -> 
         else "못 쟀음 — " + _t(result.index.check.note or "확인하지 못했습니다.")
     )
     spam_verdict = SPAM_VERDICT_LABEL.get(result.ai.spam.verdict, result.ai.spam.verdict)
+    # 규칙 검사를 못 했는데 "특별한 흔적 없음"이라고 쓰면 못 한 것이 깨끗함으로 읽힌다.
+    rules_evidence = (
+        _list(result.rules.evidence, "특별한 흔적 없음")
+        if result.rules.check.ok
+        else '<p class="muted">'
+        + _t(result.rules.check.note or "규칙 검사를 못 했습니다.")
+        + " (흔적이 없다는 뜻이 아닙니다)</p>"
+    )
     facts = [
         ("지금 살 수 있나", _t(result.availability_label or AVAILABILITY_LABEL["unknown"])),
         ("등록일", _t(registration.created or "알 수 없음")),
@@ -353,7 +384,7 @@ def detail_fragment(result: DomainResult, capture_base: str = "../captures") -> 
 {_captures(result, capture_base)}
 
 <h2>6. 신호와 근거</h2>
-<h3>운영방식 규칙이 찾은 흔적</h3>{_list(result.rules.evidence, "특별한 흔적 없음")}
+<h3>운영방식 규칙이 찾은 흔적</h3>{rules_evidence}
 <h3>AI 스팸성 판정</h3>
 <p>{_t(spam_verdict)} · 확신도 {result.ai.spam.confidence:.2f}</p>
 {quotes or '<p class="muted">인용된 근거 없음</p>'}
@@ -363,9 +394,9 @@ def detail_fragment(result: DomainResult, capture_base: str = "../captures") -> 
 <p>{index_line}</p>
 {_list(result.index.titles[:10], "색인된 제목 없음")}
 <h3>블랙리스트</h3>
-<p>스팸하우스: {_t(result.spamhaus.check.note or "-")}<br>
-세이프 브라우징: {_t(result.safebrowsing.check.note or "-")}<br>
-바이러스토탈: {_t(result.virustotal.check.note or "-")}</p>
+<p>스팸하우스: {_check_line(result.spamhaus.check)}<br>
+세이프 브라우징: {_check_line(result.safebrowsing.check)}<br>
+바이러스토탈: {_check_line(result.virustotal.check)}</p>
 
 <h2>7. 확인하지 못한 것</h2>
 <h3>미확인(검사했지만 답을 못 받음)</h3>{_list(result.unchecked, "없음")}
@@ -442,15 +473,18 @@ def render_index(results: list[DomainResult]) -> str:
         label if hit == len(results) else f"{label} — 도메인 {len(results)}개 중 {hit}개에서"
         for label, hit in sorted(counts.items())
     ]
+    # 언제 검사한 결과인지 없으면 묵은 답을 오늘 것으로 읽는다.
+    checked_at = max((r.finished_at for r in results if r.finished_at), default="")
     body = (
-        f'<p class="muted">도메인 {len(results)}개 · {escape(SCORE_GUIDE)}</p>'
+        f'<p class="muted">{_t(_when(checked_at))}에 검사함 · 도메인 {len(results)}개 · '
+        f"{escape(SCORE_GUIDE)}</p>"
         + _alert(escape(DISCLAIMER))
         + "".join(groups)
         + "<h2>이 검사의 한계</h2>"
         + _list(LIMITS)
         + "<h2>이번 실행에서 확인하지 못한 검사</h2>"
         + _list(missing, "없음")
-        + '<p class="muted">원자료: <a href="../results.json">results.json</a> · '
+        + '<p class="muted">원자료: <a href="results.json">results.json</a> · '
         f"검사 항목 이름: {_t(', '.join(CHECK_LABEL.values()))}</p>"
     )
     return _page("낙장도메인 품질 체커 결과", "검사 결과", body)
@@ -460,10 +494,17 @@ def write_report(results: list[DomainResult], base: Path | str) -> Path:
     """Write data/report/index.html plus one page per domain; returns the index."""
     out_dir = Path(base) / "report"
     out_dir.mkdir(parents=True, exist_ok=True)
+    keep = {"index.html"}
     for result in results:
-        (out_dir / f"{_safe_name(result.domain)}.html").write_text(
-            render_detail_page(result), encoding="utf-8"
-        )
+        name = f"{_safe_name(result.domain)}.html"
+        keep.add(name)
+        (out_dir / name).write_text(render_detail_page(result), encoding="utf-8")
+    # 지난 실행에서 남은 도메인 페이지는 지운다 — 목록에 없는데 파일만 남으면
+    # 옛 결과를 오늘 것으로 착각한다.
+    for stale in out_dir.glob("*.html"):
+        if stale.name not in keep:
+            with contextlib.suppress(OSError):
+                stale.unlink()
     index = out_dir / "index.html"
     index.write_text(render_index(results), encoding="utf-8")
     (out_dir / "results.json").write_text(

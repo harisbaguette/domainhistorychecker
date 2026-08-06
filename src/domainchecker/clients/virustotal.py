@@ -7,6 +7,7 @@ import httpx
 
 from ..models import CheckState, CheckStatus, MalwareScan
 from ..ratelimit import AdaptiveRateLimiter
+from . import http_reason
 
 URL = "https://www.virustotal.com/api/v3/domains/{domain}"
 RPM = 4
@@ -44,7 +45,8 @@ async def check(
         return result
     if response.status_code != 200:
         result.check = CheckState(
-            status=CheckStatus.UNCHECKED, note=f"바이러스토탈 응답 오류({response.status_code})."
+            status=CheckStatus.UNCHECKED,
+            note="바이러스토탈 검사를 못 했습니다 — " + http_reason(response.status_code),
         )
         return result
     try:

@@ -118,7 +118,8 @@
               <label class="dw-label" for="k_openrouter">OpenRouter 키 (AI 분석 · 필수)</label>
               <div class="dw-field-content">
                 <input type="password" class="dw-input" id="k_openrouter" autocomplete="off">
-                <p class="dw-field-description">발급: <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a> — 로그인 후 “Create key”를 누르면 됩니다.</p>
+                <p class="dw-field-description">발급: <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a> — 로그인 후 “Create key”를 누르면 됩니다.<br>
+        <b>이 키만 돈이 듭니다.</b> 미리 충전해 둬야 하고, 잔액이 0이면 AI 분석이 실패합니다(도메인 300개에 약 650원). 충전은 <a href="https://openrouter.ai/credits" target="_blank" rel="noopener">openrouter.ai/credits</a>에서 합니다.</p>
                 <div class="dw-collapsible app-howto" data-open="false">
                   <button type="button" class="dw-collapsible-trigger" aria-expanded="false" aria-controls="howto-openrouter">
                     그림으로 보는 발급 순서
@@ -381,6 +382,7 @@ const rows = new Map();
 let source = null;
 let reportUrl = null;
 let resumable = false;   // 중단된 목록이 남아 있나 (서버 run_state.json 기준)
+let failed = [];         // 검사 도중 터져서 결과가 없는 도메인
 let startedAt = 0;       // 이번 검사를 지켜보기 시작한 시각 — 남은 시간 계산용
 let doneBase = 0;        // 그때 이미 끝나 있던 개수(중간에 다시 붙어도 시간이 안 틀리게)
 
@@ -536,6 +538,7 @@ $("report").onclick = async () => {
 function listen() {
   if (source) source.close();
   startedAt = 0;
+  failed = [];
   source = new EventSource("/api/events");
   source.onmessage = (e) => handle(JSON.parse(e.data));
   source.onerror = () => { /* 서버가 스트림을 닫으면 브라우저가 알아서 다시 붙는다 */ };
@@ -554,14 +557,31 @@ function handle(ev) {
     $("progressText").textContent = ev.domain + " 사진 " + ev.shots + "장 저장. " + (ev.note || "");
     return;
   }
+  // 한 도메인이 터져도 나머지는 계속 간다. 어느 것이 빠졌는지는 반드시 알려 준다.
+  if (ev.type === "domain_failed") {
+    failed.push(ev.domain);
+    progress(ev.done, ev.total);
+    return;
+  }
   if (ev.type === "report_ready") { reportUrl = ev.url; $("report").hidden = false; return; }
   if (ev.type === "report_error") { $("progressText").innerHTML = '<span class="dw-field-error">보고서를 만들지 못했습니다: ' + escapeHtml(ev.message) + "</span>"; return; }
   if (ev.type === "finished") {
     resumable = Boolean(ev.stopped);  // 끝까지 갔으면 이어서 할 것이 없다
     setRunning(false);
-    $("progressText").textContent = ev.stopped
+    const base = ev.stopped
       ? "중단한 상태로 끝났습니다."
       : (reportUrl ? "모두 끝났습니다 — 보고서가 준비됐습니다." : "모두 끝났습니다.");
+    const missed = (ev.failed && ev.failed.length ? ev.failed.length : failed.length);
+    if (missed) {
+      $("progressText").innerHTML = escapeHtml(base) +
+        ' <span class="dw-field-error">' +
+        escapeHtml("검사하지 못한 도메인 " + missed + "개가 있습니다: " +
+          (failed.slice(0, 5).join(", ") || "") + " — ‘이어서 검사’로 다시 해 보세요.") +
+        "</span>";
+      resumable = true;
+    } else {
+      $("progressText").textContent = base;
+    }
     if (source) source.close();
     return;
   }
@@ -599,6 +619,12 @@ function progress(done, total) {
   }
 }
 
+/* 언제 검사한 저장분인지 안 적으면 묵은 답을 오늘 것으로 읽는다. */
+function when(stamp) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(stamp || ""));
+  return m ? Number(m[1]) + "년 " + Number(m[2]) + "월 " + Number(m[3]) + "일" : "언제인지 모를 때";
+}
+
 /* 판정·취득 상태를 DW badge 의 tone 으로 옮긴다 — 색은 tokens.css 한 곳에서만 나온다. */
 const TONE = {BUY: "success", REVIEW: "warning", NO_HISTORY: "warning", REJECT: "error"};
 const AVAIL_TONE = {free: "success", soon: "warning", auction: "warning", taken: "neutral", unknown: "neutral"};
@@ -625,7 +651,7 @@ function addRow(result, cached) {
     '<span class="dw-list-item-content">' +
       '<span class="dw-list-item-title app-domain">' + escapeHtml(result.domain) + "</span>" +
       '<span class="dw-list-item-description">' + escapeHtml(result.one_liner) +
-        (cached ? " (저장분)" : "") + "</span>" +
+        (cached ? escapeHtml(" (" + when(result.finished_at) + "에 검사한 저장분)") : "") + "</span>" +
     "</span>" +
     '<span class="dw-list-item-actions">' + ICON_CHEVRON + "</span>" +
     '<span class="dw-list-item-footer"><span class="app-badges">' +
