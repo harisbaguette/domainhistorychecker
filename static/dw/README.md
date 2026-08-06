@@ -13,6 +13,7 @@
 |---|---|
 | `tokens.css` | `tokens/tokens.css` |
 | `base.css` | `styles/base.css` |
+| `typography.css` | `styles/typography.css` |
 | `ui/alert.css` | `ui/alert/alert.css` |
 | `ui/badge.css` | `ui/badge/badge.css` |
 | `ui/button.css` | `ui/button/button.css` |
@@ -28,10 +29,16 @@
 | `ui/native-select.css` | `ui/native-select/native-select.css` |
 | `ui/progress.css` | `ui/progress/progress.css` |
 | `ui/textarea.css` | `ui/textarea/textarea.css` |
+| `ui/toggle-group.css` | `ui/toggle-group/toggle-group.css` |
 | `blocks/app-shell-mobile.css` | `blocks/app-shell-mobile/app-shell-mobile.css` |
 | `blocks/settings.css` | `blocks/settings/settings.css` |
 
-부품 15종 + 블록(화면 뼈대) 2종. 이 앱이 쓰지 않는 나머지는 zip 배포 무게 때문에 복사하지 않았다.
+스타일 3장(토큰·기본·프로즈) + 부품 16종 + 블록(화면 뼈대) 2종.
+이 앱이 쓰지 않는 나머지는 zip 배포 무게 때문에 복사하지 않았다.
+
+`typography.css`(`.dw-prose`)는 DW 가 "읽어 내려가는 글에만 쓰고 UI 껍데기에는 쓰지 말라"고 못 박은
+조판 정본이다. 상세 근거와 보고서 본문이 정확히 그 '읽는 글'이라 그대로 가져다 씌운다
+(예전에는 앱이 제목·문단·인용·코드 규칙을 따로 만들어 두어 DW 와 모양이 갈라져 있었다).
 
 **표(`ui/table.css`)와 상단 탭(`ui/tabs.css`)은 뺐다.** 폰 폭(440px)에는 열이 여섯인 표가 들어가지
 않는다 — DW가 목록에 내놓는 답은 `list-item`(목록 한 줄)이라 그쪽으로 옮겼고, 화면 이동은
@@ -40,10 +47,11 @@
 ## 다시 복사하는 법
 
 ```sh
-cp "Z:/Doweek/design-system/tokens/tokens.css" static/dw/tokens.css
-cp "Z:/Doweek/design-system/styles/base.css"   static/dw/base.css
+cp "Z:/Doweek/design-system/tokens/tokens.css"       static/dw/tokens.css
+cp "Z:/Doweek/design-system/styles/base.css"         static/dw/base.css
+cp "Z:/Doweek/design-system/styles/typography.css"   static/dw/typography.css
 for c in alert badge button button-group card checkbox collapsible empty-state field input \
-         label list-item native-select progress textarea; do
+         label list-item native-select progress textarea toggle-group; do
   cp "Z:/Doweek/design-system/ui/$c/$c.css" "static/dw/ui/$c.css"
 done
 for b in app-shell-mobile settings; do
@@ -66,6 +74,6 @@ done
 ## CSS를 합쳐 내려주는 곳
 
 `src/domainchecker/report/html.py`가 이 폴더의 파일을
-`tokens → base → ui/*(이름순) → blocks/*(이름순) → static/app.css` 순서로 읽어 하나로 합친다.
+`tokens → base → typography → ui/*(이름순) → blocks/*(이름순) → static/app.css` 순서로 읽어 하나로 합친다.
 블록은 부품을 짜 맞춘 것이라 부품 뒤에 온다. 서버는 그것을 `/style.css`로 내려주고,
 보고서 HTML은 같은 내용을 `<style>`로 끼워 넣는다(zip을 풀어 파일로 열어도 모양이 나오도록).

@@ -38,9 +38,10 @@ static/app.css              ← 이 앱만의 레이아웃(DW 부품·블록이 
 **규칙**: 마크업은 DW 부품 클래스(`dw-*`)와 `data-*` 속성으로만 쓰고, 색·모서리·그림자·간격은 `var(--dw-*)` 로만
 쓴다. hex 직접 사용 0. 토큰 이름도 DW 원본 그대로다(`--dw-ring`, `--dw-font-body`, `--dw-space-*` …).
 
-가져다 쓴 DW 부품 15종:
+가져다 쓴 DW 스타일 3장: `tokens` `base` `typography`(`.dw-prose` — 읽는 글 조판).
+가져다 쓴 DW 부품 16종:
 `alert` `badge` `button` `button-group` `card` `checkbox` `collapsible` `empty-state` `field` `input`
-`label` `list-item` `native-select` `progress` `textarea`.
+`label` `list-item` `native-select` `progress` `textarea` `toggle-group`.
 가져다 쓴 DW 블록(화면 뼈대) 2종: `app-shell-mobile` `settings`.
 안 쓰는 나머지는 zip 무게 때문에 복사하지 않았다.
 
@@ -78,6 +79,9 @@ static/app.css              ← 이 앱만의 레이아웃(DW 부품·블록이 
 | 화면 뼈대(제목 줄·본문·아래 탭 줄) | `app-shell-mobile` | 화면 이동은 아래 탭 줄(검사·상세·설정). 고른 칸은 `data-current` + `aria-current="page"`, 제목 줄은 그 화면의 이름을 든다 |
 | 설정 화면 묶음 | `settings` | `dw-block-settings-group` + 조용한 묶음 제목. 묶음: API 키 · AI 모델 · 속도 · 선택 검사 |
 | 결과 목록 · 점수 내역 | `list-item` | 한 줄에 도메인(제목) · 한줄평(설명) · 판정/취득 배지와 점수(아래 칸). 누를 수 있는 줄은 `button`, 보고서에서는 `a` |
+| 판정으로 거르기 | `toggle-group` | `data-variant="segmented"` 전체·매입 후보·검토 필요·제외. 띠 하나가 Tab 한 번이고 안에서는 화살표로 옮긴다(DW 규칙) |
+| 넣는 칸 접기 | `collapsible` | 볼 결과가 이미 있으면 스스로 접혀 목록을 첫 화면으로 올린다. 접힌 동안 `inert` |
+| 상세 근거 · 보고서 본문 조판 | `styles/typography.css`(`.dw-prose`) | DW 정본 그대로. '읽어 내려가는 글'에만 쓰고 단추·칸이 늘어선 화면에는 쓰지 않는다(DW 지시) |
 | 안내·경고 상자 | `alert` | 키 없음·면책 = `warning`, 입력 미리보기 = `info` |
 | 판정 도장(시그니처) | `badge` | 채운 배지. 매입 후보=`success` / 검토 필요·이력 없음=`warning` / 제외=`error` |
 | "지금 살 수 있나" | `badge` | 도장보다 한 단계 조용하게 — `data-variant="outline"`(모르는 것은 `ghost`) |
@@ -92,7 +96,8 @@ static/app.css              ← 이 앱만의 레이아웃(DW 부품·블록이 
 | 주요 버튼 1개/화면 | `button` | 검사 시작·설정 저장만 `data-variant="primary" data-size="lg" data-block`(폭을 다 쓴다). 나머지는 `secondary` |
 | 보조 버튼 줄(중단·이어서·지우기) | `button-group` | 셋을 이어 붙인 한 줄, `data-size="sm"`(손가락 기기에서는 DW가 알아서 44px로 키운다) |
 
-DW 부품·블록이 덮지 못해 `static/app.css` 에 남긴 것: 프로즈 여백,
+DW 부품·블록이 덮지 못해 `static/app.css` 에 남긴 것: 조작판(글이 아닌 화면)의 문단·안내상자 간격,
+고르기 줄을 담는 종이(`.app-filter`),
 저장 이력 타임라인 막대(`--dw-chart-1` 한 색 · 해는 양 끝에만 적는다 — 폰 폭에서 막대가 20px 밑으로 내려가
 막대마다 해를 적으면 글자가 겹쳐 못 읽는다),
 AI 인용 문장, 웨이백 사진 배치, 요약 타일 세로 쌓기, 파일 고르기 칸, 발급 순서 삽화, 건너뛰기 링크, 화면 전환,

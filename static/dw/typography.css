@@ -1,0 +1,209 @@
+/* ==========================================================================
+   DW Design System — typography.css
+   .dw-prose: the reading rules for a block of written text (help pages, notes,
+   release notes). Only for text the user reads through — never for UI chrome.
+   Load after tokens.css and base.css. Values come from tokens.css only.
+   ========================================================================== */
+
+.dw-prose {
+  /* A line longer than ~65 characters loses the eye on the way back. */
+  max-width: 65ch;
+  color: var(--dw-text);
+  font-family: var(--dw-font-body);
+  font-size: var(--dw-size-body);
+  line-height: var(--dw-leading-body);
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
+/* One rhythm for everything that follows something else. */
+.dw-prose > * + * {
+  margin-top: var(--dw-space-4);
+}
+
+/* ── Headings: three steps, and the step is weight before size ──────────── */
+.dw-prose h1,
+.dw-prose h2,
+.dw-prose h3 {
+  line-height: var(--dw-leading-tight);
+  letter-spacing: var(--dw-tracking-display);
+}
+
+/* The handwriting face is the brand moment, so it stays on the top title only.
+   Running it down the whole page would turn a signature into noise. */
+.dw-prose h1 {
+  font-family: var(--dw-font-display);
+  font-size: var(--dw-size-display);
+  font-weight: var(--dw-weight-black);
+}
+
+.dw-prose h2 {
+  font-family: var(--dw-font-body);
+  font-size: var(--dw-size-title);
+  font-weight: var(--dw-weight-black);
+}
+
+.dw-prose h3 {
+  font-family: var(--dw-font-body);
+  font-size: var(--dw-size-body);
+  font-weight: var(--dw-weight-bold);
+}
+
+/* A heading needs more air above it than below, so it belongs to its section. */
+.dw-prose > * + h1,
+.dw-prose > * + h2,
+.dw-prose > * + h3 {
+  margin-top: var(--dw-space-8);
+}
+
+.dw-prose h1 + *,
+.dw-prose h2 + *,
+.dw-prose h3 + * {
+  margin-top: var(--dw-space-3);
+}
+
+/* ── Lists ──────────────────────────────────────────────────────────────── */
+.dw-prose ul,
+.dw-prose ol {
+  padding-left: var(--dw-space-6);
+}
+
+.dw-prose ul {
+  list-style: disc;
+}
+
+.dw-prose ol {
+  list-style: decimal;
+}
+
+.dw-prose li + li {
+  margin-top: var(--dw-space-2);
+}
+
+.dw-prose li::marker {
+  color: var(--dw-text-muted-aa);
+}
+
+.dw-prose li > ul,
+.dw-prose li > ol {
+  margin-top: var(--dw-space-2);
+}
+
+/* ── Quote ──────────────────────────────────────────────────────────────── */
+.dw-prose blockquote {
+  padding-left: var(--dw-space-4);
+  border-left: 2px solid var(--dw-accent);
+  color: var(--dw-text-muted-aa);
+}
+
+/* ── Code ───────────────────────────────────────────────────────────────── */
+.dw-prose code,
+.dw-prose pre {
+  /* Falls back to the platform mono stack until the tokens define one. */
+  font-family: var(--dw-font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: var(--dw-size-micro);
+}
+
+.dw-prose code {
+  padding: 2px var(--dw-space-1);
+  border-radius: calc(var(--dw-radius-control) - 6px);
+  background: var(--dw-surface-sunken);
+  color: var(--dw-text);
+  word-break: break-all;
+}
+
+.dw-prose pre {
+  padding: var(--dw-space-4);
+  border-radius: var(--dw-radius-card);
+  background: var(--dw-surface-sunken);
+  color: var(--dw-text);
+  line-height: var(--dw-leading-body);
+  /* Long lines scroll inside the block instead of widening the page. */
+  overflow-x: auto;
+}
+
+.dw-prose pre code {
+  padding: 0;
+  background: transparent;
+  word-break: normal;
+}
+
+/* ── The rest ───────────────────────────────────────────────────────────── */
+.dw-prose strong {
+  font-weight: var(--dw-weight-bold);
+}
+
+.dw-prose a {
+  color: var(--dw-accent-strong);
+  text-decoration: underline;
+}
+
+.dw-prose hr {
+  height: 1px;
+  border: none;
+  background: var(--dw-border-strong);
+}
+
+.dw-prose img {
+  border-radius: var(--dw-radius-card);
+}
+
+/* Numbers in a column keep their places lined up. */
+.dw-prose [data-numeric] {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── h4: the fourth step is weight only, not another size ────────────────── */
+/* Three sizes is the rule (DESIGN.md 4.5), so a fourth heading level cannot
+   have a size of its own. It separates by weight and colour instead, which is
+   enough for the depth a help page ever reaches. */
+.dw-prose h4 {
+  font-family: var(--dw-font-body);
+  font-size: var(--dw-size-body);
+  font-weight: var(--dw-weight-bold);
+  line-height: var(--dw-leading-tight);
+  color: var(--dw-text-muted-aa);
+}
+
+.dw-prose > * + h4 {
+  margin-top: var(--dw-space-6);
+}
+
+.dw-prose h4 + * {
+  margin-top: var(--dw-space-2);
+}
+
+/* ── Tables inside prose ─────────────────────────────────────────────────── */
+/* A table in running text is usually a small one, so it gets the same hairline
+   rows as ui/table without the scrolling frame. On a phone it may still outgrow
+   the column, so the wrapper scrolls rather than pushing the page sideways. */
+.dw-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--dw-size-body);
+}
+
+.dw-prose th,
+.dw-prose td {
+  padding: var(--dw-space-2) var(--dw-space-3);
+  text-align: left;
+  border-bottom: 1px solid var(--dw-border);
+  word-break: keep-all;
+}
+
+.dw-prose th {
+  font-weight: var(--dw-weight-bold);
+  color: var(--dw-text-muted-aa);
+  white-space: nowrap;
+}
+
+.dw-prose tr:last-child td {
+  border-bottom: none;
+}
+
+.dw-prose caption {
+  padding-bottom: var(--dw-space-2);
+  font-size: var(--dw-size-micro);
+  color: var(--dw-text-muted-aa);
+  text-align: left;
+}

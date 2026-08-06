@@ -87,7 +87,12 @@ def _read_css(path: Path) -> str:
 
 
 def build_stylesheet() -> str:
-    parts = [_read_css(DW_DIR / "tokens.css"), _read_css(DW_DIR / "base.css")]
+    parts = [
+        _read_css(DW_DIR / "tokens.css"),
+        _read_css(DW_DIR / "base.css"),
+        # '읽는 글'(상세 근거·보고서) 조판. DW 가 주는 정본이라 앱이 다시 만들지 않는다.
+        _read_css(DW_DIR / "typography.css"),
+    ]
     # 블록(화면 뼈대)은 부품을 짜 맞춘 것이라 부품 뒤에 온다.
     for folder in ("ui", "blocks"):
         one_dir = DW_DIR / folder
@@ -122,12 +127,29 @@ ICON_WARNING = _icon(
     cls="dw-alert-icon",
 )
 ICON_CHEVRON = _icon('<path d="m9 18 6-6-6-6"/>')
+ICON_INFO = _icon(
+    '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
+    cls="dw-alert-icon",
+)
+ICON_SUCCESS = _icon(
+    '<path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/>',
+    cls="dw-alert-icon",
+)
+# DW alert.jsx 규칙: warning·error 는 급한 소식이라 role="alert", 나머지는 role="status".
+# 아이콘도 variant 마다 다르다 — 안내에 경고 삼각형을 그리면 뜻이 뒤집힌다.
+ALERT_FACE = {
+    "warning": ("alert", ICON_WARNING),
+    "error": ("alert", ICON_WARNING),
+    "info": ("status", ICON_INFO),
+    "success": ("status", ICON_SUCCESS),
+}
 
 
 def _alert(text: str, variant: str = "warning") -> str:
     """DW alert — 아이콘 한 칸 + 설명 한 칸."""
+    role, icon = ALERT_FACE.get(variant, ALERT_FACE["warning"])
     return (
-        f'<div class="dw-alert" data-variant="{variant}" role="status">{ICON_WARNING}'
+        f'<div class="dw-alert" data-variant="{variant}" role="{role}">{icon}'
         f'<p class="dw-alert-description">{text}</p></div>'
     )
 
@@ -257,7 +279,8 @@ def _timeline(result: DomainResult) -> str:
         if result.wayback.gap_years
         else ""
     )
-    return f'<div class="app-years">{bars}</div>{scale}{gaps}'
+    # 막대와 해 표시는 한 덩어리다 — 따로 두면 글 리듬이 둘 사이를 벌려 놓는다.
+    return f'<div class="app-timeline"><div class="app-years">{bars}</div>{scale}</div>{gaps}'
 
 
 def _captures(result: DomainResult, capture_base: str) -> str:
@@ -298,7 +321,8 @@ def detail_fragment(result: DomainResult, capture_base: str = "../captures") -> 
         f"<li><b>{_t(t.get('topic'))}</b> — {_t(t.get('reason'))}</li>"
         for t in result.recommended_topics
     )
-    quotes = "".join(f'<blockquote class="app-quote">{_t(q)}</blockquote>' for q in result.ai.spam.quotes)
+    # 인용은 민무늬 blockquote — 모양은 DW 프로즈 정본(typography.css)이 낸다.
+    quotes = "".join(f"<blockquote>{_t(q)}</blockquote>" for q in result.ai.spam.quotes)
     links = "".join(
         f'<li><a href="{_t(url)}" target="_blank" rel="noopener">{_t(label)}</a></li>'
         for label, url in recheck_links(result.domain)
@@ -420,7 +444,8 @@ def _page(title: str, bar: str, body: str, action: str = "") -> str:
         f"<title>{_t(title)}</title><style>{CSS}</style></head>"
         '<body><div class="dw-block-shell"><header class="dw-block-shell-bar">'
         f'<h1 class="dw-block-shell-title">{_t(bar)}</h1>{slot}</header>'
-        f'<main class="dw-block-shell-body app-prose">{body}</main></div></body></html>'
+        f'<main class="dw-block-shell-body"><div class="dw-prose">{body}</div>'
+        "</main></div></body></html>"
     )
 
 
@@ -436,13 +461,23 @@ def _safe_name(domain: str) -> str:
     return re.sub(r"[^a-z0-9.\-]", "_", domain.lower())[:120] or "unknown"
 
 
+# 지금 살 수 있는 것 → 곧 살 수 있는 것 → 경매 → 모름 → 남이 쓰는 중 순서.
+_BUY_RANK = {"free": 0, "soon": 1, "auction": 2, "unknown": 3, "taken": 4}
+
+
+def _buy_rank(result: DomainResult) -> int:
+    return _BUY_RANK.get(result.availability, 3)
+
+
 def render_index(results: list[DomainResult]) -> str:
     groups = []
     for verdict in VERDICT_ORDER:
         rows = [r for r in results if r.verdict is verdict]
         if not rows:
             continue
-        rows.sort(key=lambda r: (r.score is None, -(r.score or 0)))
+        # 점수만으로 줄을 세우면 "매입 후보" 맨 위에 못 사는 도메인이 온다.
+        # 이 도구는 살 것을 고르라고 있는 물건이라, 살 수 있는 것을 먼저 올린다.
+        rows.sort(key=lambda r: (_buy_rank(r), r.score is None, -(r.score or 0)))
         body = _item_group(
             [
                 _item(

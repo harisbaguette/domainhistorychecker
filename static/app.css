@@ -67,47 +67,19 @@ body {
   display: block;
 }
 
-/* ── 프로즈 — base.css 가 margin 을 0 으로 지운 자리를 이 앱 기준으로 채운다.
-   :where() 로 감싸 힘을 0 으로 두었다. 그래서 이 규칙은 맨 민무늬 태그에만 걸리고,
-   DW 부품 클래스(.dw-card-title 등)가 얹히는 순간 언제나 부품 쪽이 이긴다. ── */
-:where(.app-prose) h1 {
-  margin: 0 0 var(--dw-space-2);
-}
-
-:where(.app-prose) h2 {
-  margin: var(--dw-space-8) 0 var(--dw-space-3);
-  font-weight: var(--dw-weight-bold);
-}
-
-:where(.app-prose) h3 {
-  margin: var(--dw-space-4) 0 var(--dw-space-2);
-  font-weight: var(--dw-weight-bold);
-  color: var(--dw-text-muted-aa);
-}
-
-:where(.app-prose) p {
+/* ── 조작판(검사·설정 화면)의 문단 간격 ────────────────────────────
+   '읽는 글'의 조판은 DW 정본 `.dw-prose`(static/dw/typography.css)가 맡는다.
+   DW 는 그것을 "읽어 내려가는 글에만, UI 껍데기에는 절대 쓰지 마라"고 못 박았으므로,
+   단추·칸이 늘어선 화면에는 쓰지 않고 여기 최소한의 간격만 둔다.
+   :where() 로 힘을 0 으로 두어 DW 부품 클래스가 얹히면 언제나 부품이 이긴다. ── */
+:where(.app-screen) .screen > p {
   margin: var(--dw-space-2) 0;
 }
 
-:where(.app-prose) ul {
-  margin: var(--dw-space-2) 0;
-  padding-left: var(--dw-space-6);
-}
-
-:where(.app-prose) li {
-  margin: var(--dw-space-1) 0;
-}
-
-:where(.app-prose) a:hover {
-  color: var(--dw-accent-pressed);
-}
-
-code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: var(--dw-size-micro);
-  background: var(--dw-surface-sunken);
-  padding: 2px var(--dw-space-1);
-  border-radius: var(--dw-space-1);
+/* 안내 상자는 DW 부품이 여백을 안 갖는다. 화면 흐름에 바로 놓일 때만 띄운다 */
+:where(.app-screen) .screen > .dw-alert,
+:where(.app-screen) .dw-card > .dw-alert {
+  margin: var(--dw-space-4) 0;
 }
 
 /* 보조 문구 — 본문 바닥선(4.97:1)을 지키는 muted-aa 만 쓴다 */
@@ -116,8 +88,8 @@ code {
   font-size: var(--dw-size-micro);
 }
 
-/* ── 안내 상자 — DW alert 는 여백을 안 갖는다. 글 흐름 안에 놓일 때만 띄운다 ── */
-:where(.app-prose) .dw-alert {
+/* 글 안에 놓인 안내 상자도 앞뒤로 숨을 준다(프로즈 리듬은 16px 한 칸뿐이라 같은 값) */
+.dw-prose > .dw-alert {
   margin: var(--dw-space-4) 0;
 }
 
@@ -178,6 +150,28 @@ code {
   border-radius: var(--dw-radius-control);
 }
 
+/* ── 고르기 줄 — 목록 바로 위에 얹힌 한 장의 종이 ──────────────── */
+.app-filter {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dw-space-3);
+  margin: var(--dw-space-4) 0;
+  padding: var(--dw-space-3);
+  background: var(--dw-surface);
+  border-radius: var(--dw-radius-card);
+  box-shadow: var(--dw-shadow-1);
+}
+
+/* DW 토글 띠는 안기는 폭만큼만 차지한다 — 여기서는 줄 전체를 쓰게 한다 */
+.app-filter .dw-toggle-group {
+  display: flex;
+  width: 100%;
+}
+
+.app-filter .muted {
+  margin: 0;
+}
+
 /* ── 결과 한 줄(DW list-item)에 붙는 자리 ────────────────────────── */
 /* 줄 전체가 링크인 경우 밑줄까지 깔리면 목록이 아니라 글 목록으로 보인다 */
 a.dw-list-item {
@@ -209,12 +203,12 @@ a.dw-list-item {
   min-width: 0;
 }
 
-/* ── 요약 타일 · 점수 내역 — 폰이라 한 줄에 하나씩 쌓는다 ────────── */
+/* ── 요약 타일 · 점수 내역 — 폰이라 한 줄에 하나씩 쌓는다 ──────────
+   글 사이 간격은 DW 프로즈 리듬이 준다. 여기서 또 주면 두 번 벌어진다. */
 .app-grid {
   display: flex;
   flex-direction: column;
   gap: var(--dw-space-2);
-  margin: var(--dw-space-4) 0;
 }
 
 /* ── 저장 이력 타임라인 — 계열이 하나뿐이라 chart-1 한 색만 쓴다 ──── */
@@ -223,7 +217,7 @@ a.dw-list-item {
   gap: 2px;
   align-items: flex-end;
   height: 60px;
-  margin: var(--dw-space-3) 0 var(--dw-space-1);
+  margin: 0 0 var(--dw-space-1);
 }
 
 .app-years div {
@@ -238,19 +232,12 @@ a.dw-list-item {
 .app-years-scale {
   display: flex;
   justify-content: space-between;
-  margin: 0 0 var(--dw-space-4);
+  margin: 0;
   font-variant-numeric: tabular-nums;
 }
 
-/* ── AI 가 인용한 문장 ───────────────────────────────────────────── */
-.app-quote {
-  border-left: 3px solid var(--dw-border-strong);
-  background: var(--dw-surface-raised);
-  padding: var(--dw-space-2) var(--dw-space-4);
-  margin: var(--dw-space-2) 0;
-  color: var(--dw-text-muted-aa);
-  border-radius: 0 var(--dw-radius-control) var(--dw-radius-control) 0;
-}
+/* AI 가 인용한 문장은 그냥 <blockquote> 다 — 모양은 DW 프로즈 정본이 낸다.
+   (예전에 자체 규칙 .app-quote 를 두었으나 DW 와 테두리·배경이 달라져 폐기) */
 
 /* ── 웨이백 화면 사진 — 폰 폭에 맞춰 한 장씩 ─────────────────────── */
 .app-shots {
