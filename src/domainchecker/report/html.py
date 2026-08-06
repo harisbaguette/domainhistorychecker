@@ -80,9 +80,11 @@ def _read_css(path: Path) -> str:
 
 def build_stylesheet() -> str:
     parts = [_read_css(DW_DIR / "tokens.css"), _read_css(DW_DIR / "base.css")]
-    ui_dir = DW_DIR / "ui"
-    if ui_dir.is_dir():
-        parts += [_read_css(one) for one in sorted(ui_dir.glob("*.css"))]
+    # 블록(화면 뼈대)은 부품을 짜 맞춘 것이라 부품 뒤에 온다.
+    for folder in ("ui", "blocks"):
+        one_dir = DW_DIR / folder
+        if one_dir.is_dir():
+            parts += [_read_css(one) for one in sorted(one_dir.glob("*.css"))]
     parts.append(_read_css(STATIC_DIR / "app.css"))
     joined = "\n".join(part for part in parts if part.strip())
     if not joined:
@@ -98,13 +100,20 @@ CSS = build_stylesheet()
 
 # lucide 아이콘(ISC) 원본 path 를 그대로 인라인한다 — DW 부품이 아이콘 자리를 전제로
 # 만들어졌고, 이 앱에는 번들러가 없어 lucide-react 를 못 쓴다.
-ICON_WARNING = (
-    '<svg class="dw-alert-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" '
-    'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
-    'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+def _icon(paths: str, size: int = 20, cls: str = "") -> str:
+    return (
+        f'<svg class="{cls}" xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" '
+        'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+        f'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{paths}</svg>'
+    )
+
+
+ICON_WARNING = _icon(
     '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/>'
-    '<path d="M12 9v4"/><path d="M12 17h.01"/></svg>'
+    '<path d="M12 9v4"/><path d="M12 17h.01"/>',
+    cls="dw-alert-icon",
 )
+ICON_CHEVRON = _icon('<path d="m9 18 6-6-6-6"/>')
 
 
 def _alert(text: str, variant: str = "warning") -> str:
@@ -115,16 +124,36 @@ def _alert(text: str, variant: str = "warning") -> str:
     )
 
 
-def _table(head: str, body: str, wrap: bool = True) -> str:
-    """DW table 한 벌. 표는 흰 종이(dw-card) 위에 얹고, 좁아지면 카드로 접힌다."""
-    return (
-        '<div class="dw-card" data-elevation="float" data-table-card>'
-        '<div class="dw-table-frame" tabindex="0">'
-        f'<table class="dw-table"{" data-wrap" if wrap else ""}>'
-        f'<thead class="dw-table-header"><tr class="dw-table-row">{head}</tr></thead>'
-        f'<tbody class="dw-table-body">{body}</tbody>'
-        "</table></div></div>"
+def _item(
+    title: str,
+    lines: list[str],
+    *,
+    href: str | None = None,
+    footer: str = "",
+    variant: str = "default",
+    title_class: str = "",
+) -> str:
+    """DW list-item 한 줄. 폰 폭(440px)에 표를 우겨넣지 않는다 — 목록 한 줄이 DW 의 답이다."""
+    body = (
+        '<span class="dw-list-item-content">'
+        f'<span class="dw-list-item-title{" " + title_class if title_class else ""}">{title}</span>'
+        + "".join(f'<span class="dw-list-item-description">{line}</span>' for line in lines if line)
+        + "</span>"
     )
+    if href is not None:
+        body += f'<span class="dw-list-item-actions">{ICON_CHEVRON}</span>'
+    if footer:
+        body += f'<span class="dw-list-item-footer">{footer}</span>'
+    tag = "a" if href is not None else "div"
+    where = f' href="{href}"' if href is not None else ""
+    return (
+        f'<{tag} class="dw-list-item" data-variant="{variant}" data-size="default"{where}>'
+        f"{body}</{tag}>"
+    )
+
+
+def _item_group(items: list[str]) -> str:
+    return f'<div class="dw-list-item-group">{"".join(items)}</div>'
 
 
 def _t(value) -> str:
@@ -222,13 +251,22 @@ def detail_fragment(result: DomainResult, capture_base: str = "../captures") -> 
     """The full evidence view for one domain (no <html> wrapper)."""
     registration = result.registration
     age = result.wayback.age_years
-    scoring_rows = "".join(
-        '<tr class="dw-table-row">'
-        f'<td class="dw-table-cell" data-label="항목">{_t(item.label)}</td>'
-        f'<td class="dw-table-cell" data-align="end" data-label="점수">'
-        + (f"{item.earned:.1f} / {item.max_points}" if item.earned is not None else "미확인(분모 제외)")
-        + f'</td><td class="dw-table-cell" data-label="설명">{_t(item.note)}</td></tr>'
-        for item in result.scoring.items
+    scoring_rows = _item_group(
+        [
+            _item(
+                _t(item.label),
+                [_t(item.note)],
+                variant="outline",
+                footer='<span class="muted">점수</span><span class="app-score">'
+                + (
+                    f"{item.earned:.1f} / {item.max_points}"
+                    if item.earned is not None
+                    else "미확인(분모 제외)"
+                )
+                + "</span>",
+            )
+            for item in result.scoring.items
+        ]
     )
     topics = "".join(
         f"<li><b>{_t(t.get('topic'))}</b> — {_t(t.get('reason'))}</li>"
@@ -257,11 +295,6 @@ def detail_fragment(result: DomainResult, capture_base: str = "../captures") -> 
         else "못 쟀음 — " + _t(result.index.check.note or "확인하지 못했습니다.")
     )
     spam_verdict = SPAM_VERDICT_LABEL.get(result.ai.spam.verdict, result.ai.spam.verdict)
-    scoring_head = (
-        '<th class="dw-table-head" scope="col">항목</th>'
-        '<th class="dw-table-head" scope="col" data-align="end">점수</th>'
-        '<th class="dw-table-head" scope="col">설명</th>'
-    )
     facts = [
         ("지금 살 수 있나", _t(result.availability_label or AVAILABILITY_LABEL["unknown"])),
         ("등록일", _t(registration.created or "알 수 없음")),
@@ -290,7 +323,7 @@ def detail_fragment(result: DomainResult, capture_base: str = "../captures") -> 
 <h3>사면 안 되는 이유</h3>{_list(result.fatal_reasons, "없음")}
 <h3>조심할 이유</h3>{_list(result.warn_reasons, "없음")}
 <h3>점수 내역</h3>
-{_table(scoring_head, scoring_rows)}
+{scoring_rows}
 <p class="muted">미확인 항목은 0점도 만점도 아니라 분모에서 빼고 계산합니다(그래서 부분 점수는 참고치입니다).</p>
 
 <h2>2. 나이와 등록 정보</h2>
@@ -338,24 +371,26 @@ def detail_fragment(result: DomainResult, capture_base: str = "../captures") -> 
 """
 
 
-def _page(title: str, body: str, reading: bool = False) -> str:
+def _page(title: str, bar: str, body: str, action: str = "") -> str:
+    """DW 블록 app-shell-mobile 그대로 — 붙어 있는 제목 줄 + 가운데만 구르는 본문.
+    보고서에는 화면을 옮길 곳이 없으므로 탭 줄만 없다."""
+    slot = f'<div class="dw-block-shell-action">{action}</div>' if action else ""
     return (
-        "<!doctype html><html lang=\"ko\"><head><meta charset=\"utf-8\">"
-        '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        '<!doctype html><html lang="ko"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'
         f"<title>{_t(title)}</title><style>{CSS}</style></head>"
-        f'<body><div class="app-page app-prose"{" data-reading" if reading else ""}>'
-        f"{body}</div></body></html>"
+        '<body><div class="dw-block-shell"><header class="dw-block-shell-bar">'
+        f'<h1 class="dw-block-shell-title">{_t(bar)}</h1>{slot}</header>'
+        f'<main class="dw-block-shell-body app-prose">{body}</main></div></body></html>'
     )
 
 
 def render_detail_page(result: DomainResult, capture_base: str = "../captures") -> str:
-    body = (
-        '<p><a href="index.html">← 전체 목록으로</a></p>'
-        + _alert(escape(DISCLAIMER))
-        + detail_fragment(result, capture_base)
+    body = _alert(escape(DISCLAIMER)) + detail_fragment(result, capture_base)
+    back = (
+        '<a class="dw-button" data-variant="ghost" data-size="sm" href="index.html">전체 목록으로</a>'
     )
-    # 글 중심 화면이라 읽기 폭(860px)으로 좁힌다.
-    return _page(f"{result.domain} 상세 — 낙장도메인 품질 체커", body, reading=True)
+    return _page(f"{result.domain} 상세 — 낙장도메인 품질 체커", "상세 근거", body, action=back)
 
 
 def _safe_name(domain: str) -> str:
@@ -369,29 +404,28 @@ def render_index(results: list[DomainResult]) -> str:
         if not rows:
             continue
         rows.sort(key=lambda r: (r.score is None, -(r.score or 0)))
-        body = "".join(
-            '<tr class="dw-table-row">'
-            f'<td class="dw-table-cell" data-label="도메인">'
-            f'<a href="{_t(_safe_name(r.domain))}.html">{_t(r.domain)}</a></td>'
-            f'<td class="dw-table-cell" data-label="판정">{_stamp(r)}</td>'
-            f'<td class="dw-table-cell" data-label="지금 살 수 있나">{_avail(r)}</td>'
-            f'<td class="dw-table-cell" data-align="end" data-label="점수">{_t(_score_text(r))}</td>'
-            f'<td class="dw-table-cell" data-label="한줄평">{_t(r.one_liner)}</td>'
-            f'<td class="dw-table-cell" data-label="추천 주제">'
-            f'{_t(", ".join(t.get("topic", "") for t in r.recommended_topics[:3]))}</td></tr>'
-            for r in rows
+        body = _item_group(
+            [
+                _item(
+                    _t(r.domain),
+                    [
+                        _t(r.one_liner),
+                        (
+                            "추천 주제: "
+                            + _t(", ".join(t.get("topic", "") for t in r.recommended_topics[:3]))
+                            if r.recommended_topics
+                            else ""
+                        ),
+                    ],
+                    href=f"{_t(_safe_name(r.domain))}.html",
+                    title_class="app-domain",
+                    footer=f'<span class="app-badges">{_stamp(r)}{_avail(r)}</span>'
+                    f'<span class="app-score">{_t(_score_text(r))}</span>',
+                )
+                for r in rows
+            ]
         )
-        head = (
-            '<th class="dw-table-head" scope="col">도메인</th>'
-            '<th class="dw-table-head" scope="col">판정</th>'
-            '<th class="dw-table-head" scope="col">지금 살 수 있나</th>'
-            '<th class="dw-table-head" scope="col" data-align="end">점수</th>'
-            '<th class="dw-table-head" scope="col">한줄평</th>'
-            '<th class="dw-table-head" scope="col">추천 주제</th>'
-        )
-        groups.append(
-            f"<h2>{_t(VERDICT_LABEL[verdict])} — {len(rows)}개</h2>{_table(head, body)}"
-        )
+        groups.append(f"<h2>{_t(VERDICT_LABEL[verdict])} — {len(rows)}개</h2>{body}")
 
     # 합집합만 적으면 "AI 분석 못 함"이라 써 놓고 옆 표에는 AI 한줄평이 보여 모순으로 읽힌다.
     # 몇 개 도메인에서 못 했는지 함께 적어 준다.
@@ -401,7 +435,6 @@ def render_index(results: list[DomainResult]) -> str:
         for label, hit in sorted(counts.items())
     ]
     body = (
-        "<h1>낙장도메인 품질 체커 결과</h1>"
         f'<p class="muted">도메인 {len(results)}개 · {escape(SCORE_GUIDE)}</p>'
         + _alert(escape(DISCLAIMER))
         + "".join(groups)
@@ -412,7 +445,7 @@ def render_index(results: list[DomainResult]) -> str:
         + '<p class="muted">원자료: <a href="../results.json">results.json</a> · '
         f"검사 항목 이름: {_t(', '.join(CHECK_LABEL.values()))}</p>"
     )
-    return _page("낙장도메인 품질 체커 결과", body)
+    return _page("낙장도메인 품질 체커 결과", "검사 결과", body)
 
 
 def write_report(results: list[DomainResult], base: Path | str) -> Path:

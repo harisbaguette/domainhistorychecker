@@ -1,0 +1,121 @@
+.dw-list-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--dw-space-3);
+  width: 100%;
+  min-height: var(--dw-tap);
+  padding: var(--dw-space-3) var(--dw-space-4);
+  background: var(--dw-surface);
+  border-radius: var(--dw-radius-card);
+  box-shadow: var(--dw-shadow-1);
+  text-align: left;
+  color: var(--dw-text);
+  transition: transform var(--dw-duration-fast) var(--dw-ease);
+}
+
+/* 누를 수 있는 줄은 태그가 곧 신호다 — as="button" · as="a" 로 바꾼 것만 반응한다. */
+.dw-list-item:is(button, a):active {
+  transform: scale(0.985);
+}
+
+.dw-list-item[data-variant='outline'] {
+  box-shadow: none;
+  border: 1px solid var(--dw-border-strong);
+}
+
+.dw-list-item[data-variant='muted'] {
+  background: var(--dw-surface-sunken);
+  box-shadow: none;
+}
+
+.dw-list-item[data-size='sm'] {
+  padding: var(--dw-space-2) var(--dw-space-3);
+}
+
+.dw-list-item[data-size='xs'] {
+  gap: var(--dw-space-2);
+  padding: var(--dw-space-1) var(--dw-space-2);
+}
+
+.dw-list-item-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dw-space-2);
+}
+
+.dw-list-item-separator {
+  margin: 0;
+  border: none;
+  border-top: 1px solid var(--dw-border-strong);
+}
+
+.dw-list-item-media,
+.dw-list-item-actions {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--dw-text-muted);
+}
+
+.dw-list-item-media[data-variant='icon'],
+.dw-list-item-media[data-variant='image'] {
+  justify-content: center;
+  width: var(--dw-space-8);
+  height: var(--dw-space-8);
+  border-radius: var(--dw-radius-control);
+}
+
+.dw-list-item-media[data-variant='icon'] {
+  background: var(--dw-surface-sunken);
+}
+
+.dw-list-item-media[data-variant='image'] {
+  overflow: hidden;
+}
+
+.dw-list-item-media[data-variant='image'] img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.dw-list-item-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.dw-list-item-title {
+  font-size: var(--dw-size-body);
+  font-weight: var(--dw-weight-bold);
+  line-height: var(--dw-leading-body);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dw-list-item-description {
+  font-size: var(--dw-size-micro);
+  color: var(--dw-text-muted-aa);
+}
+
+/* 통으로 한 줄을 차지해 본문 줄 위·아래로 접힌다. */
+.dw-list-item-header,
+.dw-list-item-footer {
+  display: flex;
+  flex-basis: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--dw-space-2);
+  font-size: var(--dw-size-micro);
+  color: var(--dw-text-muted-aa);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .dw-list-item:is(button, a):hover {
+    box-shadow: var(--dw-shadow-2);
+  }
+}

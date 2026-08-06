@@ -1,0 +1,88 @@
+/* Phone frame: fixed bar, scrolling middle, fixed tab row.
+   Only the middle scrolls, so the tab row never runs away from the thumb. */
+
+.dw-block-shell {
+  display: flex;
+  flex-direction: column;
+  height: var(--dw-block-screen-height, 100dvh);
+  max-width: var(--dw-app-max-width);
+  margin: 0 auto;
+  background: var(--dw-bg);
+  color: var(--dw-text);
+}
+
+.dw-block-shell-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--dw-space-3);
+  flex-shrink: 0;
+  padding: calc(var(--dw-space-4) + env(safe-area-inset-top)) var(--dw-space-4)
+    var(--dw-space-3);
+  background: var(--dw-bg);
+}
+
+.dw-block-shell-title {
+  margin: 0;
+  min-width: 0;
+  font-family: var(--dw-font-display);
+  font-size: var(--dw-size-display);
+  font-weight: var(--dw-weight-black);
+  line-height: var(--dw-leading-tight);
+  letter-spacing: var(--dw-tracking-display);
+  color: var(--dw-text);
+}
+
+.dw-block-shell-action {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.dw-block-shell-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dw-space-3);
+  flex: 1;
+  min-height: 0;
+  padding: 0 var(--dw-space-4) var(--dw-space-6);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.dw-block-shell-tabs {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  flex-shrink: 0;
+  padding-bottom: env(safe-area-inset-bottom);
+  background: var(--dw-surface);
+  box-shadow: var(--dw-shadow-glass);
+}
+
+.dw-block-shell-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--dw-space-1);
+  /* 44px tap floor plus room for the label under the icon */
+  min-height: calc(var(--dw-tap) + var(--dw-space-3));
+  padding: var(--dw-space-2) var(--dw-space-1);
+  color: var(--dw-text-muted-aa);
+  transition: color var(--dw-duration-fast) var(--dw-ease);
+}
+
+.dw-block-shell-tab-icon {
+  display: inline-flex;
+}
+
+.dw-block-shell-tab-label {
+  font-size: var(--dw-size-micro);
+  font-weight: var(--dw-weight-bold);
+  line-height: 1;
+}
+
+.dw-block-shell-tab[data-current] {
+  color: var(--dw-accent-strong);
+}

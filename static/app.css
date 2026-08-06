@@ -1,7 +1,8 @@
 /* ==========================================================================
    낙장도메인 품질 체커 — 이 앱만의 레이아웃
-   DW 부품(static/dw/)이 덮지 못하는 것만 여기 둔다. 색·모서리·그림자·간격은
-   전부 var(--dw-*) 로만 쓴다(hex 직접 사용 0).
+   화면 뼈대는 DW 블록 `app-shell-mobile`(static/dw/blocks/)이 잡는다. 폭·탭 줄·
+   스크롤 규칙을 이 파일에서 다시 만들지 않는다. 여기 남는 것은 DW 부품·블록이
+   덮지 못하는 것뿐이고, 색·모서리·그림자·간격은 전부 var(--dw-*) 로만 쓴다.
    화면(static/index.html)과 보고서(report/html.py)가 함께 쓴다.
    ========================================================================== */
 
@@ -12,16 +13,36 @@
   --dw-font-display: var(--dw-font-body);
 }
 
-/* ── 페이지 골격 ─────────────────────────────────────────────────── */
-.app-page {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: var(--dw-space-6) var(--dw-space-4) var(--dw-space-12);
+/* 폰 화면 하나가 책상 위에 놓인 그림 — 440px 기둥 바깥은 DW 의 '책상' 색이다.
+   기둥 자체(폭·높이·스크롤)는 dw-block-shell 이 잡는다. */
+body {
+  background: var(--dw-bg-outer);
 }
 
-/* 글 중심 화면(상세 보고서)은 읽기 폭으로 좁힌다 */
-.app-page[data-reading] {
-  max-width: 860px;
+/* 건너뛰기 링크 — 평소엔 화면 밖, Tab 을 누르면 왼쪽 위로 들어온다 */
+.skip {
+  position: absolute;
+  left: -9999px;
+}
+
+.skip:focus {
+  left: var(--dw-space-4);
+  top: var(--dw-space-4);
+  z-index: 10;
+  background: var(--dw-surface);
+  color: var(--dw-text);
+  padding: var(--dw-space-3) var(--dw-space-4);
+  border-radius: var(--dw-radius-control);
+  box-shadow: var(--dw-shadow-2);
+}
+
+/* 한 번에 한 화면 — 탭 줄이 고른 것만 보인다 */
+.screen {
+  display: none;
+}
+
+.screen.on {
+  display: block;
 }
 
 /* ── 프로즈 — base.css 가 margin 을 0 으로 지운 자리를 이 앱 기준으로 채운다.
@@ -78,33 +99,99 @@ code {
   margin: var(--dw-space-4) 0;
 }
 
-/* ── 표를 담는 종이 — DW 카드에서 안쪽 여백만 걷어낸 것 ────────────── */
-.dw-card[data-table-card] {
-  padding: 0;
-  overflow: hidden;
-  border: 1px solid var(--dw-border);
-  margin: var(--dw-space-4) 0;
+/* 폰 폭에서는 안내 상자의 단추가 글 옆에 붙으면 글이 한 낱말씩 쪼개진다.
+   단추를 늘 글 아래 줄로 내린다. */
+.dw-alert-action {
+  grid-column: 2;
+  grid-row: auto; /* 설명이 몇 줄이든 그 아래 줄로 흘러간다 */
+  align-self: start;
+  justify-self: start;
+  margin-top: var(--dw-space-2);
 }
 
-/* 문장 열은 접어도, 숫자 열은 접지 않는다 — 점수가 여러 줄로 쪼개지면 못 읽는다.
-   넘치면 페이지가 아니라 표 틀(.dw-table-frame)이 옆으로 움직인다. */
-.dw-table[data-wrap] .dw-table-cell[data-align='end'] {
+/* ── 버튼 줄 — 주된 행동 1개는 폭을 다 쓰고, 나머지 셋은 이어 붙인 한 줄 ── */
+.app-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dw-space-3);
+  margin: var(--dw-space-4) 0 0;
+}
+
+.app-actions .dw-button-group {
+  display: flex;
+  width: 100%;
+}
+
+.app-actions .dw-button-group > .dw-button {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* 진행률 — 막대가 한 줄, 보고서 단추가 그 아래 줄 */
+.app-progress-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dw-space-3);
+  margin: var(--dw-space-6) 0 var(--dw-space-2);
+}
+
+/* ── 파일 고르기 — DW 에 짝이 되는 부품이 없어 기본 칸을 토큰으로 입힌다 ── */
+.app-file {
+  font-size: var(--dw-size-body);
+  color: var(--dw-text-muted-aa);
+  max-width: 100%;
+}
+
+.app-file::file-selector-button {
+  font: inherit;
+  font-size: var(--dw-size-body);
+  font-weight: var(--dw-weight-bold);
+  min-height: var(--dw-tap);
+  padding: 0 var(--dw-space-4);
+  margin-right: var(--dw-space-3);
+  cursor: pointer;
+  background: var(--dw-surface);
+  color: var(--dw-text);
+  border: 1.5px solid var(--dw-border-strong);
+  border-radius: var(--dw-radius-control);
+}
+
+/* ── 결과 한 줄(DW list-item)에 붙는 자리 ────────────────────────── */
+/* 줄 전체가 링크인 경우 밑줄까지 깔리면 목록이 아니라 글 목록으로 보인다 */
+a.dw-list-item {
+  text-decoration: none;
+}
+
+/* DW 목록 한 줄의 제목은 한 줄로 자르는 것이 기본이다(할 일 제목이라면 그게 맞다).
+   도메인 이름은 잘리면 무엇인지 알 수 없으므로 이 자리에서만 줄바꿈을 허용한다. */
+.dw-list-item-title.app-domain {
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: anywhere;
+}
+
+/* 점수는 이 도구가 내놓는 답이다 — 메타 회색으로 흐려지지 않게 본문 잉크로 세운다 */
+.app-score {
+  color: var(--dw-text);
+  font-weight: var(--dw-weight-bold);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-/* ── 배지 줄 · 카드 격자 ─────────────────────────────────────────── */
+/* ── 배지 줄 — 판정 도장과 취득 상태가 나란히 선다 ───────────────── */
 .app-badges {
   display: flex;
   flex-wrap: wrap;
   gap: var(--dw-space-2);
   align-items: center;
-  margin: 0 0 var(--dw-space-2);
+  min-width: 0;
 }
 
+/* ── 요약 타일 · 점수 내역 — 폰이라 한 줄에 하나씩 쌓는다 ────────── */
 .app-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: var(--dw-space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--dw-space-2);
   margin: var(--dw-space-4) 0;
 }
 
@@ -147,10 +234,10 @@ code {
   border-radius: 0 var(--dw-radius-control) var(--dw-radius-control) 0;
 }
 
-/* ── 웨이백 화면 사진 ────────────────────────────────────────────── */
+/* ── 웨이백 화면 사진 — 폰 폭에 맞춰 한 장씩 ─────────────────────── */
 .app-shots {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: var(--dw-space-4);
 }
 
@@ -160,84 +247,52 @@ code {
 }
 
 .app-shots img {
-  max-width: 520px;
   width: 100%;
   border: 1px solid var(--dw-border-strong);
   border-radius: var(--dw-radius-control);
 }
 
-/* ── 좁은 화면(375px 기준) — 표를 한 줄씩 카드로 접는다 ───────────── */
-@media (max-width: 640px) {
-  .app-page {
-    padding: var(--dw-space-4) var(--dw-space-3) var(--dw-space-8);
-  }
+/* ── 키 발급 순서 그림 — 이 화면에만 있는 삽화 ───────────────────── */
+.app-howto svg {
+  margin-top: var(--dw-space-3);
+  background: var(--dw-surface-raised);
+  border: 1px solid var(--dw-border);
+  border-radius: var(--dw-radius-control);
+  height: auto;
+}
 
-  /* 좁은 화면에서 안내 상자의 단추가 옆에 붙으면 글이 한 낱말씩 쪼개진다.
-     단추를 글 아래 줄로 내린다. */
-  .dw-alert-action {
-    grid-column: 2;
-    grid-row: auto;  /* 설명이 몇 줄이든 그 아래 줄로 흘러간다 */
-    align-self: start;
-    justify-self: start;
-    margin-top: var(--dw-space-2);
-  }
+.app-howto svg text {
+  fill: var(--dw-text);
+}
 
-  .dw-card[data-table-card] {
-    background: none;
-    border: none;
-    box-shadow: none;
-    overflow: visible;
-  }
+.app-howto svg .face {
+  fill: var(--dw-surface-raised);
+  stroke: var(--dw-border-strong);
+}
 
-  .dw-table-frame {
-    overflow-x: visible;
-  }
+.app-howto svg .field {
+  fill: var(--dw-surface);
+  stroke: var(--dw-border-strong);
+}
 
-  .dw-table,
-  .dw-table-body,
-  .dw-table-row,
-  .dw-table-cell {
-    display: block;
-    width: 100%;
-  }
+.app-howto svg .goal {
+  fill: var(--dw-success-bg);
+  stroke: var(--dw-success);
+}
 
-  .dw-table-header {
-    display: none;
-  }
+.app-howto svg .cta {
+  fill: var(--dw-accent-strong);
+}
 
-  .dw-table-row {
-    background: var(--dw-surface);
-    border: 1px solid var(--dw-border);
-    border-radius: var(--dw-radius-card);
-    box-shadow: var(--dw-shadow-glass);
-    padding: var(--dw-space-3) var(--dw-space-4);
-    margin-bottom: var(--dw-space-3);
-  }
+.app-howto svg .on-cta {
+  fill: var(--dw-on-accent);
+}
 
-  .dw-table-cell {
-    border: none;
-    padding: var(--dw-space-1) 0;
-    white-space: normal;
-    word-break: keep-all;
-  }
+.app-howto svg .arrow {
+  fill: var(--dw-text-muted-aa);
+}
 
-  .dw-table-cell[data-align='end'] {
-    text-align: left;
-  }
-
-  /* 머리글 줄이 사라지므로 각 칸이 자기 이름을 데리고 다닌다 */
-  .dw-table-cell::before {
-    content: attr(data-label);
-    display: block;
-    color: var(--dw-text-muted-aa);
-    font-size: var(--dw-size-micro);
-  }
-
-  .dw-table-cell:empty {
-    display: none;
-  }
-
-  .app-shots img {
-    max-width: 100%;
-  }
+.app-howto ol {
+  margin: var(--dw-space-2) 0;
+  padding-left: var(--dw-space-6);
 }

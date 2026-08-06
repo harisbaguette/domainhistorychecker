@@ -1,0 +1,35 @@
+/* Grouping only. Rows carry their own paper (ListItem), so this file just
+   decides how far apart groups sit and how quiet a group heading is. */
+
+.dw-block-settings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dw-space-6);
+  width: 100%;
+  max-width: var(--dw-app-max-width);
+  margin: 0 auto;
+}
+
+.dw-block-settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dw-space-2);
+}
+
+/* Label, not prose — micro size is allowed here. */
+.dw-block-settings-group-title {
+  margin: 0;
+  padding-left: var(--dw-space-1);
+  font-family: var(--dw-font-body);
+  font-size: var(--dw-size-micro);
+  font-weight: var(--dw-weight-bold);
+  letter-spacing: 0.06em;
+  line-height: var(--dw-leading-body);
+  color: var(--dw-text-muted-aa);
+}
+
+.dw-block-settings-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dw-space-2);
+}
