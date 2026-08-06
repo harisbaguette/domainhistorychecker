@@ -73,14 +73,15 @@ static/app.css              ← 이 앱만의 레이아웃(DW 부품·블록이 
 
 ## 6. 화면 요소와 DW 부품 대응
 
-| 화면 요소 | DW 부품 | 쓰는 법 |
+| 화면 요소 | DW 부품·블록 | 쓰는 법 |
 |---|---|---|
-| 상단 화면 이동(검사·상세·설정) | `tabs` | `data-variant="segmented"` — 고른 칸으로 알약이 미끄러진다 |
+| 화면 뼈대(제목 줄·본문·아래 탭 줄) | `app-shell-mobile` | 화면 이동은 아래 탭 줄(검사·상세·설정). 고른 칸은 `data-current` + `aria-current="page"`, 제목 줄은 그 화면의 이름을 든다 |
+| 설정 화면 묶음 | `settings` | `dw-block-settings-group` + 조용한 묶음 제목. 묶음: API 키 · AI 모델 · 속도 · 선택 검사 |
+| 결과 목록 · 점수 내역 | `list-item` | 한 줄에 도메인(제목) · 한줄평(설명) · 판정/취득 배지와 점수(아래 칸). 누를 수 있는 줄은 `button`, 보고서에서는 `a` |
 | 안내·경고 상자 | `alert` | 키 없음·면책 = `warning`, 입력 미리보기 = `info` |
 | 판정 도장(시그니처) | `badge` | 채운 배지. 매입 후보=`success` / 검토 필요·이력 없음=`warning` / 제외=`error` |
 | "지금 살 수 있나" | `badge` | 도장보다 한 단계 조용하게 — `data-variant="outline"`(모르는 것은 `ghost`) |
-| 입력 카드·표 종이·요약 타일 | `card` | `data-elevation="float"`(시그니처 그림자). 표를 담을 때만 `data-table-card` 로 안쪽 여백을 없앤다 |
-| 결과 표·점수 내역 | `table` | `data-wrap`(문장 열은 접힘) + 숫자 열 `data-align="end"`. 640px 이하는 한 줄씩 카드로 접힌다 |
+| 입력 카드·요약 타일 | `card` | `data-elevation="float"`(시그니처 그림자). 요약 타일은 `data-size="sm"` 로 한 줄에 하나씩 |
 | 도메인 붙여넣기 칸 | `textarea` | |
 | API 키 칸 | `input` + `field` + `label` | |
 | 모델·속도 고르기 | `native-select` | 폰에서 기본 휠이 뜨도록 브라우저 것을 그대로 |
@@ -88,11 +89,13 @@ static/app.css              ← 이 앱만의 레이아웃(DW 부품·블록이 
 | 진행률 | `progress` | `role="progressbar"` + 진행 문구를 `aria-labelledby` 로 가리킨다 |
 | 결과 없음 | `empty-state` | |
 | 그림으로 보는 발급 순서 | `collapsible` | 접힌 동안 `inert` — 눈에도 안 보이고 Tab 으로도 안 들어간다 |
-| 주요 버튼 1개/화면 | `button` | 검사 시작·설정 저장만 `data-variant="primary" data-size="lg"`. 나머지는 `secondary`, 표 안은 `data-size="sm"` |
+| 주요 버튼 1개/화면 | `button` | 검사 시작·설정 저장만 `data-variant="primary" data-size="lg" data-block`(폭을 다 쓴다). 나머지는 `secondary` |
+| 보조 버튼 줄(중단·이어서·지우기) | `button-group` | 셋을 이어 붙인 한 줄, `data-size="sm"`(손가락 기기에서는 DW가 알아서 44px로 키운다) |
 
-DW 부품이 덮지 못해 `static/app.css` 에 남긴 것: 페이지 폭·프로즈 여백, 표 카드의 여백 제거와 640px 카드 접기,
-저장 이력 타임라인 막대(`--dw-chart-1` 한 색), AI 인용 문장, 웨이백 사진 배치, 요약 타일 격자.
-`static/index.html` 의 `<style>` 에 남긴 것: 건너뛰기 링크, 위 띠, 화면 전환, 버튼 줄, 파일 고르기 칸, 발급 순서 삽화.
+DW 부품·블록이 덮지 못해 `static/app.css` 에 남긴 것: 프로즈 여백, 저장 이력 타임라인 막대(`--dw-chart-1` 한 색),
+AI 인용 문장, 웨이백 사진 배치, 요약 타일 세로 쌓기, 파일 고르기 칸, 발급 순서 삽화, 건너뛰기 링크, 화면 전환,
+그리고 두 가지 자리 보정 — 목록 한 줄의 도메인 줄바꿈(`.app-domain`)과 점수를 본문 잉크로 세우기(`.app-score`).
+`static/index.html` 의 `<style>` 에 남긴 것: `[hidden]` 한 줄뿐이다.
 
 - **접근성 바닥**: 본문 대비 4.5:1+, 터치 44px+(주요 버튼 52px), 가로 스크롤 0, `:focus-visible` 링 유지.
 

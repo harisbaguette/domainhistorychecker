@@ -19,6 +19,28 @@ body {
   background: var(--dw-bg-outer);
 }
 
+/* 종이로 뽑을 때는 폰 틀을 푼다 — 가운데 칸만 구르는 화면을 그대로 인쇄하면
+   첫 화면 한 장만 나온다. 보고서 HTML 을 인쇄·PDF 로 저장하는 사람이 있다. */
+@media print {
+  body {
+    background: var(--dw-surface);
+  }
+
+  .dw-block-shell {
+    height: auto;
+    max-width: none;
+  }
+
+  .dw-block-shell-body {
+    overflow: visible;
+  }
+
+  .dw-block-shell-tabs,
+  .dw-block-shell-action {
+    display: none;
+  }
+}
+
 /* 건너뛰기 링크 — 평소엔 화면 밖, Tab 을 누르면 왼쪽 위로 들어온다 */
 .skip {
   position: absolute;
