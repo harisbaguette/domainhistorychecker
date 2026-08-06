@@ -23,14 +23,15 @@ DW의 종이 수첩 컨셉을 그대로 잇는다: 따뜻한 종이 배경 위 �
 DW가 갱신되면 같은 자리에 다시 덮어쓰면 끝이다(복사 방법은 `static/dw/README.md`).
 
 ```
-static/dw/tokens.css      ← Z:\Doweek\design-system\tokens\tokens.css   (편집 금지)
-static/dw/base.css        ← Z:\Doweek\design-system\styles\base.css     (편집 금지)
-static/dw/ui/<이름>.css   ← Z:\Doweek\design-system\ui\<이름>\<이름>.css (편집 금지, 이 앱이 쓰는 15종만)
-static/app.css            ← 이 앱만의 레이아웃(DW 부품이 덮지 못하는 것만). 이 프로젝트 소유
+static/dw/tokens.css        ← Z:\Doweek\design-system\tokens\tokens.css     (편집 금지)
+static/dw/base.css          ← Z:\Doweek\design-system\styles\base.css       (편집 금지)
+static/dw/ui/<이름>.css     ← Z:\Doweek\design-system\ui\<이름>\<이름>.css   (편집 금지, 이 앱이 쓰는 15종만)
+static/dw/blocks/<이름>.css ← Z:\Doweek\design-system\blocks\<이름>\<이름>.css (편집 금지, 화면 뼈대 2종)
+static/app.css              ← 이 앱만의 레이아웃(DW 부품·블록이 덮지 못하는 것만). 이 프로젝트 소유
 ```
 
-`src/domainchecker/report/html.py` 가 위 파일들을 `tokens → base → ui/*(이름순) → app.css` 순서로 읽어
-하나로 잇고(설명 주석은 빼고), 서버는 그것을 `/style.css` 로 내려준다. 화면과 보고서가 같은 CSS를 쓴다.
+`src/domainchecker/report/html.py` 가 위 파일들을 `tokens → base → ui/*(이름순) → blocks/*(이름순) → app.css`
+순서로 읽어 하나로 잇고(설명 주석은 빼고), 서버는 그것을 `/style.css` 로 내려준다. 화면과 보고서가 같은 CSS를 쓴다.
 보고서 HTML은 같은 내용을 `<style>` 로 통째로 끼워 넣는다 — zip을 풀어 파일 하나만 열어도 모양이 나와야 하고,
 한 장만 떼어 남에게 보내는 일도 있기 때문이다.
 
@@ -38,8 +39,15 @@ static/app.css            ← 이 앱만의 레이아웃(DW 부품이 덮지 못
 쓴다. hex 직접 사용 0. 토큰 이름도 DW 원본 그대로다(`--dw-ring`, `--dw-font-body`, `--dw-space-*` …).
 
 가져다 쓴 DW 부품 15종:
-`alert` `badge` `button` `card` `checkbox` `collapsible` `empty-state` `field` `input` `label`
-`native-select` `progress` `table` `tabs` `textarea`. 안 쓰는 45종은 zip 무게 때문에 복사하지 않았다.
+`alert` `badge` `button` `button-group` `card` `checkbox` `collapsible` `empty-state` `field` `input`
+`label` `list-item` `native-select` `progress` `textarea`.
+가져다 쓴 DW 블록(화면 뼈대) 2종: `app-shell-mobile` `settings`.
+안 쓰는 나머지는 zip 무게 때문에 복사하지 않았다.
+
+**표(`table`)와 상단 세그먼트 탭(`tabs`)은 뺐다(2026-08-06).** 이 앱은 doweek 그대로 모바일 형식이라
+폭이 440px이고, 열이 여섯인 표는 그 안에 들어가지 않는다. DW가 목록에 내놓는 답은 `list-item`(목록 한 줄)이라
+결과 목록·점수 내역을 전부 그쪽으로 옮겼고, 화면 이동은 `app-shell-mobile`의 아래 탭 줄이 맡는다.
+예전에 있던 "640px 이하에서 표를 카드로 접는" 규칙은 DW에 없는 자체 발명이라 함께 지웠다.
 
 ## 4. 타이포
 
@@ -54,10 +62,12 @@ static/app.css            ← 이 앱만의 레이아웃(DW 부품이 덮지 못
 
 | 항목 | DW | 이 프로젝트 | 근거 |
 |---|---|---|---|
-| 최대 폭 | 440px(모바일 앱) | 표 화면 1100px, 상세 글 860px | 수백 행 표 도구 — 440px에 표를 우겨넣으면 정보가 죽는다. 375px 반응형(카드형 행 변환)은 유지 |
+| 최대 폭 | 440px(모바일 앱) | **같음(440px)** | 2026-08-06 운영자 지시 "절대적으로 doweek 대로". 예전에는 1100px 표 화면이었는데, 그 폭·상단 탭·표 접기는 전부 DW에 없는 자체 발명이었다 |
+| 화면 뼈대 | `app-shell-mobile` 블록 | **같음** | 제목 줄 고정 · 가운데만 구름 · 아래 탭 줄(검사/상세/설정). 화면 폭 바깥은 DW의 '책상' 색(`--dw-bg-outer`) |
+| 목록 한 줄 | `list-item` | **같음** | 도메인 이름만은 잘리지 않게 이 자리에서만 줄바꿈 허용(`.app-domain`). 도메인이 잘리면 무엇인지 알 수 없어 도구가 못 쓰이게 된다 |
 | 부품 쓰는 법 | React 컴포넌트(jsx) | 같은 CSS + 손으로 쓴 HTML | 빌드 도구(node·vite) 없이 파이썬만으로 zip 배포한다. DW 부품 CSS는 클래스+`data-*` 방식의 순수 CSS라 React 없이 그대로 붙는다. jsx는 마크업 구조를 읽는 참고용으로만 열었다 |
-| 상태 있는 부품 | React 상태 | 20줄 안쪽 바닐라 JS | `tabs`(고른 칸 표시·화살표 이동·`--dw-tabs-index`)와 `collapsible`(펴짐 표시·`inert`)만 손으로 배선했다. 나머지는 CSS만으로 동작 |
-| 아이콘 | `lucide-react` | lucide 원본 path를 인라인 SVG로 | 번들러가 없다. 임의 창작이 아니라 lucide(ISC) 원본 path 그대로. 쓰는 것: 경고·안내(alert), 체크(checkbox), 아래꺾쇠(collapsible·native-select), 받은편지함(empty-state) |
+| 상태 있는 부품 | React 상태 | 20줄 안쪽 바닐라 JS | 아래 탭 줄(`data-current`·`aria-current`·제목 갈아 끼우기)과 `collapsible`(펴짐 표시·`inert`)만 손으로 배선했다. 나머지는 CSS만으로 동작 |
+| 아이콘 | `lucide-react` | lucide 원본 path를 인라인 SVG로 | 번들러가 없다. 임의 창작이 아니라 lucide(ISC) 원본 path 그대로. 쓰는 것: 돋보기·서류·톱니(아래 탭 줄), 경고·안내(alert), 체크(checkbox), 아래꺾쇠(collapsible·native-select), 오른꺾쇠(list-item), 받은편지함(empty-state) |
 | 이모지 | 금지 | 금지 | DW·ECC 공통 규칙 |
 | 다크 테마 | 라이트+다크 | 라이트만 나온다 | `tokens.css` 를 통째로 복사해 다크 값도 함께 실려 있지만, 이 앱은 `data-theme` 을 설정하지 않아 항상 라이트다. 굳이 지우지 않는다 — 지우면 원본과 달라진다 |
 
