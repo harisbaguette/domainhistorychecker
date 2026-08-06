@@ -206,6 +206,18 @@ async def test_second_run_uses_the_cache(config):
 
 
 @respx.mock
+async def test_domain_done_counts_include_the_domain_just_finished(config):
+    """화면 진행률이 이 숫자를 그대로 쓴다 — 여기서 하나 어긋나면 막대가 100%를 넘는다."""
+    mock_all()
+    events = []
+    await fast_pipeline(config, events).run([DOMAIN])
+
+    done_events = [e for e in events if e["type"] == "domain_done"]
+    assert [e["done"] for e in done_events] == [1]
+    assert done_events[-1]["done"] == done_events[-1]["total"]
+
+
+@respx.mock
 async def test_report_is_ready_before_the_run_reports_finished(config):
     """보고서 단추가 '끝났습니다' 뒤에 늦게 켜지면 사용자는 없는 줄 알고 나간다."""
     mock_all()

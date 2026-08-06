@@ -31,6 +31,24 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/domainchecker"]
 
+[tool.ruff]
+target-version = "py312"
+line-length = 110
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "C4", "UP", "SIM", "RUF", "ASYNC", "BLE", "PTH"]
+ignore = [
+    "E501",     # 줄 길이는 한국어 주석에서 자주 넘긴다 — 포맷터가 아니라 사람이 판단한다
+    "RUF001",   # 한국어 본문의 ‘ ’ “ ” 따옴표는 의도한 표기다
+    "RUF002",
+    "RUF003",
+    "ASYNC109", # whois_lookup 의 timeout 인자는 공개 API 라 유지한다
+]
+
+[tool.ruff.lint.per-file-ignores]
+# 테스트는 asyncio 전용이라 파일을 그냥 읽어도 된다(trio/anyio 안 씀).
+"tests/*" = ["E402", "ASYNC240"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]

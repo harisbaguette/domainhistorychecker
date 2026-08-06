@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
 
-class CheckStatus(str, Enum):
+class CheckStatus(StrEnum):
     """Outcome of a single check.
 
     OK        = the check ran and produced an answer.
@@ -20,7 +20,7 @@ class CheckStatus(str, Enum):
     NOT_RUN = "NOT_RUN"
 
 
-class Verdict(str, Enum):
+class Verdict(StrEnum):
     """Final judgement. NO_HISTORY is a warn-level verdict shown as 이력 없음(신중)."""
 
     BUY = "BUY"

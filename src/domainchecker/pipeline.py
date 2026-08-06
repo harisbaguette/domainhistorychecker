@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import inspect
 import json
 from collections.abc import Callable
@@ -21,9 +22,9 @@ from .clients.openrouter import OpenRouterClient
 from .clients.rdap import RdapClient
 from .clients.wayback import WaybackClient
 from .config import Config, data_dir
-from .report import html as report_html
 from .models import Authority, CheckState, CheckStatus, DomainResult
 from .ratelimit import AdaptiveRateLimiter
+from .report import html as report_html
 
 EventCallback = Callable[[dict], None] | None
 
@@ -49,19 +50,16 @@ def load_run_state(base: Path | str) -> list[str]:
 
 
 def save_run_state(base: Path | str, domains: list[str]) -> None:
-    try:
+    # 진행 기록을 못 남겨도 검사 자체는 계속한다.
+    with contextlib.suppress(OSError):
         run_state_path(base).write_text(
             json.dumps({"domains": domains}, ensure_ascii=False, indent=2), encoding="utf-8"
         )
-    except OSError:
-        pass  # 진행 기록을 못 남겨도 검사 자체는 계속한다
 
 
 def clear_run_state(base: Path | str) -> None:
-    try:
+    with contextlib.suppress(OSError):
         run_state_path(base).unlink(missing_ok=True)
-    except OSError:
-        pass
 
 
 class Pipeline:

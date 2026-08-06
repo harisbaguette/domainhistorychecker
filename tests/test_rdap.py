@@ -89,6 +89,36 @@ async def test_both_sources_failing_is_unchecked(http):
     assert "실패" in result.check.note
 
 
+@respx.mock
+async def test_malformed_rdap_shapes_do_not_kill_the_whois_fallback(http):
+    """RDAP 서버마다 모양이 달라 어긋난 답이 온다 — 여기서 터지면 whois 대체 조회까지 죽는다."""
+    broken = {
+        "events": ["보통은 사전인데 글자만 온 경우"],
+        "status": "active",
+        "entities": ["문자열", {"roles": ["registrar"], "vcardArray": []}],
+    }
+    respx.get("https://rdap.org/domain/odd.com").mock(return_value=httpx.Response(200, json=broken))
+    result = await RdapClient(http).fetch("odd.com")
+    assert result.check.status is CheckStatus.OK
+    assert result.registrar == ""
+    assert result.acquisition == "등록 중"
+
+
+@respx.mock
+async def test_rdap_json_that_is_not_an_object_falls_back_to_whois(http):
+    respx.get("https://rdap.org/domain/example.kr").mock(
+        return_value=httpx.Response(200, json=["엉뚱한 모양"])
+    )
+
+    async def fake_whois(domain, server):
+        return WHOIS_KR
+
+    result = await RdapClient(http, whois_query=fake_whois).fetch("example.kr")
+    assert result.source == "whois"
+    assert result.check.status is CheckStatus.OK
+    assert result.created == "2004-07-12"
+
+
 def test_redemption_period_wins_over_pending_delete():
     """두 상태가 같이 오면 아직 원주인이 되찾을 수 있는 복원 기간이다(심사 B3)."""
     assert (

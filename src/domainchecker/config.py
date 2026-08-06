@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
-import os
 from pathlib import Path
 
 from pydantic import BaseModel
@@ -90,11 +90,9 @@ def save(config: Config, path: Path | None = None) -> Path:
     tmp.write_text(
         json.dumps(config.model_dump(), ensure_ascii=False, indent=2), encoding="utf-8"
     )
-    os.replace(tmp, target)
-    try:
+    tmp.replace(target)
+    with contextlib.suppress(OSError):
         target.chmod(0o600)
-    except OSError:
-        pass
     return target
 
 

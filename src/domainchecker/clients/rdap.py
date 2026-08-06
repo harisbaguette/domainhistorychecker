@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import re
 from collections.abc import Awaitable, Callable
 
@@ -100,10 +101,16 @@ class RdapClient:
         except ValueError:
             result.check = CheckState(status=CheckStatus.UNCHECKED, note="RDAP 응답 해석 실패.")
             return result
+        if not isinstance(data, dict):
+            # 모양이 어긋난 응답에서 터지면 whois 대체 조회까지 함께 죽는다.
+            result.check = CheckState(status=CheckStatus.UNCHECKED, note="RDAP 응답 형식이 올바르지 않습니다.")
+            return result
 
         events = data.get("events") or []
         registrations = []
         for event in events:
+            if not isinstance(event, dict):
+                continue
             action = str(event.get("eventAction", "")).lower()
             date = str(event.get("eventDate", ""))[:10]
             if action == "registration":
@@ -113,7 +120,8 @@ class RdapClient:
         if registrations:
             result.created = min(registrations)
             result.redropped = len(registrations) > 1
-        result.statuses = [str(s) for s in (data.get("status") or [])]
+        raw_statuses = data.get("status") or []
+        result.statuses = [str(s) for s in raw_statuses] if isinstance(raw_statuses, list) else [str(raw_statuses)]
         result.registrar = _rdap_registrar(data)
         result.acquisition = acquisition_label(result.statuses, bool(result.created))
         result.check = CheckState(status=CheckStatus.OK)
@@ -148,10 +156,8 @@ async def whois_lookup(domain: str, server: str, timeout: float = 10.0) -> str:
         payload = await asyncio.wait_for(reader.read(-1), timeout)
     finally:
         writer.close()
-        try:
+        with contextlib.suppress(OSError):
             await writer.wait_closed()
-        except OSError:
-            pass
     return decode_whois(payload)
 
 
@@ -206,11 +212,16 @@ def acquisition_label(statuses: list[str], registered: bool) -> str:
 
 
 def _rdap_registrar(data: dict) -> str:
+    """등록대행자 이름. RDAP 서버마다 모양이 제각각이라 어긋난 응답에도 터지지 않게 막는다."""
     for entity in data.get("entities") or []:
+        if not isinstance(entity, dict):
+            continue
         roles = [str(r).lower() for r in entity.get("roles") or []]
         if "registrar" not in roles:
             continue
-        for item in entity.get("vcardArray", [None, []])[1] or []:
+        vcard = entity.get("vcardArray")
+        fields = vcard[1] if isinstance(vcard, list) and len(vcard) >= 2 else None
+        for item in fields or []:
             if isinstance(item, list) and len(item) >= 4 and item[0] == "fn":
                 return str(item[3])
     return ""

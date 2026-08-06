@@ -11,7 +11,9 @@ MAX_DOMAINS = 1000
 _SPLIT = re.compile(r"[\s,;]+")
 _SCHEME = re.compile(r"^[a-z][a-z0-9+.\-]*://", re.IGNORECASE)
 _LABEL = r"[a-z0-9](?:[a-z0-9\-]{0,61}[a-z0-9])?"
-_VALID = re.compile(rf"^(?:{_LABEL}\.)+[a-z]{{2,63}}$")
+# 끝자리(TLD)는 글자만인 것(com·kr)과 퓨니코드로 바뀐 것(.한국 → xn--3e0b707e)을 함께 받는다.
+_TLD = r"(?:[a-z]{2,63}|xn--[a-z0-9]{2,59})"
+_VALID = re.compile(rf"^(?:{_LABEL}\.)+{_TLD}$")
 
 
 class ParseResult(BaseModel):

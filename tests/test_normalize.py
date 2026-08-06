@@ -16,6 +16,13 @@ def test_idn_is_punycoded():
     assert normalize_domain("한국.kr") == "xn--3e0b707e.kr"
 
 
+def test_idn_top_level_domains_are_accepted():
+    """끝자리까지 한글·러시아어인 주소(.한국·.рф)도 검사 대상이다 — 퓨니코드는 글자가 아니다."""
+    assert normalize_domain("한국관광.한국") == "xn--zb0b8aws432l.xn--3e0b707e"
+    assert normalize_domain("example.xn--3e0b707e") == "example.xn--3e0b707e"
+    assert normalize_domain("сайт.рф") == "xn--80aswg.xn--p1ai"
+
+
 def test_parse_splits_on_newline_and_comma_and_dedupes():
     raw = "example.com, www.example.com\nhttps://foo.net\n\n엉뚱한값\nfoo.net"
     result = parse_domains(raw)
