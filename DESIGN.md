@@ -28,6 +28,7 @@ static/dw/base.css          ← Z:\Doweek\design-system\styles\base.css       (�
 static/dw/ui/<이름>.css     ← Z:\Doweek\design-system\ui\<이름>\<이름>.css   (편집 금지, 이 앱이 쓰는 15종만)
 static/dw/blocks/<이름>.css ← Z:\Doweek\design-system\blocks\<이름>\<이름>.css (편집 금지, 화면 뼈대 2종)
 static/app.css              ← 이 앱만의 레이아웃(DW 부품·블록이 덮지 못하는 것만). 이 프로젝트 소유
+static/fonts/               ← 손글씨 글꼴 한 벌 + 라이선스 원문(§4). 화면과 보고서가 함께 쓴다
 ```
 
 `src/domainchecker/report/html.py` 가 위 파일들을 `tokens → base → ui/*(이름순) → blocks/*(이름순) → app.css`
@@ -43,30 +44,65 @@ static/app.css              ← 이 앱만의 레이아웃(DW 부품·블록이 
 가져다 쓴 DW 스타일 3장: `tokens` `base` `typography`(`.dw-prose` — 읽는 글 조판).
 가져다 쓴 DW 부품 16종:
 `alert` `badge` `button` `button-group` `card` `checkbox` `collapsible` `empty-state` `field` `input`
-`label` `list-item` `native-select` `progress` `textarea` `toggle-group`.
+`label` `list-item` `native-select` `progress` `textarea`.
 가져다 쓴 DW 블록(화면 뼈대) 2종: `app-shell-mobile` `settings`.
 안 쓰는 나머지는 zip 무게 때문에 복사하지 않았다.
 
 **표(`table`)와 상단 세그먼트 탭(`tabs`)은 뺐다(2026-08-06).** 이 앱은 doweek 그대로 모바일 형식이라
 폭이 440px이고, 열이 여섯인 표는 그 안에 들어가지 않는다. DW가 목록에 내놓는 답은 `list-item`(목록 한 줄)이라
-결과 목록·점수 내역을 전부 그쪽으로 옮겼고, 화면 이동은 `app-shell-mobile`의 아래 탭 줄이 맡는다.
+결과 목록·점수 내역을 전부 그쪽으로 옮겼고, 화면 이동은 doweek의 떠 있는 도크가 맡는다(3-2절).
 예전에 있던 "640px 이하에서 표를 카드로 접는" 규칙은 DW에 없는 자체 발명이라 함께 지웠다.
+
+## 3-2. doweek 본체 화면 부품 이식 (2026-08-07 운영자 지시)
+
+DW 디자인 시스템은 doweek에서 **뽑아낸** 것이라 부품 값은 같지만, doweek 앱이 실제로 화면에
+쓰는 모양(떠 있는 도크·미끄러지는 알약 탭)까지 담고 있지는 않다. 운영자가 "지금은 doweek과
+완전히 다르다"고 지적해, **doweek 본체(`Z:\Doweek\src`)의 화면 부품을 직접 옮겨 왔다.**
+구조와 수치는 원본 그대로 베끼고 색만 `--dw-*` 토큰으로 적었다(doweek의 `--primary` 등이
+원래 `--dw-*`를 가리키므로 같은 색이다).
+
+| 옮긴 것 | doweek 원본 | 이 앱에서 대체한 것 |
+|---|---|---|
+| 아래 도크(`.dock-nav` `.dock-glass` `.dock-item`) | `src/shared/components/BottomNav.jsx` | DW `app-shell-mobile`의 밋밋한 탭 줄 |
+| 미끄러지는 알약 필터 탭(`.filter-header` `.task-sub-tabs` `.sub-tab` `.tab-badge`) | `src/shared/layout/MainLayout.jsx`의 `renderFilterHeader` | DW `toggle-group`(`data-variant="segmented"`) |
+| 앱 폭 바깥 테두리 그림자·480px 이하에서 그림자 해제 | `src/index.css`의 `#root` | 없던 것 |
+
+- **도크**: 흰 알약 한 장(모서리 `--dw-radius-modal`, 유리 흐림 + 4단 그림자)이 배경 위에 떠 있고,
+  고른 칸 뒤에 44×26 둥근 틴트가 깔리며 그림이 1.5px 위로 뜬다. 라벨 10px, 고르면 굵어진다.
+  칸이 셋뿐이라 doweek의 좌우 넘김 화살표는 안 쓴다(`--dock-cols:3`).
+- **필터 탭**: 흰 띠(모서리 14px, 안쪽 4px) 안에서 색칠된 알약이 고른 칸으로 미끄러지고(0.18s),
+  그 위 글자는 흰색이 된다. 칸마다 제 색을 들고 있어 알약 색도 함께 바뀐다 —
+  전체 `--dw-cat-1` · 매입 후보 `--dw-success-ink` · 검토 필요 `--dw-warning-ink` · 제외 `--dw-error-ink`.
+  칸마다 몇 개인지 작은 알약(`.tab-badge`)으로 함께 든다. 자리는 doweek처럼 **구르는 본문 바깥**
+  (제목 줄 바로 아래)이라 목록을 내려도 안 사라지고, 검사 화면에서 결과가 있을 때만 나온다.
+- 그래서 `ui/toggle-group.css`는 쓰는 데가 없어져 지웠다(zip 무게).
+- 기계 검사가 남기는 WARN 2건은 여기서 나온다: 도크 라벨 10px(문장이 아니라 아이콘 이름표)과
+  탭 띠 모서리 14px. **둘 다 doweek 원본 값이라 그대로 둔다.**
 
 ## 4. 타이포
 
-- 본문: `--dw-font-body`(Pretendard → Apple SD Gothic Neo → Malgun Gothic → system-ui) — 16px, 줄간격 1.5, `word-break: keep-all`.
+- **화면 전체가 손글씨다** — doweek 본체가 `src/index.css`의 `--font-app` 한 줄로 제목만이 아니라
+  본문까지 메모먼트 꾹꾹체로 깔기 때문에, 이 도구도 똑같이 간다(2026-08-07 운영자 지시).
+  `static/app.css`에서 `--dw-font-body`와 `--dw-font-display`를 함께
+  `'DoweekHand' → Pretendard → Apple SD Gothic Neo → Malgun Gothic → system-ui`로 덮어썼다.
+- 글꼴 파일은 `static/fonts/MemomentKkukkukk.woff2`(1.9MB · 한글 음절 11,172자 + 라틴 전부).
+  doweek이 쓰는 것과 **같은 파일**이고, 글자 모양은 손대지 않고 woff2로 다시 압축만 했다.
+  이름을 `DoweekHand`로 지은 것은 `base.css`의 같은 이름 선언과 겹치면 브라우저가 거기 적힌
+  (이 앱에 없는) 경로까지 받으러 가 404가 나기 때문이다 — 이름을 가른 뒤 실측 404 0건.
+- **라이선스**: 배포처(눈누) 허용 범위표에 임베딩 금지로 적혀 있다(2026-08-07 확인).
+  그 사실을 알린 뒤 운영자가 "손글씨 폰트도 꼭 써야 함"이라고 지시하여 그대로 싣는다.
+  자세한 근거·출처·되돌리는 법은 `static/fonts/NOTICE.md`.
+- 보고서는 폴더째 메일로 나가므로 `write_report`가 글꼴을 보고서 폴더에도 한 벌 복사한다.
 - 크기 3단(1.25): 16 / 20 / 25px. 위계는 크기보다 **웨이트**(400/700/900). 뱃지·메타 전용 14px(문장 금지).
-- 손글씨 디스플레이 폰트(MemomentKkukkukk)는 **넣지 않는다** — 재배포 라이선스 미확인(DW `assets/fonts/NOTICE.md`).
-  `base.css` 의 `@font-face` 는 원본 그대로 두되, `static/app.css` 에서 `--dw-font-display: var(--dw-font-body)` 로
-  덮어썼다. 그래서 어떤 요소도 그 글꼴을 요구하지 않고, 없는 woff 를 받으러 가지도 않는다(실측: `document.fonts`
-  에서 `MemomentKkukkukk: unloaded`, 404 0건). `simplify:` 라이선스 확인되면 이 한 줄만 지우면 살아난다.
+  손글씨는 글자 몸통이 세로로 짧아 작아 보여서 제목 두 자리(제목 줄·빈 화면 제목)만 1.16배로 키웠다.
+- 줄간격 1.5, `word-break: keep-all`은 DW 그대로.
 
 ## 5. DW에서 달리 정한 것 (근거 명시)
 
 | 항목 | DW | 이 프로젝트 | 근거 |
 |---|---|---|---|
 | 최대 폭 | 440px(모바일 앱) | **같음(440px)** | 2026-08-06 운영자 지시 "절대적으로 doweek 대로". 예전에는 1100px 표 화면이었는데, 그 폭·상단 탭·표 접기는 전부 DW에 없는 자체 발명이었다 |
-| 화면 뼈대 | `app-shell-mobile` 블록 | **같음** | 제목 줄 고정 · 가운데만 구름 · 아래 탭 줄(검사/상세/설정). 화면 폭 바깥은 DW의 '책상' 색(`--dw-bg-outer`) |
+| 화면 뼈대 | `app-shell-mobile` 블록 | **아래 탭 줄만 doweek 도크로 교체** | 제목 줄 고정 · 가운데만 구름 · 아래 탭 줄(검사/상세/설정). 화면 폭 바깥은 DW의 '책상' 색(`--dw-bg-outer`) |
 | 목록 한 줄 | `list-item` | **같음** | 도메인 이름만은 잘리지 않게 이 자리에서만 줄바꿈 허용(`.app-domain`). 도메인이 잘리면 무엇인지 알 수 없어 도구가 못 쓰이게 된다 |
 | 부품 쓰는 법 | React 컴포넌트(jsx) | 같은 CSS + 손으로 쓴 HTML | 빌드 도구(node·vite) 없이 파이썬만으로 zip 배포한다. DW 부품 CSS는 클래스+`data-*` 방식의 순수 CSS라 React 없이 그대로 붙는다. jsx는 마크업 구조를 읽는 참고용으로만 열었다 |
 | 상태 있는 부품 | React 상태 | 20줄 안쪽 바닐라 JS | 아래 탭 줄(`data-current`·`aria-current`·제목 갈아 끼우기)과 `collapsible`(펴짐 표시·`inert`)만 손으로 배선했다. 나머지는 CSS만으로 동작 |
@@ -78,10 +114,11 @@ static/app.css              ← 이 앱만의 레이아웃(DW 부품·블록이 
 
 | 화면 요소 | DW 부품·블록 | 쓰는 법 |
 |---|---|---|
-| 화면 뼈대(제목 줄·본문·아래 탭 줄) | `app-shell-mobile` | 화면 이동은 아래 탭 줄(검사·상세·설정). 고른 칸은 `data-current` + `aria-current="page"`, 제목 줄은 그 화면의 이름을 든다 |
-| 설정 화면 묶음 | `settings` | `dw-block-settings-group` + 조용한 묶음 제목. 묶음: API 키 · AI 모델 · 속도 · 선택 검사 |
+| 화면 뼈대(제목 줄·본문) | `app-shell-mobile` | 제목 줄은 그 화면의 이름을 든다. 아래 탭 줄만은 doweek 본체의 도크로 갈아 끼웠다(3-2절) |
+| 화면 이동 | doweek 도크 | 검사·상세·설정 세 칸. 고른 칸은 `data-current` + `aria-current="page"` |
+| 설정 화면 묶음 | `settings` | `dw-block-settings-group` + 조용한 묶음 제목. 처음 보이는 것은 꼭 필요한 키 1칸뿐이고, 나머지(속도·선택 키 4개·선택 검사)는 "고급 설정" `collapsible` 안에 접어 둔다 |
 | 결과 목록 · 점수 내역 | `list-item` | 한 줄에 도메인(제목) · 한줄평(설명) · 판정/취득 배지와 점수(아래 칸). 누를 수 있는 줄은 `button`, 보고서에서는 `a` |
-| 판정으로 거르기 | `toggle-group` | `data-variant="segmented"` 전체·매입 후보·검토 필요·제외. 띠 하나가 Tab 한 번이고 안에서는 화살표로 옮긴다(DW 규칙) |
+| 판정으로 거르기 | doweek 알약 탭 | 화면 맨 위 고정. 전체·매입 후보·검토 필요·제외 + 개수 알약. 띠 하나가 Tab 한 번이고 안에서는 화살표로 옮긴다 |
 | 넣는 칸 접기 | `collapsible` | 볼 결과가 이미 있으면 스스로 접혀 목록을 첫 화면으로 올린다. 접힌 동안 `inert` |
 | 상세 근거 · 보고서 본문 조판 | `styles/typography.css`(`.dw-prose`) | DW 정본 그대로. '읽어 내려가는 글'에만 쓰고 단추·칸이 늘어선 화면에는 쓰지 않는다(DW 지시) |
 | 안내·경고 상자 | `alert` | 키 없음·면책 = `warning`, 입력 미리보기 = `info` |
@@ -90,11 +127,11 @@ static/app.css              ← 이 앱만의 레이아웃(DW 부품·블록이 
 | 입력 카드·요약 타일 | `card` | `data-elevation="float"`(시그니처 그림자). 요약 타일은 `data-size="sm"` 로 한 줄에 하나씩 |
 | 도메인 붙여넣기 칸 | `textarea` | |
 | API 키 칸 | `input` + `field` + `label` | |
-| 모델·속도 고르기 | `native-select` | 폰에서 기본 휠이 뜨도록 브라우저 것을 그대로 |
-| 선택 검사 3개 | `checkbox` | |
+| 속도·줄 세우기 고르기 | `native-select` | 폰에서 기본 휠이 뜨도록 브라우저 것을 그대로. AI 모델은 실패하면 자동으로 다음 것으로 넘어가므로 고르는 칸을 두지 않는다 |
+| 선택 검사 2개 | `checkbox` | 바이러스토탈(느려짐)·화면 사진. 세이프 브라우징은 켜고 끌 이유가 없어 키만 있으면 그냥 돈다 |
 | 진행률 | `progress` | `role="progressbar"` + 진행 문구를 `aria-labelledby` 로 가리킨다 |
 | 결과 없음 | `empty-state` | |
-| 그림으로 보는 발급 순서 | `collapsible` | 접힌 동안 `inert` — 눈에도 안 보이고 Tab 으로도 안 들어간다 |
+| 키 받는 법 그림 · 고급 설정 | `collapsible` | 접힌 동안 `inert` — 눈에도 안 보이고 Tab 으로도 안 들어간다. 그림 안내는 칸마다 달지 않고 셋을 한 곳에 모은다 |
 | 주요 버튼 1개/화면 | `button` | 검사 시작·설정 저장만 `data-variant="primary" data-size="lg" data-block`(폭을 다 쓴다). 나머지는 `secondary` |
 | 보조 버튼 줄(중단·이어서·지우기) | `button-group` | 셋을 이어 붙인 한 줄, `data-size="sm"`(손가락 기기에서는 DW가 알아서 44px로 키운다) |
 

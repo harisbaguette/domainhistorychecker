@@ -6,37 +6,25 @@
    화면(static/index.html)과 보고서(report/html.py)가 함께 쓴다.
    ========================================================================== */
 
-/* ── 손글씨 시그니처 — DW 가 말하는 "종이 수첩" 의 첫 번째 시그니처 ────────────
-   DW 정본의 손글씨는 메모먼트 꾹꾹체지만, 배포처가 임베딩(글꼴 파일을 앱에 실어
-   보내는 것)을 금지한다(2026-08-07 확인 · 근거는 static/fonts/NOTICE.md).
-   그래서 두 겹으로 둔다.
-   ① 꾹꾹체는 local() 로만 부른다 — 쓰는 사람 컴퓨터에 이미 깔려 있으면 진짜 doweek
-      얼굴이 나오고, 없으면 조용히 넘어간다. 파일을 받으러 가지 않으니 404 가 없다.
-      이름을 base.css 의 것과 일부러 다르게 지었다: 같은 이름으로 두면 브라우저가
-      base.css 에 적힌 (이 앱에는 없는) woff 까지 같이 받으러 가 404 가 난다.
-   ② 아무 데서나 손글씨가 나오도록 개구체(Gaegu, OFL)를 함께 싣는다. */
+/* ── 손글씨 — doweek 앱과 똑같이 화면 전체를 손글씨로 쓴다 ────────────────────
+   doweek 본체(src/index.css)는 `--font-app` 한 줄로 앱 전체 글씨를 꾹꾹체로 깐다.
+   그래서 여기서도 제목만이 아니라 본문까지 같은 글씨로 간다(운영자 지시 2026-08-07).
+   이름을 base.css 의 것과 다르게 지었다 — 같은 이름이면 브라우저가 base.css 에 적힌
+   (이 앱에 없는) 경로까지 같이 받으러 가 404 가 난다. */
 @font-face {
-  font-family: 'MemomentKkukkukkInstalled';
-  src: local('MemomentKkukkukk'), local('메모먼트 꾹꾹체'), local('Memoment Kkukkukk');
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Gaegu';
-  src: url('fonts/Gaegu-Bold.woff2') format('woff2');
-  /* 한 벌뿐이라 굵은 자리(700·900)를 이 파일이 다 받는다 — 받아 놓고 또 굵게
-     그리는 가짜 볼드를 막는다 */
-  font-weight: 400 900;
+  font-family: 'DoweekHand';
+  src: url('fonts/MemomentKkukkukk.woff2') format('woff2');
+  font-weight: 100 900;
   font-style: normal;
   font-display: swap;
 }
 
 :root {
-  --dw-font-display: 'MemomentKkukkukkInstalled', 'Gaegu', var(--dw-font-body);
+  --dw-font-display: 'DoweekHand', 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
+  --dw-font-body: 'DoweekHand', 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
 }
 
-/* 손글씨는 글자 몸통이 세로로 짧아 같은 크기에서도 본문보다 작아 보인다.
-   손글씨가 실제로 나온 자리에서만 한 뼘 키워 원래 크기로 보이게 맞춘다. */
+/* 손글씨는 글자 몸통이 세로로 짧아 같은 크기에서도 작아 보인다. 제목 자리만 키운다. */
 .dw-block-shell-title {
   font-size: calc(var(--dw-size-display) * 1.16);
 }
@@ -46,9 +34,235 @@
 }
 
 /* 폰 화면 하나가 책상 위에 놓인 그림 — 440px 기둥 바깥은 DW 의 '책상' 색이다.
-   기둥 자체(폭·높이·스크롤)는 dw-block-shell 이 잡는다. */
+   doweek 본체가 #root 에 두르는 테두리 그림자까지 그대로 옮겼다. */
 body {
   background: var(--dw-bg-outer);
+}
+
+.dw-block-shell {
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.02), 0 20px 40px rgba(0, 0, 0, 0.1);
+}
+
+/* doweek 은 폰 크기에서는 책상 색과 테두리 그림자를 뺀다(폰에서는 앱이 화면을 다 쓴다) */
+@media (max-width: 480px) {
+  body {
+    background: var(--dw-bg);
+  }
+
+  .dw-block-shell {
+    box-shadow: none;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   doweek 본체 화면 부품 이식 (Z:\Doweek\src\shared)
+   아래 두 덩이는 DW 부품이 아니라 doweek 앱이 실제로 쓰는 모양이다. 구조·수치는
+   doweek 원본(BottomNav.jsx · MainLayout.jsx)에서 그대로 가져오고, 색만 DW 토큰으로
+   바꿔 적었다(doweek 의 --primary 등이 원래 --dw-* 를 가리키고 있어 같은 색이다).
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 아래 메뉴 = doweek 의 떠 있는 도크 ──────────────────────────────────────
+   흰 알약 한 장이 배경 위에 떠 있고, 고른 칸에는 둥근 틴트가 깔리며 그림이 살짝
+   위로 뜬다. DW 뼈대의 밋밋한 탭 줄을 이것으로 갈아 끼운다. */
+.dock-nav {
+  display: flex;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
+  background: var(--dw-bg);
+}
+
+.dock-wrap {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  isolation: isolate;
+  --dock-height: 68px;
+}
+
+.dock-glass {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+  min-height: var(--dock-height);
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: saturate(180%) blur(24px);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  border-radius: var(--dw-radius-modal);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 0 0 0.5px rgba(0, 0, 0, 0.04),
+    0 4px 14px -4px rgba(0, 0, 0, 0.08),
+    0 20px 44px -12px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+}
+
+.dock-page {
+  min-width: 100%;
+  display: grid;
+  grid-template-columns: repeat(var(--dock-cols, 3), minmax(0, 96px));
+  justify-content: center;
+  align-items: center;
+  padding: 9px 0 8px;
+}
+
+.dock-item {
+  min-width: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 51px;
+  gap: 3px;
+  padding: 0;
+  color: rgba(0, 0, 0, 0.28);
+  background: transparent;
+  transition: color 0.18s;
+}
+
+/* 고른 칸 뒤에 깔리는 둥근 틴트 — 눌리면 커지듯 자리를 잡는다 */
+.dock-item::before {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 50%;
+  width: 44px;
+  height: 26px;
+  border-radius: 10px;
+  background: transparent;
+  transform: translateX(-50%) scale(0.8);
+  transition: background 0.18s, transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.dock-item > * {
+  position: relative;
+}
+
+.dock-item[data-current]::before {
+  background: var(--dw-accent-soft);
+  transform: translateX(-50%) scale(1);
+}
+
+.dock-item[data-current] {
+  color: var(--dw-cat-1);
+}
+
+.dock-item svg {
+  transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.dock-item[data-current] svg {
+  transform: translateY(-1.5px);
+  stroke-width: 2.5;
+}
+
+.dock-item:active svg {
+  transform: scale(0.85);
+  transition: transform 0.08s;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .dock-item:not([data-current]):hover {
+    color: rgba(0, 0, 0, 0.45);
+  }
+
+  .dock-item:not([data-current]):hover::before {
+    background: rgba(0, 0, 0, 0.05);
+    transform: translateX(-50%) scale(0.95);
+  }
+}
+
+.dock-label {
+  font-size: 10px;
+  font-weight: var(--dw-weight-medium, 500);
+  line-height: 1;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dock-item[data-current] .dock-label {
+  font-weight: var(--dw-weight-bold);
+}
+
+/* ── 위 필터 = doweek 의 미끄러지는 알약 탭 ──────────────────────────────────
+   흰 띠 안에서 색칠된 알약이 고른 칸으로 미끄러져 가고, 그 위 글자는 흰색이 된다.
+   칸마다 제 색이 있어서 알약 색도 함께 바뀐다(doweek 규칙). */
+.filter-header {
+  flex-shrink: 0;
+  z-index: 50;
+  padding: 0 var(--dw-space-4) var(--dw-space-3);
+  background: var(--dw-bg);
+}
+
+.task-sub-tabs {
+  position: relative;
+  display: flex;
+  gap: 0;
+  padding: 4px;
+  background: var(--dw-surface);
+  border-radius: 14px;
+  box-shadow: var(--dw-shadow-1);
+}
+
+.task-sub-tabs::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: calc(4px + var(--active-idx, 0) * (100% - 8px) / var(--tab-count, 3));
+  width: calc((100% - 8px) / var(--tab-count, 3));
+  border-radius: 10px;
+  background: var(--slider-bg, var(--dw-cat-1));
+  transition: left 0.18s cubic-bezier(0.34, 1.2, 0.64, 1), background 0.18s ease;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.sub-tab {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 8px 2px;
+  border-radius: 10px;
+  background: transparent;
+  /* doweek 은 칸이 다섯 이상일 때만 0.74rem 으로 좁힌다(dense-tabs). 여기는 넷이라 기본값. */
+  font-size: 0.875rem;
+  font-weight: var(--dw-weight-medium, 500);
+  white-space: nowrap;
+  color: var(--dw-text-muted-aa);
+  transition: color 0.2s;
+}
+
+.sub-tab[aria-pressed='true'] {
+  color: var(--dw-on-accent);
+  font-weight: var(--dw-weight-bold);
+}
+
+.tab-badge {
+  margin-left: 2px;
+  padding: 0 4px;
+  border-radius: 20px;
+  background: var(--dw-accent-bg);
+  color: var(--dw-cat-1);
+  font-size: 0.68rem;
+  font-weight: var(--dw-weight-bold);
+  line-height: 1.4;
+}
+
+.sub-tab[aria-pressed='true'] .tab-badge {
+  background: rgba(0, 0, 0, 0.2);
+  color: var(--dw-on-accent);
 }
 
 /* 종이로 뽑을 때는 폰 틀을 푼다 — 가운데 칸만 구르는 화면을 그대로 인쇄하면
@@ -67,7 +281,8 @@ body {
     overflow: visible;
   }
 
-  .dw-block-shell-tabs,
+  .dock-nav,
+  .filter-header,
   .dw-block-shell-action {
     display: none;
   }
@@ -204,12 +419,6 @@ body {
   background: var(--dw-surface);
   border-radius: var(--dw-radius-card);
   box-shadow: var(--dw-shadow-1);
-}
-
-/* DW 토글 띠는 안기는 폭만큼만 차지한다 — 여기서는 줄 전체를 쓰게 한다 */
-.app-filter .dw-toggle-group {
-  display: flex;
-  width: 100%;
 }
 
 .app-filter .muted {

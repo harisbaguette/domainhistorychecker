@@ -556,8 +556,7 @@ def _copy_fonts(out_dir: Path) -> None:
         return
     dest_dir = out_dir / "fonts"
     dest_dir.mkdir(parents=True, exist_ok=True)
-    # 글꼴 파일과 그 라이선스 원문은 한 몸이다 — OFL 이 함께 배포할 것을 요구한다.
-    for name in ("Gaegu-Bold.woff2", "OFL.txt"):
+    for name in ("MemomentKkukkukk.woff2",):
         one = src_dir / name
         if one.is_file():
             with contextlib.suppress(OSError):
