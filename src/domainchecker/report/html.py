@@ -10,6 +10,7 @@ from __future__ import annotations
 import contextlib
 import json
 import re
+import shutil
 from collections import Counter
 from html import escape
 from pathlib import Path
@@ -186,8 +187,21 @@ def _item_group(items: list[str]) -> str:
     return f'<div class="dw-list-item-group">{"".join(items)}</div>'
 
 
+# DW·ECC 공통 규칙: 화면에 이모지를 쓰지 않는다. 그런데 이 앱의 글 가운데 일부는
+# 우리가 쓴 것이 아니라 AI 가 써 보낸 것이고(한줄평·소견), 예전에 저장해 둔 결과에도
+# 옛 문구가 그대로 남아 있다 — 거기 이모지가 섞여 들어오면 화면에 그대로 찍힌다.
+# 그래서 글자를 내보내는 길목 한 곳에서 지운다(그림 문자·이모지 변형 표시).
+# 화살표(→)는 지우지 않는다 — "정상→위험" 처럼 뜻을 나르는 자리에 쓰고 있다.
+_EMOJI = re.compile("[\U0001f000-\U0001faff☀-➿⬀-⯿️⃣]")
+
+
+def strip_emoji(text: str) -> str:
+    """이모지를 지우고 그 자리에 생긴 겹공백을 하나로 줄인다."""
+    return re.sub(r"[ \t]{2,}", " ", _EMOJI.sub("", text)).strip()
+
+
 def _t(value) -> str:
-    return escape(str(value if value is not None else ""))
+    return escape(strip_emoji(str(value if value is not None else "")))
 
 
 def _when(stamp: str) -> str:
@@ -530,12 +544,33 @@ def render_index(results: list[DomainResult]) -> str:
     return _page("낙장도메인 품질 체커 결과", "검사 결과", body)
 
 
+def _copy_fonts(out_dir: Path) -> None:
+    """손글씨 글꼴을 보고서 폴더에도 한 벌 둔다.
+
+    보고서는 폴더째 메일로 나간다. `style.css` 가 글꼴을 `fonts/…` 로 부르므로,
+    글꼴이 옆에 없으면 받는 사람 화면에서는 제목이 손글씨로 나오지 않는다.
+    글꼴이 없어도 보고서 자체는 나와야 하니 실패는 조용히 넘긴다.
+    """
+    src_dir = STATIC_DIR / "fonts"
+    if not src_dir.is_dir():
+        return
+    dest_dir = out_dir / "fonts"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    # 글꼴 파일과 그 라이선스 원문은 한 몸이다 — OFL 이 함께 배포할 것을 요구한다.
+    for name in ("Gaegu-Bold.woff2", "OFL.txt"):
+        one = src_dir / name
+        if one.is_file():
+            with contextlib.suppress(OSError):
+                shutil.copyfile(one, dest_dir / name)
+
+
 def write_report(results: list[DomainResult], base: Path | str) -> Path:
     """Write data/report/index.html plus one page per domain; returns the index."""
     out_dir = Path(base) / "report"
     out_dir.mkdir(parents=True, exist_ok=True)
     # 모양 규칙 한 장. 페이지마다 통째로 끼워 넣으면 도메인 1,000개에 약 78MB 가 된다.
     (out_dir / "style.css").write_text(CSS, encoding="utf-8")
+    _copy_fonts(out_dir)
     keep = {"index.html"}
     for result in results:
         name = f"{_safe_name(result.domain)}.html"

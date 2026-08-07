@@ -62,10 +62,12 @@ done
 ## 원본을 그대로 쓰기 위해 프로젝트가 감수하는 것
 
 - `base.css`의 `@font-face`는 손글씨 폰트(`MemomentKkukkukk`) woff를 상대경로로 가리킨다.
-  그 폰트는 재배포 라이선스가 확인되지 않아 **가져오지 않았다**(DW `assets/fonts/NOTICE.md`).
-  대신 `static/app.css`에서 `--dw-font-display`를 본문 폰트로 덮어써서, 어떤 요소도
-  그 폰트를 요구하지 않게 했다 — 그래서 없는 woff를 받으러 가지 않고 404도 나지 않는다.
-  `base.css` 자체는 한 글자도 고치지 않았다.
+  그 폰트는 배포처가 **임베딩을 금지**해 파일을 가져오지 않았다(2026-08-07 확인 · 근거와 출처는
+  `static/fonts/NOTICE.md`). `base.css` 자체는 한 글자도 고치지 않았고, `static/app.css`가
+  **다른 이름**(`MemomentKkukkukkInstalled`)으로 `local()` 전용 선언을 따로 두어 그 자리를 대신한다 —
+  같은 이름을 쓰면 브라우저가 `base.css`의 없는 woff까지 받으러 가 404가 난다. 이름을 가른 덕에
+  실측 404 0건이고, 컴퓨터에 꾹꾹체가 깔려 있는 사람에게는 진짜 doweek 얼굴이 나온다.
+  나머지 모든 사람에게는 함께 싣는 개구체(`static/fonts/Gaegu-Bold.woff2`, SIL OFL)가 나온다.
 - `tokens.css`의 다크 팔레트(`[data-theme="dark"]`)도 그대로 뒀다. 이 앱은
   `data-theme`을 설정하지 않으므로 항상 라이트로 나온다.
 - `app-shell-mobile.css`는 `--dw-block-screen-height`가 없으면 `100dvh`를 쓴다. 이 앱은
