@@ -97,7 +97,7 @@ async def check(domain: str, api_key: str, http: httpx.AsyncClient) -> IndexInfo
     if not api_key:
         result.check = CheckState(
             status=CheckStatus.NOT_RUN,
-            note="Serper 키가 없어 색인 검사를 못 했습니다(필수 검사라 매입 후보 판정 불가).",
+            note="Serper 키가 없어 구글 색인은 못 봤습니다.",
         )
         return result
     try:

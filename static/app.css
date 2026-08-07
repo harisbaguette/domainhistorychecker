@@ -120,7 +120,7 @@ body {
 .dw-list-item[data-verdict] {
   margin-bottom: 0;
   background: var(--dw-surface);
-  border-radius: 16px;
+  border-radius: var(--dw-radius-card);
   box-shadow: var(--dw-shadow-1);
   border-left: 3px solid var(--verdict-color, var(--dw-cat-1));
   overflow: hidden;
@@ -550,9 +550,10 @@ body {
   transform: rotate(180deg);
 }
 
-/* 내보내기는 목록을 다 훑고 난 끝에 온다 — 맨 아래 한 줄 */
+/* 내보내기는 목록을 다 훑고 난 끝에 온다 — 맨 아래 한 줄.
+   결과 줄과 같은 흰 카드라 바짝 붙이면 '세 번째 결과'처럼 읽힌다. 한 칸 띄운다. */
 .app-list-foot {
-  margin-top: var(--dw-space-2);
+  margin-top: var(--dw-space-6);
 }
 
 /* ── 결과 한 줄(DW list-item)에 붙는 자리 ────────────────────────── */

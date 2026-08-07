@@ -92,8 +92,10 @@ def test_config_saves_keys_and_keeps_them_when_left_blank(client, config_path):
     assert "serper-secret" not in json.dumps(data)  # 원문 키는 화면에 내려보내지 않는다
     assert data["speed_mode"] == "safe"
     assert data["enable_capture"] is False
-    # Open PageRank 는 이제 선택 — ✅ 를 막는 것은 AI 키뿐이다.
-    assert data["missing_keys"] == ["OpenRouter (AI 분석)"]
+    # 키는 전부 선택이 됐다 — 하나도 없어도 판정이 나온다.
+    assert data["missing_keys"] == []
+    # 대신 "키가 없어 무엇으로 보고 있는지"를 화면에 알려 줄 수 있어야 한다.
+    assert any("규칙 검사" in note for note in data["free_fallbacks"])
 
     # 빈 값으로 저장하면 기존 키가 살아 있어야 한다
     client.post("/api/config", json={"serper": "", "model": "deepseek/deepseek-v3.2"})

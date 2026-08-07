@@ -259,7 +259,12 @@ def test_low_partial_score_is_not_rejected_when_evidence_is_missing():
     thin = healthy(
         wayback=WaybackHistory(check=CheckState(status=CheckStatus.UNCHECKED, note="접속 실패")),
         ai=AIAnalysis(check=CheckState(status=CheckStatus.UNCHECKED, note="본문 없음")),
-        rules=RuleFindings(check=OK, doorway=True, hidden_text=True, link_farm=True),
+        # 흔적 2종까지는 규칙 단독 치명(3종)에 못 미친다 — 여기서 보려는 것은
+        # "증거가 비어 점수가 낮은 경우"이지 "규칙이 스팸을 확정한 경우"가 아니다.
+        rules=RuleFindings(
+            check=OK, doorway=True, hidden_text=True, language_shift=True,
+            sensitive_terms=["도박:카지노"],
+        ),
         authority=Authority(check=OK, page_rank=0.0),
         index=IndexInfo(check=OK, indexed_count=0),
     )
@@ -285,6 +290,121 @@ def test_partial_score_normalises_over_confirmed_items_only():
     assert score.partial is True
     # 10(중립) + 7(권위 상한) + 3(색인) = 20 / 20 → 100
     assert score.total == pytest.approx(100.0)
+
+
+def test_a_domain_can_be_bought_with_no_api_keys_at_all():
+    """키가 하나도 없어도(=AI·권위 점수 없이) 초록 판정이 나와야 한다."""
+    keyless = judge(
+        healthy(
+            ai=AIAnalysis(check=CheckState(status=CheckStatus.NOT_RUN, note="키 없음")),
+            authority=Authority(check=CheckState(status=CheckStatus.NOT_RUN, note="키 없음")),
+        )
+    )
+
+    assert keyless.verdict is Verdict.BUY
+    assert keyless.warn_reasons == []
+    assert "AI 분석" in keyless.not_run and "권위 점수" in keyless.not_run
+    assert keyless.one_liner  # 기계적으로 만든 한 줄 평가가 대신 들어간다
+
+
+def test_turning_the_ai_on_never_costs_points_by_itself():
+    """AI를 켰다는 이유만으로 점수가 깎이면 'AI 안 쓰는 게 이득'이 된다."""
+    without = judge(healthy(ai=AIAnalysis(check=CheckState(status=CheckStatus.NOT_RUN))))
+    with_ai = judge(healthy())  # AI 가 clean 이라고 답한 경우
+
+    assert with_ai.score >= without.score
+    # 안 돈 AI 몫은 만점으로 채우는 게 아니라 분모에서 빠진다.
+    safety = next(i for i in without.scoring.items if i.name == "safety")
+    assert safety.max_points == 25
+    assert safety.earned == pytest.approx(25.0)
+
+
+def test_the_ai_penalty_keeps_its_weight_when_both_sources_ran():
+    """분모를 나눴다고 감점이 물러지면 안 된다 — 예전 비율 그대로여야 한다."""
+    unclear = judge(
+        healthy(ai=AIAnalysis(check=OK, spam=SpamJudgement(verdict="unclear", confidence=0.9)))
+    )
+    item = next(i for i in unclear.scoring.items if i.name == "safety")
+
+    assert item.max_points == 45
+    assert item.earned == pytest.approx(45 - 45 * 0.3 * 0.9)
+
+
+def test_three_mechanical_spam_marks_reject_the_domain_without_any_ai():
+    """AI가 없다고 규칙이 잡은 흔적 세 종류를 노랑에서 멈추게 두면 안 된다."""
+    result = judge(
+        healthy(
+            ai=AIAnalysis(check=CheckState(status=CheckStatus.NOT_RUN)),
+            rules=RuleFindings(
+                check=OK, doorway=True, hidden_text=True, link_farm=True, languages=["ko"]
+            ),
+        )
+    )
+
+    assert result.verdict is Verdict.REJECT
+    assert any("기계적 검사만으로도 확정" in reason for reason in result.fatal_reasons)
+
+    # AI 를 켰다고 ❌ 가 ⚠️ 로 물러지면 "AI 켜는 게 손해"가 된다 — 같은 흔적이면 같은 판정.
+    with_ai = judge(
+        healthy(
+            ai=AIAnalysis(check=OK, spam=SpamJudgement(verdict="clean", confidence=0.9)),
+            rules=RuleFindings(
+                check=OK, doorway=True, hidden_text=True, link_farm=True, languages=["ko"]
+            ),
+        )
+    )
+    assert with_ai.verdict is Verdict.REJECT
+
+
+def test_a_rejected_domain_leads_its_one_liner_with_the_reason():
+    result = judge(
+        healthy(
+            ai=AIAnalysis(check=CheckState(status=CheckStatus.NOT_RUN)),
+            spamhaus=Reputation(check=OK, listed=True, codes=["스팸 도메인"]),
+        )
+    )
+
+    assert result.verdict is Verdict.REJECT
+    assert result.one_liner.startswith("스팸하우스 블랙리스트")
+
+
+def test_no_history_does_not_say_the_same_thing_twice():
+    result = judge(
+        healthy(
+            wayback=WaybackHistory(check=OK),
+            rules=RuleFindings(check=CheckState(status=CheckStatus.UNCHECKED, note="본문 없음")),
+        )
+    )
+
+    assert result.verdict is Verdict.NO_HISTORY
+    assert not any("운영방식 규칙 검사" in reason for reason in result.warn_reasons)
+    assert any("저장된 과거 이력이 아예 없습니다" in reason for reason in result.warn_reasons)
+
+
+def test_rules_finding_spam_without_ai_still_blocks_a_buy():
+    """AI가 없을 때 규칙이 잡은 흔적을 그냥 넘기면 스팸 도메인에 초록이 나간다."""
+    result = judge(
+        healthy(
+            ai=AIAnalysis(check=CheckState(status=CheckStatus.NOT_RUN, note="키 없음")),
+            rules=RuleFindings(check=OK, doorway=True, hidden_text=True, languages=["ko"]),
+        )
+    )
+
+    assert result.verdict is not Verdict.BUY
+    assert any("규칙 검사가 스팸 운영 흔적" in reason for reason in result.warn_reasons)
+
+
+def test_the_plain_one_liner_only_states_what_was_actually_counted():
+    result = judge(
+        healthy(
+            ai=AIAnalysis(check=CheckState(status=CheckStatus.NOT_RUN)),
+            index=IndexInfo(check=OK, indexed_count=25, current_parking=True),
+        )
+    )
+
+    assert "저장된 화면 400장" in result.one_liner
+    assert "나쁜 운영 흔적은 안 나옴" in result.one_liner
+    assert "판매용 빈 화면" in result.one_liner
 
 
 def test_no_authority_data_is_neutral_not_a_zero_score():

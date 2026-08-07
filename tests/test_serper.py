@@ -124,4 +124,4 @@ def test_parking_matching_is_word_bounded():
 async def test_missing_key_is_not_run(http):
     result = await serper.check("example.com", "", http)
     assert result.check.status is CheckStatus.NOT_RUN
-    assert "매입 후보 판정 불가" in result.check.note
+    assert "구글 색인은 못 봤습니다" in result.check.note

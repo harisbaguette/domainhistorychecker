@@ -142,7 +142,7 @@ async def analyze(
     if client is None or not client.api_key:
         result.check = CheckState(
             status=CheckStatus.NOT_RUN,
-            note="OpenRouter 키가 없어 AI 분석을 못 했습니다(필수 검사라 매입 후보 판정 불가).",
+            note="OpenRouter 키가 없어 AI 분석은 건너뛰었습니다(규칙 검사만으로 판정합니다).",
         )
         return result
     readable = [s for s in snapshots if s.text]

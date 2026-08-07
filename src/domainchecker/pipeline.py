@@ -17,15 +17,7 @@ from .analyze import ai as ai_analyze
 from .analyze import rules as rules_analyze
 from .analyze import scoring
 from .analyze.extract import snapshot_from_page
-from .clients import (
-    freeindex,
-    openpagerank,
-    safebrowsing,
-    serper,
-    spamhaus,
-    tranco,
-    virustotal,
-)
+from .clients import freeindex, openpagerank, safebrowsing, serper, spamhaus, virustotal
 from .clients.openrouter import OpenRouterClient
 from .clients.rdap import RdapClient
 from .clients.wayback import WaybackClient
@@ -40,7 +32,7 @@ RUN_STATE_NAME = "run_state.json"
 
 # 검사 방식이 바뀌면 올린다. 저장분에 찍힌 번호가 이보다 낮으면 다시 검사한다 —
 # 안 그러면 "키가 없어 못 했습니다"라고 적힌 예전 결과를 일주일 동안 계속 보여 준다.
-ENGINE_VERSION = 2
+ENGINE_VERSION = 3
 
 
 def run_state_path(base: Path | str) -> Path:
@@ -241,19 +233,10 @@ class Pipeline:
     ) -> dict[str, Authority]:
         """권위 점수 한 번에 조회. 여기서 터지면 검사가 통째로 죽으므로 반드시 삼킨다.
 
-        키가 있으면 Open PageRank, 없으면 키 없이 받는 Tranco 인기 도메인 목록.
+        선택 검사다 — 키가 없으면 그냥 비워 두고, 판정에는 쓰지 않는다.
         """
         try:
-            if self.config.keys.openpagerank:
-                return await openpagerank.fetch_batch(
-                    pending, self.config.keys.openpagerank, http
-                )
-            # 목록 파일(약 9MB)을 처음 받을 땐 몇 십 초 걸린다 — 화면이 멈춘 것처럼
-            # 보이지 않게 무엇을 하는 중인지 알려 준다.
-            await self._emit(
-                "stage", message="인기 도메인 목록을 준비하는 중입니다(처음 한 번만 걸립니다)…"
-            )
-            return await tranco.fetch_batch(pending, http, self.base)
+            return await openpagerank.fetch_batch(pending, self.config.keys.openpagerank, http)
         except Exception as exc:  # noqa: BLE001 — 어떤 응답이 와도 나머지 검사는 계속한다
             state = CheckState(
                 status=CheckStatus.UNCHECKED,

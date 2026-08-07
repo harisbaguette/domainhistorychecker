@@ -25,6 +25,25 @@ from ..models import (
 BUY_CUT = 75.0
 REJECT_CUT = 50.0
 AI_FATAL_CONFIDENCE = 0.85  # AI 단독 치명 판정에 필요한 확신도
+RULES_FATAL_HITS = 3  # AI 없이 규칙만으로 치명(❌)을 낼 최소 흔적 수
+
+# 안전성·전환 항목은 AI 몫과 규칙 몫으로 나뉜다. 한쪽이 안 돌면 그만큼 만점(분모)이
+# 줄고, 감점은 "남은 만점의 몇 할"로 매긴다. 안 돈 쪽을 만점으로 채워 주면
+# "AI를 켤수록 점수가 깎인다"는 거꾸로 된 유인이 생긴다.
+AI_SAFETY_POINTS = 20
+RULES_SAFETY_POINTS = 25
+AI_TRANSITION_POINTS = 9
+RULES_TRANSITION_POINTS = 6
+
+# 감점 비율 — 예전 45점·15점 만점 기준의 감점을 그대로 비율로 옮긴 값이다.
+_SPAM_UNCLEAR = 0.3
+_RULES_HIT = 12 / 45
+_RULES_HIT_CAP = 36 / 45
+_CONTAMINATION = 15 / 45
+_TRANSITION_RISK = 9 / 15
+_TRANSITION_MILD = 2 / 15
+_LANGUAGE_SHIFT = 6 / 15
+_SENSITIVE = 3 / 15
 
 
 def _check_of(result: DomainResult, name: str):
@@ -67,15 +86,19 @@ def _safety_item(result: DomainResult) -> ScoreItem:
         item.note = "과거 본문을 읽지 못해 채점에서 제외했습니다."
         return item
 
-    points = 45.0
+    item.max_points = (AI_SAFETY_POINTS if ai_ok else 0) + (
+        RULES_SAFETY_POINTS if rules_ok else 0
+    )
+    full = float(item.max_points)
+    points = full
     notes = []
     if ai_ok:
         spam = result.ai.spam
         if spam.verdict == "spam":
-            points -= 45 * max(0.3, spam.confidence)
+            points -= full * max(0.3, spam.confidence)
             notes.append(f"AI가 스팸 운영으로 봄(확신도 {spam.confidence:.2f})")
         elif spam.verdict == "unclear":
-            points -= 45 * 0.3 * max(0.3, spam.confidence)
+            points -= full * _SPAM_UNCLEAR * max(0.3, spam.confidence)
             notes.append("AI가 판단을 유보함")
     if rules_ok:
         hits = sum(
@@ -87,14 +110,17 @@ def _safety_item(result: DomainResult) -> ScoreItem:
             ]
         )
         if hits:
-            points -= min(36.0, hits * 12.0)
+            points -= min(full * _RULES_HIT_CAP, hits * full * _RULES_HIT)
             notes.append(f"운영방식 규칙 위반 {hits}종")
     if result.index.check.ok and result.index.contaminated:
-        points -= 15.0
+        points -= full * _CONTAMINATION
         notes.append("색인에 위험 문구 잔존")
 
-    item.earned = max(0.0, min(45.0, points))
-    item.note = ", ".join(notes) or "위험 신호 없음"
+    item.earned = max(0.0, min(full, points))
+    if not notes:
+        # AI를 안 돌렸으면 "다 봤고 깨끗하다"가 아니라 "기계가 볼 수 있는 것만 봤다"이다.
+        notes = ["위험 신호 없음"] if ai_ok else ["기계적 규칙 검사에서는 흔적 없음(문맥까지는 못 봄)"]
+    item.note = ", ".join(notes)
     return item
 
 
@@ -152,26 +178,30 @@ def _transition_item(result: DomainResult) -> ScoreItem:
         item.note = "전환 흐름을 확인할 자료가 없어 채점에서 제외했습니다."
         return item
 
-    points = 15.0
+    item.max_points = (AI_TRANSITION_POINTS if ai_ok else 0) + (
+        RULES_TRANSITION_POINTS if rules_ok else 0
+    )
+    full = float(item.max_points)
+    points = full
     notes = []
     if ai_ok:
         # 서술문 낱말 검색은 "위험 전환은 없었습니다"까지 감점하던 오탐원이었다.
         # 이제 AI가 스키마로 직접 답한 boolean 하나만 본다.
         if result.ai.transition_risk:
-            points -= 9
+            points -= full * _TRANSITION_RISK
             notes.append("정상→위험 방향 전환 소견")
         elif any(word in result.ai.transition for word in ("전환", "변화", "바뀌")):
-            points -= 2
+            points -= full * _TRANSITION_MILD
             notes.append("주제 전환 있음(정상 범위)")
     if rules_ok:
         if result.rules.language_shift:
-            points -= 6
+            points -= full * _LANGUAGE_SHIFT
             notes.append("사용 언어가 도중에 바뀜")
         if result.rules.sensitive_terms:
-            points -= 3
+            points -= full * _SENSITIVE
             notes.append("민감 업종 낱말 등장(주의 표지)")
 
-    item.earned = max(0.0, min(15.0, points))
+    item.earned = max(0.0, min(full, points))
     item.note = ", ".join(notes) or "주제 흐름이 일관됨"
     return item
 
@@ -256,13 +286,55 @@ def judge(result: DomainResult) -> DomainResult:
 
     result.verdict_label = VERDICT_LABEL[result.verdict]
     if not result.one_liner:
-        result.one_liner = result.ai.one_liner
+        result.one_liner = result.ai.one_liner or plain_one_liner(result)
     if not result.recommended_topics:
         result.recommended_topics = result.ai.recommended_topics
     result.acquisition = result.registration.acquisition
     result.availability = availability_of(result.registration.acquisition)
     result.availability_label = AVAILABILITY_LABEL[result.availability]
     return result
+
+
+def plain_one_liner(result: DomainResult) -> str:
+    """AI 없이 모은 사실만으로 만드는 한 줄 평가 — 지어내지 않고 센 것만 적는다."""
+    # 빨간 도장이 찍힌 도메인 옆에 안심시키는 말부터 나오면 안 된다.
+    parts = [result.fatal_reasons[0]] if result.fatal_reasons else []
+    history = result.wayback
+    if history.check.ok and history.has_history:
+        span = ""
+        if history.first_seen and history.last_seen:
+            span = f"{history.first_seen[:4]}~{history.last_seen[:4]}년 "
+        parts.append(f"{span}저장된 화면 {history.total_captures}장이 남아 있음")
+    elif history.check.ok:
+        parts.append("저장된 과거 화면이 아예 없음")
+
+    if result.rules.check.ok:
+        marks = [
+            name
+            for name, hit in (
+                ("도어웨이", result.rules.doorway),
+                ("숨긴 글자", result.rules.hidden_text),
+                ("링크 무더기", result.rules.link_farm),
+                ("자동 생성 반복", result.rules.autogenerated),
+            )
+            if hit
+        ]
+        if marks:
+            parts.append("규칙 검사가 잡은 흔적: " + ", ".join(marks))
+        else:
+            parts.append("규칙 검사에서 나쁜 운영 흔적은 안 나옴")
+        if result.rules.parking_ratio >= 0.3:
+            parts.append(f"과거 화면의 {int(result.rules.parking_ratio * 100)}%가 판매용 빈 화면이었음")
+
+    if result.index.check.ok:
+        if result.index.contaminated:
+            parts.append("지금도 위험 업종 문구가 남아 있음")
+        elif result.index.current_parking:
+            parts.append("지금은 판매용 빈 화면임")
+        else:
+            parts.append(f"지금 웹에 남은 페이지 {result.index.indexed_count}건")
+
+    return ". ".join(parts) + "." if parts else "판단할 자료를 거의 모으지 못했습니다."
 
 
 def availability_of(acquisition: str) -> str:
@@ -289,8 +361,22 @@ def fatal_reasons(result: DomainResult) -> list[str]:
     spam = result.ai.spam
     ai_says_spam = result.ai.check.ok and spam.verdict == "spam"
     rules_say_spam = result.rules.check.ok and result.rules.spam_operation
+    rule_hits = sum(
+        [
+            result.rules.doorway,
+            result.rules.hidden_text,
+            result.rules.link_farm,
+            result.rules.autogenerated,
+        ]
+    )
     if ai_says_spam and rules_say_spam:
         reasons.append("규칙 검사와 AI가 모두 스팸 운영으로 판정했습니다.")
+    # 기계적 흔적이 세 종류 넘게 겹치면 그 자체로 충분한 근거다. AI를 켰는지와
+    # 무관하게 적용한다 — AI를 켜면 ❌가 ⚠️로 물러지는 거꾸로 된 유인을 막기 위해서다.
+    elif result.rules.check.ok and rule_hits >= RULES_FATAL_HITS:
+        reasons.append(
+            f"규칙 검사가 스팸 운영 흔적을 {rule_hits}종 찾았습니다(기계적 검사만으로도 확정)."
+        )
     elif ai_says_spam and spam.confidence >= AI_FATAL_CONFIDENCE and spam.quotes:
         reasons.append(
             f"AI가 확신도 {spam.confidence:.2f}로 스팸 운영이라고 판정했습니다(근거 인용: "
@@ -304,7 +390,12 @@ def fatal_reasons(result: DomainResult) -> list[str]:
 def warn_reasons(result: DomainResult) -> list[str]:
     """Rule 3 — anything that forbids a ✅ even when nothing fatal was found."""
     reasons = []
+    # 과거가 아예 없는 도메인은 "이력 없음" 한 줄로 충분하다. 규칙 검사 미확인까지
+    # 함께 적으면 같은 사실을 두 번 말하는 데다, 고칠 수 있는 실패처럼 읽힌다.
+    no_history = result.wayback.check.ok and not result.wayback.has_history
     for name in REQUIRED_CHECKS:
+        if name == "rules" and no_history:
+            continue
         check = _check_of(result, name)
         if not check.ok:
             reasons.append(f"필수 검사 미확인 — {CHECK_LABEL[name]}: {check.note or '확인하지 못했습니다.'}")
@@ -328,7 +419,13 @@ def warn_reasons(result: DomainResult) -> list[str]:
     rules_say_spam = result.rules.check.ok and result.rules.spam_operation
     # 규칙이 스팸 흔적을 찾았는데 AI가 스팸이라 답하지 않은 경우는 전부 충돌이다
     # (clean·unclear·unknown 모두) — 유보를 무혐의로 읽어 ✅를 내주던 구멍을 막는다.
-    if rules_say_spam and result.ai.check.ok and spam.verdict != "spam":
+    # AI를 안 돌린 경우(키 없음·실패)에도 규칙이 잡은 흔적은 그대로 경고로 남긴다.
+    # 이 줄이 없으면 규칙이 도어웨이·숨긴 글자를 찾아 놓고도 아무 말 없이 ✅가 나간다.
+    if rules_say_spam and not result.ai.check.ok:
+        reasons.append(
+            "규칙 검사가 스팸 운영 흔적을 찾았습니다(AI 확인 없이 기계적 검사만으로 본 결과입니다)."
+        )
+    elif rules_say_spam and result.ai.check.ok and spam.verdict != "spam":
         reasons.append(
             "신호 충돌 — 규칙 검사는 스팸 흔적을 찾았는데 AI는 스팸이라고 보지 않았습니다"
             f"(AI 판정: {spam.verdict})."

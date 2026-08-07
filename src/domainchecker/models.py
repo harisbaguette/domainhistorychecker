@@ -50,8 +50,10 @@ AVAILABILITY_LABEL = {
 }
 
 # Names of the checks that must all be OK before a ✅ verdict may be issued.
-REQUIRED_CHECKS = ("wayback", "registration", "spamhaus", "index", "ai", "authority")
-OPTIONAL_CHECKS = ("safebrowsing", "virustotal")
+# 전부 키 없이 도는 것들이다 — 판정의 뼈대는 기계적 검사(파이썬)로 세우고,
+# AI·권위 점수는 있으면 더 정확해지는 보조로 내렸다.
+REQUIRED_CHECKS = ("wayback", "registration", "spamhaus", "index", "rules")
+OPTIONAL_CHECKS = ("ai", "authority", "safebrowsing", "virustotal")
 
 # 미확인·미실시 목록에 이름을 올릴 검사 전부. 여기 빠지면 "검사를 못 했다"는 사실이
 # 화면 어디에도 안 나와, 못 한 것이 "깨끗함"으로 읽힌다(rules 가 그랬다).

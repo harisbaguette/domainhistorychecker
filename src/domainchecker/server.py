@@ -160,7 +160,8 @@ def estimate(config: Config, count: int) -> dict:
         quota.append(
             f"Open PageRank {math.ceil(count / 100)}번 물어봄 (한 달에 도메인 3만 개까지 무료)"
         )
-    quota.append(f"AI 분석 {count}번, 드는 돈 {_money(ai_cost)}")
+    if config.keys.openrouter:
+        quota.append(f"AI 분석 {count}번, 드는 돈 {_money(ai_cost)}")
     # 키를 안 넣은 검사는 무엇으로 대신 도는지 함께 알려 준다.
     quota += [f"{note} — 공개 자료라 키도 돈도 안 듭니다" for note in config.free_fallbacks()]
     if config.enable_virustotal:
@@ -403,6 +404,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
             "enable_virustotal": config.enable_virustotal,
             "enable_capture": config.enable_capture,
             "missing_keys": config.missing_required_keys(),
+            "free_fallbacks": config.free_fallbacks(),
             "config_path": str(app.state.config_path or config_module.CONFIG_PATH),
         }
 

@@ -55,19 +55,18 @@ class Config(BaseModel):
         return chain
 
     def missing_required_keys(self) -> list[str]:
-        """✅ 판정을 막는 키만. 색인·권위는 키 없이 도는 무료 대체 검사가 있다."""
-        missing = []
-        if not self.keys.openrouter:
-            missing.append("OpenRouter (AI 분석)")
-        return missing
+        """✅ 판정을 막는 키. 이제 없다 — 필수 검사는 전부 키 없이 돈다."""
+        return []
 
     def free_fallbacks(self) -> list[str]:
-        """키 대신 무료 공개 자료로 도는 검사들(정확도만 조금 낮다)."""
+        """키가 없어 대신 도는 것들(정확도만 조금 낮다)."""
         notes = []
         if not self.keys.serper:
-            notes.append("색인 검사 — 커먼크롤 공개 색인과 현재 페이지로 대신 봅니다")
+            notes.append("색인 검사 — 공개 크롤 기록과 도메인 현재 페이지로 대신 봅니다")
+        if not self.keys.openrouter:
+            notes.append("과거 내용 판단 — AI 없이 규칙 검사(기계적 판단)만으로 봅니다")
         if not self.keys.openpagerank:
-            notes.append("권위 점수 — Tranco 인기 도메인 100만 목록으로 대신 봅니다")
+            notes.append("권위 점수 — 보조 지표라 비워 둡니다(판정에는 쓰지 않습니다)")
         return notes
 
 
