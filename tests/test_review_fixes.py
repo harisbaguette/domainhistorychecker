@@ -13,7 +13,7 @@ import respx
 from domainchecker.analyze.scoring import judge
 from domainchecker.clients import http_reason, openpagerank, serper
 from domainchecker.models import CheckState, CheckStatus, DomainResult
-from domainchecker.pipeline import is_stale
+from domainchecker.pipeline import ENGINE_VERSION, is_stale
 from domainchecker.report import html as report_html
 
 OK = CheckState(status=CheckStatus.OK)
@@ -145,13 +145,27 @@ def test_blacklist_checks_that_never_ran_say_so():
 
 # ── 묵은 저장분을 오늘 것처럼 쓰던 문제 ─────────────────────────────────
 def test_old_cached_results_are_rechecked():
-    fresh = {"finished_at": datetime.now(UTC).isoformat(timespec="seconds")}
-    old = {"finished_at": (datetime.now(UTC) - timedelta(days=30)).isoformat(timespec="seconds")}
+    now = datetime.now(UTC).isoformat(timespec="seconds")
+    fresh = {"finished_at": now, "engine": ENGINE_VERSION}
+    old = {
+        "finished_at": (datetime.now(UTC) - timedelta(days=30)).isoformat(timespec="seconds"),
+        "engine": ENGINE_VERSION,
+    }
 
     assert is_stale(fresh, 7) is False
     assert is_stale(old, 7) is True
-    assert is_stale({"finished_at": ""}, 7) is True  # 언제인지 모르면 믿지 않는다
+    assert is_stale({"finished_at": "", "engine": ENGINE_VERSION}, 7) is True  # 언제인지 모르면 믿지 않는다
     assert is_stale(old, 0) is False  # 0이면 무기한 보관
+
+
+def test_results_from_an_older_check_engine_are_rechecked():
+    """검사 방식이 바뀌었으면 '키가 없어 못 했습니다'라고 적힌 저장분을 버려야 한다."""
+    now = datetime.now(UTC).isoformat(timespec="seconds")
+
+    assert is_stale({"finished_at": now}, 7) is True  # 번호가 아예 없는 옛 저장분
+    assert is_stale({"finished_at": now, "engine": ENGINE_VERSION - 1}, 7) is True
+    assert is_stale({"finished_at": now, "engine": "망가짐"}, 0) is True
+    assert is_stale({"finished_at": now, "engine": ENGINE_VERSION}, 7) is False
 
 
 # ── 보고서 위생 ───────────────────────────────────────────────────────

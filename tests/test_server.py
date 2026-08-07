@@ -56,7 +56,8 @@ def test_preview_normalizes_input_and_estimates(client):
     assert "중복 1개 제거" in data["notice"]
     assert data["estimate"]["count"] == 2
     assert "분" in data["estimate"]["summary"]
-    assert any("Serper" in q for q in data["estimate"]["quota"])
+    # 키가 없는 기본 상태에서는 "돈도 키도 안 드는 공개 자료"로 안내한다.
+    assert any("공개 자료" in q for q in data["estimate"]["quota"])
 
 
 def test_preview_explains_the_1000_limit(client):
@@ -91,7 +92,8 @@ def test_config_saves_keys_and_keeps_them_when_left_blank(client, config_path):
     assert "serper-secret" not in json.dumps(data)  # 원문 키는 화면에 내려보내지 않는다
     assert data["speed_mode"] == "safe"
     assert data["enable_capture"] is False
-    assert any("Open PageRank" in m for m in data["missing_keys"])
+    # Open PageRank 는 이제 선택 — ✅ 를 막는 것은 AI 키뿐이다.
+    assert data["missing_keys"] == ["OpenRouter (AI 분석)"]
 
     # 빈 값으로 저장하면 기존 키가 살아 있어야 한다
     client.post("/api/config", json={"serper": "", "model": "deepseek/deepseek-v3.2"})

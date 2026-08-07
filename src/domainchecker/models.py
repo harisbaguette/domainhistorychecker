@@ -59,7 +59,7 @@ CHECK_LABEL = {
     "wayback": "과거 이력(웨이백)",
     "registration": "등록 정보",
     "spamhaus": "스팸하우스 블랙리스트",
-    "index": "구글 색인",
+    "index": "웹 색인·현재 상태",
     "ai": "AI 분석",
     "authority": "권위 점수",
     "rules": "운영방식 규칙 검사",

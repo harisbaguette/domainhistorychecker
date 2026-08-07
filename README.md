@@ -43,17 +43,26 @@
 
 ## 2. 열쇠(API 키) 넣기
 
-“설정” 화면에서 넣습니다. 키는 `~/.domainchecker/config.json` 파일에만 저장되고 밖으로 나가지 않습니다.
+“설정” 화면에서 넣습니다. **처음 보이는 칸은 하나뿐이고, 거기만 채우면 끝입니다.**
+키는 `~/.domainchecker/config.json` 파일에만 저장되고 밖으로 나가지 않습니다.
 
 | 키 | 꼭 필요한가 | 어디서 받나 |
 |---|---|---|
-| OpenRouter | **필요** (과거 내용 읽는 AI) | https://openrouter.ai/keys |
-| Serper | **필요** (구글 색인 검사) | https://serper.dev/api-key — 카드 없이 무료 2,500번 |
-| Open PageRank | **필요** (권위 점수) | https://www.domcop.com/openpagerank/ |
-| 구글 세이프 브라우징 | 선택 | https://console.cloud.google.com/apis/library/safebrowsing.googleapis.com |
-| 바이러스토탈 | 선택 | https://www.virustotal.com/gui/my-apikey |
+| OpenRouter | **필요** (첫 화면) | https://openrouter.ai/keys |
+| Serper | 선택 · “고급 설정” 안 (색인 검사를 더 정확히) | https://serper.dev/api-key — 카드 없이 무료 2,500번 |
+| Open PageRank | 선택 · “고급 설정” 안 (권위 점수를 더 정확히) | https://www.domcop.com/openpagerank/ |
+| 구글 세이프 브라우징 | 선택 · “고급 설정” 안 | https://console.cloud.google.com/apis/library/safebrowsing.googleapis.com |
+| 바이러스토탈 | 선택 · “고급 설정” 안 | https://www.virustotal.com/gui/my-apikey |
 
-- 키가 없어도 검사 자체는 돌아갑니다. 다만 **필수 검사가 비면 “매입 후보”(초록) 판정이 나오지 않고** 최고 “검토 필요”(노랑)까지만 나옵니다.
+- 검사 속도, 선택 키 네 개, 선택 검사 켜고 끄기는 전부 **“고급 설정”**을 펼쳐야 나옵니다 — 그냥 두면 알아서 좋은 값으로 돕니다.
+- 쓰는 AI는 고르지 않습니다. 하나가 실패하면 다음 것으로 자동으로 넘어가고, 어떤 것이 답했는지는 보고서에 적힙니다.
+- 세이프 브라우징은 켜고 끄는 칸이 따로 없습니다 — 키를 넣으면 그냥 같이 돕니다.
+
+- **꼭 필요한 키는 OpenRouter 하나뿐입니다.** 색인 검사와 권위 점수는 키가 없으면 누구나 쓸 수 있는 공개 자료로 알아서 대신 봅니다.
+  - 색인 검사 — 세계 크롤 기록(커먼크롤)에 이 도메인 주소가 몇 개나 남아 있는지 세고, 도메인의 지금 페이지를 직접 열어 판매용 빈 페이지인지·위험 업종 문구가 남았는지 봅니다.
+  - 권위 점수 — 사람이 많이 찾는 도메인 100만 개 목록(Tranco)을 일주일에 한 번 받아, 그 안에 몇 위로 있는지로 점수를 냅니다. 목록에 없으면 “자료 없음”이지 0점이 아닙니다.
+  - Serper 키가 없으면 프로그램이 그 도메인의 주소로 **직접 한 번 접속**합니다. 그래서 도메인 주인 쪽 기록에 내 인터넷 주소가 남을 수 있습니다. 그게 싫으면 Serper 키를 넣으세요(그러면 대신 물어봐 줍니다).
+- 그래도 **AI 분석 키(OpenRouter)가 비면 “매입 후보”(초록) 판정이 나오지 않고** 최고 “검토 필요”(노랑)까지만 나옵니다.
 - 채팅·메신저에 키를 붙여 넣은 적이 있다면 **그 키는 폐기하고 새로 발급**받으세요.
 
 ---
@@ -97,6 +106,7 @@ data/cache/<도메인>.json   도메인별 검사 결과 (중단·재개의 근�
 data/results.json          이번 실행 전체 결과
 data/captures/*.png        화면 사진
 data/report/index.html     HTML 보고서
+data/tranco-top-1m.csv.zip 인기 도메인 100만 목록 (약 9MB, 일주일에 한 번만 새로 받음)
 ~/.domainchecker/config.json   내 키와 설정
 ```
 

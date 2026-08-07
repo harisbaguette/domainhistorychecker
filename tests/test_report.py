@@ -147,7 +147,7 @@ def test_plain_words_are_spelled_out_for_the_reader(sample_result):
     html = detail_fragment(sample_result)
 
     assert "링크로 밀어주는 힘" in html
-    assert "구글에 남아 있는 페이지(색인)" in html
+    assert "웹에 남아 있는 페이지(색인)" in html
     assert "다른 곳으로 넘겨보낸 비율(리다이렉트)" in html
     assert "임시 화면이던 비중(파킹)" in html
     labels = " ".join(label for label, _ in recheck_links("example.com"))

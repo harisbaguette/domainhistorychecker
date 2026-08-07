@@ -153,11 +153,16 @@ def estimate(config: Config, count: int) -> dict:
     ai_cost = count * (
         AI_INPUT_TOKENS * AI_INPUT_PRICE + AI_OUTPUT_TOKENS * AI_OUTPUT_PRICE
     ) / 1_000_000
-    quota = [
-        f"Serper 검색 {count}번 (무료로 쓸 수 있는 횟수는 2,500번)",
-        f"Open PageRank {math.ceil(count / 100)}번 물어봄 (한 달에 도메인 3만 개까지 무료)",
-        f"AI 분석 {count}번, 드는 돈 {_money(ai_cost)}",
-    ]
+    quota = []
+    if config.keys.serper:
+        quota.append(f"Serper 검색 {count}번 (무료로 쓸 수 있는 횟수는 2,500번)")
+    if config.keys.openpagerank:
+        quota.append(
+            f"Open PageRank {math.ceil(count / 100)}번 물어봄 (한 달에 도메인 3만 개까지 무료)"
+        )
+    quota.append(f"AI 분석 {count}번, 드는 돈 {_money(ai_cost)}")
+    # 키를 안 넣은 검사는 무엇으로 대신 도는지 함께 알려 준다.
+    quota += [f"{note} — 공개 자료라 키도 돈도 안 듭니다" for note in config.free_fallbacks()]
     if config.enable_virustotal:
         quota.append(
             f"바이러스토탈 {count}개 (1분에 4개까지만 되어서 약 {count / 4:.0f}분 더 걸립니다)"

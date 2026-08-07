@@ -188,9 +188,12 @@ def _inheritance_item(result: DomainResult) -> ScoreItem:
     points = 10.0  # 중립
     notes = []
     if authority_ok:
-        bonus = min(7.0, result.authority.page_rank * 1.4)
-        points += bonus
-        notes.append(f"권위 점수 {result.authority.page_rank:.2f}")
+        # 자료가 없는 것은 "권위 0점"이 아니다 — 0.00 을 적으면 나쁜 점수처럼 읽힌다.
+        if result.authority.has_data:
+            points += min(7.0, result.authority.page_rank * 1.4)
+            notes.append(f"권위 점수 {result.authority.page_rank:.2f}")
+        else:
+            notes.append("권위 자료 없음(중립)")
     if index_ok:
         if result.index.indexed_count >= 10:
             points += 3
@@ -294,7 +297,7 @@ def fatal_reasons(result: DomainResult) -> list[str]:
             f"“{spam.quotes[0][:80]}”)."
         )
     if result.index.check.ok and result.index.contaminated:
-        reasons.append("현재 구글 색인에 위험 업종 문구가 남아 있습니다: " + ", ".join(result.index.contamination_terms[:5]))
+        reasons.append("지금 웹에 남아 있는 페이지에 위험 업종 문구가 있습니다: " + ", ".join(result.index.contamination_terms[:5]))
     return reasons
 
 

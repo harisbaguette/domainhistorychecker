@@ -169,13 +169,13 @@ def test_missing_required_check_forbids_buy():
     result = judge(
         healthy(
             index=IndexInfo(
-                check=CheckState(status=CheckStatus.NOT_RUN, note="Serper 키가 없습니다.")
+                check=CheckState(status=CheckStatus.NOT_RUN, note="색인 검사를 돌리지 않았습니다.")
             )
         )
     )
     assert result.verdict is Verdict.REVIEW
     assert any("필수 검사 미확인" in reason for reason in result.warn_reasons)
-    assert "구글 색인" in result.not_run[0]
+    assert "웹 색인" in result.not_run[0]
 
 
 def test_unchecked_required_check_is_listed_as_unchecked():
@@ -285,6 +285,19 @@ def test_partial_score_normalises_over_confirmed_items_only():
     assert score.partial is True
     # 10(중립) + 7(권위 상한) + 3(색인) = 20 / 20 → 100
     assert score.total == pytest.approx(100.0)
+
+
+def test_no_authority_data_is_neutral_not_a_zero_score():
+    """자료가 없는 것을 0.00 으로 적으면 '권위가 바닥인 도메인'으로 잘못 읽힌다."""
+    thin = healthy(
+        authority=Authority(check=OK, has_data=False, page_rank=0.0),
+        index=IndexInfo(check=OK, indexed_count=0),
+    )
+    item = next(i for i in compute_score(thin).items if i.name == "inheritance")
+
+    assert "권위 자료 없음(중립)" in item.note
+    assert "0.00" not in item.note
+    assert item.earned == pytest.approx(10.0)  # 중립 그대로
 
 
 @pytest.mark.parametrize(

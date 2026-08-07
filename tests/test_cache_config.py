@@ -58,7 +58,16 @@ def test_model_chain_puts_the_chosen_model_first():
     assert set(chain) == set(MODEL_CHAIN)
 
 
-def test_missing_required_keys_are_reported():
+def test_only_the_ai_key_blocks_a_buy_verdict():
+    # 색인·권위는 키 없이 도는 무료 대체 검사가 있어 ✅ 를 막지 않는다.
     missing = Config().missing_required_keys()
-    assert len(missing) == 3
-    assert Config(keys=ApiKeys(serper="a", openpagerank="b", openrouter="c")).missing_required_keys() == []
+    assert missing == ["OpenRouter (AI 분석)"]
+    assert Config(keys=ApiKeys(openrouter="c")).missing_required_keys() == []
+
+
+def test_free_fallbacks_are_listed_only_when_the_key_is_absent():
+    notes = Config().free_fallbacks()
+    assert len(notes) == 2
+    assert any("커먼크롤" in n for n in notes)
+    assert any("Tranco" in n for n in notes)
+    assert Config(keys=ApiKeys(serper="a", openpagerank="b")).free_fallbacks() == []

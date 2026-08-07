@@ -17,7 +17,15 @@ from .analyze import ai as ai_analyze
 from .analyze import rules as rules_analyze
 from .analyze import scoring
 from .analyze.extract import snapshot_from_page
-from .clients import openpagerank, safebrowsing, serper, spamhaus, virustotal
+from .clients import (
+    freeindex,
+    openpagerank,
+    safebrowsing,
+    serper,
+    spamhaus,
+    tranco,
+    virustotal,
+)
 from .clients.openrouter import OpenRouterClient
 from .clients.rdap import RdapClient
 from .clients.wayback import WaybackClient
@@ -29,6 +37,10 @@ from .report import html as report_html
 EventCallback = Callable[[dict], None] | None
 
 RUN_STATE_NAME = "run_state.json"
+
+# 검사 방식이 바뀌면 올린다. 저장분에 찍힌 번호가 이보다 낮으면 다시 검사한다 —
+# 안 그러면 "키가 없어 못 했습니다"라고 적힌 예전 결과를 일주일 동안 계속 보여 준다.
+ENGINE_VERSION = 2
 
 
 def run_state_path(base: Path | str) -> Path:
@@ -67,7 +79,14 @@ def is_stale(payload: dict, max_days: int) -> bool:
 
     "지금 등록 가능(주인 없음)" 같은 답은 하루만 지나도 뒤집힌다 — 묵은 답을
     오늘 것처럼 보여 주면 이미 남이 사 간 도메인을 사러 가게 만든다.
+    검사 방식이 바뀐 뒤의 저장분도 마찬가지로 믿지 않는다.
     """
+    try:
+        engine = int(payload.get("engine") or 0)
+    except (TypeError, ValueError):
+        engine = 0
+    if engine < ENGINE_VERSION:
+        return True
     if max_days <= 0:
         return False
     stamp = str(payload.get("finished_at") or "")
@@ -112,6 +131,12 @@ class Pipeline:
         outcome = self.on_event(event)
         if inspect.isawaitable(outcome):
             await outcome
+
+    def _cache(self, result: DomainResult) -> None:
+        """저장분에 검사 방식 번호를 함께 찍는다(옛 방식 결과를 재사용하지 않게)."""
+        payload = result.model_dump(mode="json")
+        payload["engine"] = ENGINE_VERSION
+        cache.save(result.domain, payload, self.base)
 
     def stop(self) -> None:
         """Ask the run to stop; finished domains stay in the cache for resume."""
@@ -164,7 +189,7 @@ class Pipeline:
                         return None
                     await self._emit("domain_start", domain=domain)
                     result = await self.check_domain(domain, http, authority.get(domain))
-                    cache.save(domain, result.model_dump(mode="json"), self.base)
+                    self._cache(result)
                     self._done += 1
                     await self._emit(
                         "domain_done",
@@ -214,15 +239,33 @@ class Pipeline:
     async def _authority_for(
         self, pending: list[str], http: httpx.AsyncClient
     ) -> dict[str, Authority]:
-        """권위 점수 한 번에 조회. 여기서 터지면 검사가 통째로 죽으므로 반드시 삼킨다."""
+        """권위 점수 한 번에 조회. 여기서 터지면 검사가 통째로 죽으므로 반드시 삼킨다.
+
+        키가 있으면 Open PageRank, 없으면 키 없이 받는 Tranco 인기 도메인 목록.
+        """
         try:
-            return await openpagerank.fetch_batch(pending, self.config.keys.openpagerank, http)
+            if self.config.keys.openpagerank:
+                return await openpagerank.fetch_batch(
+                    pending, self.config.keys.openpagerank, http
+                )
+            # 목록 파일(약 9MB)을 처음 받을 땐 몇 십 초 걸린다 — 화면이 멈춘 것처럼
+            # 보이지 않게 무엇을 하는 중인지 알려 준다.
+            await self._emit(
+                "stage", message="인기 도메인 목록을 준비하는 중입니다(처음 한 번만 걸립니다)…"
+            )
+            return await tranco.fetch_batch(pending, http, self.base)
         except Exception as exc:  # noqa: BLE001 — 어떤 응답이 와도 나머지 검사는 계속한다
             state = CheckState(
                 status=CheckStatus.UNCHECKED,
                 note=f"권위 점수 조회에 실패했습니다({type(exc).__name__}).",
             )
             return {d: Authority(check=state) for d in pending}
+
+    async def _index_check(self, domain: str, http: httpx.AsyncClient):
+        """색인 검사. 키가 있으면 Serper, 없으면 키 없이 도는 무료 공개 자료."""
+        if self.config.keys.serper:
+            return await serper.check(domain, self.config.keys.serper, http)
+        return await freeindex.check(domain, http)
 
     async def check_domain(
         self, domain: str, http: httpx.AsyncClient, authority: Authority | None = None
@@ -236,7 +279,7 @@ class Pipeline:
             wayback.collect(domain),
             rdap.fetch(domain),
             spamhaus.check(domain, self.resolver),
-            serper.check(domain, self.config.keys.serper, http),
+            self._index_check(domain, http),
             safebrowsing.check(
                 domain,
                 self.config.keys.safebrowsing if self.config.enable_safebrowsing else "",
@@ -317,7 +360,7 @@ class Pipeline:
             result.captures = await capture.capture_domain(
                 result, self.base, self.wayback_limiter, self.config.enable_capture
             )
-            cache.save(result.domain, result.model_dump(mode="json"), self.base)
+            self._cache(result)
             await self._emit(
                 "capture_done",
                 domain=result.domain,
