@@ -249,6 +249,14 @@ body {
   font-weight: var(--dw-weight-bold);
 }
 
+/* doweek 원본 높이는 37px 이라 손가락으로는 빗나가기 쉽다. DW 가 작은 단추에 쓰는 것과
+   같은 방법으로, 손가락 기기에서만 44px 로 키운다(마우스 화면은 doweek 그대로). */
+@media (pointer: coarse) {
+  .sub-tab {
+    min-height: var(--dw-tap);
+  }
+}
+
 .tab-badge {
   margin-left: 2px;
   padding: 0 4px;
