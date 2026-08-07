@@ -296,7 +296,8 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     @app.get("/style.css")
     async def style() -> Response:
         """UI와 보고서가 같은 스타일을 쓰도록 한 곳에서 내려준다."""
-        return Response(report_html.CSS, media_type="text/css")
+        # 앱을 켠 채로 모양 규칙을 고쳐도 새로고침만 하면 바로 보이도록 그때그때 읽는다
+        return Response(report_html.current_css(), media_type="text/css")
 
     @app.post("/api/preview")
     async def preview(request: PreviewRequest) -> dict:

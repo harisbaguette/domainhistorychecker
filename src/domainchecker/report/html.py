@@ -112,6 +112,31 @@ def build_stylesheet() -> str:
 
 CSS = build_stylesheet()
 
+# 모양 규칙을 앱 켤 때 한 번만 읽어 두면, CSS 를 고쳐도 앱을 껐다 켜기 전에는 화면이 옛 모양
+# 그대로다(실제로 새 화면이 안 나온다는 신고가 있었다). 그래서 스타일 파일들이 마지막으로
+# 바뀐 시각을 보고, 하나라도 바뀌었으면 그 자리에서 다시 읽는다.
+_css_cache: dict[str, object] = {"stamp": None, "text": CSS}
+
+
+def _style_stamp() -> float:
+    """모양 규칙에 쓰이는 파일들이 마지막으로 바뀐 시각 중 가장 늦은 것."""
+    latest = 0.0
+    for one in [STATIC_DIR / "app.css", *DW_DIR.rglob("*.css")]:
+        try:
+            latest = max(latest, one.stat().st_mtime)
+        except OSError:
+            continue
+    return latest
+
+
+def current_css() -> str:
+    """지금 파일에 적혀 있는 모양 규칙. 안 바뀌었으면 읽어 둔 것을 그대로 돌려준다."""
+    stamp = _style_stamp()
+    if _css_cache["stamp"] != stamp:
+        _css_cache["stamp"] = stamp
+        _css_cache["text"] = build_stylesheet()
+    return str(_css_cache["text"])
+
 # lucide 아이콘(ISC) 원본 path 를 그대로 인라인한다 — DW 부품이 아이콘 자리를 전제로
 # 만들어졌고, 이 앱에는 번들러가 없어 lucide-react 를 못 쓴다.
 def _icon(paths: str, size: int = 20, cls: str = "") -> str:
@@ -568,7 +593,7 @@ def write_report(results: list[DomainResult], base: Path | str) -> Path:
     out_dir = Path(base) / "report"
     out_dir.mkdir(parents=True, exist_ok=True)
     # 모양 규칙 한 장. 페이지마다 통째로 끼워 넣으면 도메인 1,000개에 약 78MB 가 된다.
-    (out_dir / "style.css").write_text(CSS, encoding="utf-8")
+    (out_dir / "style.css").write_text(current_css(), encoding="utf-8")
     _copy_fonts(out_dir)
     keep = {"index.html"}
     for result in results:

@@ -40,6 +40,9 @@ body {
 }
 
 .dw-block-shell {
+  /* 뜬 단추(.app-fab)가 이 기둥 안에서 도크 위에 앉아야 한다 — 화면 전체가 아니라
+     440px 기둥을 기준으로 자리를 잡게 하는 기준점이다. */
+  position: relative;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.02), 0 20px 40px rgba(0, 0, 0, 0.1);
 }
 
@@ -60,6 +63,80 @@ body {
    doweek 원본(BottomNav.jsx · MainLayout.jsx)에서 그대로 가져오고, 색만 DW 토큰으로
    바꿔 적었다(doweek 의 --primary 등이 원래 --dw-* 를 가리키고 있어 같은 색이다).
    ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 맨 위 알약 바 = doweek 의 ProjectSwitcher ────────────────────────────────
+   doweek 은 화면 꼭대기에 큰 제목을 두지 않는다. 흰 알약 하나에 색 점과 이름만 담는다. */
+.ps-bar {
+  position: relative;
+  z-index: 60;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  height: 40px;
+  padding: calc(4px + env(safe-area-inset-top)) var(--dw-space-4) 4px;
+  background: var(--dw-bg);
+}
+
+.ps-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 32px;
+  padding: 0 11px;
+  border-radius: var(--dw-radius-pill);
+  background: var(--dw-surface);
+  box-shadow: var(--dw-shadow-1);
+  color: var(--dw-text);
+}
+
+.ps-dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: var(--dw-radius-pill);
+  background: var(--dw-cat-1);
+}
+
+.ps-name {
+  margin: 0;
+  min-width: 0;
+  font-size: 0.82rem;
+  font-weight: var(--dw-weight-bold);
+  line-height: 1;
+  letter-spacing: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── 결과 한 줄 = doweek 의 할일 카드 ────────────────────────────────────────
+   한 줄 한 줄이 흰 카드로 떨어져 있고, 왼쪽에 그 줄의 분류 색 띠가 선다
+   (원본: Z:\Doweek\src\modules\doweek\views\DailyView.jsx 의 .task-row). */
+.dw-list-item-group {
+  gap: 8px;
+}
+
+.dw-list-item[data-verdict] {
+  margin-bottom: 0;
+  background: var(--dw-surface);
+  border-radius: 16px;
+  box-shadow: var(--dw-shadow-1);
+  border-left: 3px solid var(--verdict-color, var(--dw-cat-1));
+  overflow: hidden;
+}
+
+.dw-list-item[data-verdict='BUY'] {
+  --verdict-color: var(--dw-success);
+}
+
+.dw-list-item[data-verdict='REVIEW'] {
+  --verdict-color: var(--dw-warning);
+}
+
+.dw-list-item[data-verdict='REJECT'] {
+  --verdict-color: var(--dw-error);
+}
 
 /* ── 아래 메뉴 = doweek 의 떠 있는 도크 ──────────────────────────────────────
    흰 알약 한 장이 배경 위에 떠 있고, 고른 칸에는 둥근 틴트가 깔리며 그림이 살짝
@@ -291,6 +368,8 @@ body {
 
   .dock-nav,
   .filter-header,
+  .app-fab,
+  .app-runbar,
   .dw-block-shell-action {
     display: none;
   }
@@ -376,61 +455,104 @@ body {
   min-width: 0;
 }
 
-/* 진행률 — 막대가 한 줄, 보고서 단추가 그 아래 줄 */
-.app-progress-row {
+/* ── 진행률 줄 — 검사가 도는 동안에만 화면에 있다 ────────────────────────
+   구르는 본문 바깥(제목 줄과 판정 띠 사이)에 붙어 있어, 목록을 아무리 내려도
+   몇 개 남았는지와 멈추는 단추가 늘 같은 자리에 있다. 안 돌 때는 markup 이
+   통째로 hidden 이라 자리를 한 픽셀도 차지하지 않는다. */
+.app-runbar {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: var(--dw-space-3);
-  margin: var(--dw-space-6) 0 var(--dw-space-2);
-}
-
-/* 검사가 도는 동안에는 진행률이 화면 맨 위에 붙는다 — 목록을 내려다보는 중에도
-   몇 개 남았는지·멈추려면 어디를 눌러야 하는지가 늘 보여야 한다. */
-.app-progress-row[data-running] {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  margin-top: 0;
-  padding: var(--dw-space-2) 0;
+  flex-shrink: 0;
+  padding: 0 var(--dw-space-4) var(--dw-space-3);
   background: var(--dw-bg);
-  box-shadow: 0 var(--dw-space-2) var(--dw-space-2) calc(-1 * var(--dw-space-2)) var(--dw-border);
 }
 
-/* ── 파일 고르기 — DW 에 짝이 되는 부품이 없어 기본 칸을 토큰으로 입힌다 ── */
-.app-file {
-  font-size: var(--dw-size-body);
-  color: var(--dw-text-muted-aa);
-  max-width: 100%;
+.app-runbar .dw-progress {
+  flex: 1;
+  min-width: 0;
 }
 
-.app-file::file-selector-button {
-  font: inherit;
-  font-size: var(--dw-size-body);
-  font-weight: var(--dw-weight-bold);
-  min-height: var(--dw-tap);
-  padding: 0 var(--dw-space-4);
-  margin-right: var(--dw-space-3);
-  cursor: pointer;
-  background: var(--dw-surface);
-  color: var(--dw-text);
-  border: 1.5px solid var(--dw-border-strong);
-  border-radius: var(--dw-radius-control);
-}
-
-/* ── 고르기 줄 — 목록 바로 위에 얹힌 한 장의 종이 ──────────────── */
-.app-filter {
+/* ── 파일 고르기 — 브라우저 기본 단추는 라벨이 영어라("Choose File / No file
+   chosen") 우리 말로 바꿀 수가 없다. 진짜 칸은 화면 낭독기에만 남기고, 눈에
+   보이는 것은 그 칸을 가리키는 라벨 하나로 세운다(DW button 을 그대로 입는다). */
+.app-file-row {
   display: flex;
   flex-direction: column;
-  gap: var(--dw-space-3);
-  margin: var(--dw-space-4) 0;
-  padding: var(--dw-space-3);
+  gap: var(--dw-space-2);
+}
+
+.app-file-label {
+  cursor: pointer;
+}
+
+/* 칸이 화면 밖에 있으니 포커스 링도 대신 라벨이 든다 */
+.app-file-input:focus-visible + .app-file-label {
+  box-shadow: var(--dw-ring);
+}
+
+/* ── 개수 판 — 이 도구가 내놓는 답을 숫자 하나로 먼저 던진다 ──────────────
+   못 사는 것은 기본으로 숨는다. 숨기고 나면 목록에 남는 줄이 전부 '살 수 있는 것'
+   이라, 눈이 좇을 축이 판정 도장 하나로 줄어든다. 숨긴 개수는 아랫줄이 들고,
+   그 아랫줄이 곧 여닫는 단추다 — 그래서 설명 문장을 한 줄도 두지 않는다. */
+.app-tally {
+  padding: 0 var(--dw-space-4);
   background: var(--dw-surface);
   border-radius: var(--dw-radius-card);
-  box-shadow: var(--dw-shadow-1);
+  box-shadow: var(--dw-shadow-glass);
 }
 
-.app-filter .muted {
+.app-tally-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--dw-space-2);
   margin: 0;
+  padding: var(--dw-space-3) 0;
+}
+
+.app-tally-num {
+  font-family: var(--dw-font-display);
+  /* 크기 3단 위로 한 칸 더 — 이 숫자 하나가 화면에서 제일 큰 글자여야 한다 */
+  font-size: calc(var(--dw-size-display) * 1.8);
+  font-weight: var(--dw-weight-black);
+  line-height: var(--dw-leading-tight);
+  letter-spacing: var(--dw-tracking-display);
+  color: var(--dw-accent-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.app-tally-label {
+  font-size: var(--dw-size-body);
+  font-weight: var(--dw-weight-bold);
+  color: var(--dw-text);
+}
+
+.app-tally-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--dw-space-2);
+  width: 100%;
+  min-height: var(--dw-tap);
+  background: transparent;
+  border-top: 1px solid var(--dw-border-strong);
+  font-size: var(--dw-size-micro);
+  color: var(--dw-text-muted-aa);
+  text-align: left;
+}
+
+.app-tally-toggle svg {
+  flex-shrink: 0;
+  transition: transform var(--dw-duration-slow) var(--dw-ease);
+}
+
+.app-tally-toggle[aria-pressed='true'] svg {
+  transform: rotate(180deg);
+}
+
+/* 내보내기는 목록을 다 훑고 난 끝에 온다 — 맨 아래 한 줄 */
+.app-list-foot {
+  margin-top: var(--dw-space-2);
 }
 
 /* ── 결과 한 줄(DW list-item)에 붙는 자리 ────────────────────────── */
@@ -447,12 +569,29 @@ a.dw-list-item {
   overflow-wrap: anywhere;
 }
 
-/* 점수는 이 도구가 내놓는 답이다 — 메타 회색으로 흐려지지 않게 본문 잉크로 세운다 */
+/* 점수는 이 도구가 내놓는 답이 아니다 — 답은 판정 도장이다. 예전에는 점수를 굵은
+   본문 잉크로 제일 크게 세워 두어, 못 사는 도메인이 높은 점수만으로 맨 위처럼
+   읽혔다. 조용한 회색 메타로 내린다. */
 .app-score {
-  color: var(--dw-text);
-  font-weight: var(--dw-weight-bold);
+  color: var(--dw-text-muted-aa);
+  font-size: var(--dw-size-micro);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+/* 지금 살 수 있는 것만 글자에 힘을 준다 — 색과 굵기 하나로 '살 수 있나'를 나른다 */
+.app-avail {
+  font-size: var(--dw-size-micro);
+  color: var(--dw-text-muted-aa);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-avail[data-buy='yes'] {
+  color: var(--dw-success-ink);
+  font-weight: var(--dw-weight-bold);
 }
 
 /* ── 배지 줄 — 판정 도장과 취득 상태가 나란히 선다 ───────────────── */
@@ -561,4 +700,175 @@ a.dw-list-item {
 .app-howto ol {
   margin: var(--dw-space-2) 0;
   padding-left: var(--dw-space-6);
+}
+
+/* ── 뜬 단추 — 넣기는 탭이 아니다 ────────────────────────────────────────────
+   넣는 일은 한 번, 고르는 일은 수백 번이다. 그래서 넣기에는 탭 한 칸을 내주지
+   않고, 목록 위에 떠 있는 단추 하나만 둔다. 도크 바로 위에 앉는다
+   (도크 높이 = 위아래 여백 12px 두 번 + 알약 68px). */
+.app-fab {
+  position: absolute;
+  right: var(--dw-space-4);
+  bottom: calc(68px + var(--dw-space-3) * 3 + env(safe-area-inset-bottom));
+  z-index: 20;
+  width: auto;
+  border-radius: var(--dw-radius-pill);
+  box-shadow: var(--dw-shadow-2);
+}
+
+/* 마지막 줄이 뜬 단추에 가리지 않게 목록 끝에 그만큼 숨을 둔다 */
+#list {
+  padding-bottom: calc(52px + var(--dw-space-6));
+}
+
+/* ── 덮는 판 — 넣기와 상세 ──────────────────────────────────────────────────
+   둘 다 목록 위를 통째로 덮는다. 화면을 옮겨 다니는 것이 아니라 '위에 얹혔다가
+   치워지는' 것이라, 뒤로 단추 하나면 늘 목록으로 돌아온다. 판이 열려 있는 동안
+   뒤 화면은 inert 라 눈에도 안 보이고 Tab 으로도 안 들어간다(index.html 이 건다). */
+.app-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  justify-content: center;
+  background: var(--dw-scrim);
+}
+
+.app-sheet-panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: var(--dw-app-max-width);
+  height: 100%;
+  background: var(--dw-bg);
+}
+
+/* DW 제목 줄은 제목이 먼저 오는 것을 전제로 만들어졌다. 이 판은 뒤로 단추가
+   앞에 서므로, 남은 자리를 제목이 다 쓰도록 여기서만 늘려 준다. */
+.app-sheet .dw-block-shell-title {
+  flex: 1;
+  font-size: var(--dw-size-title);
+  overflow-wrap: anywhere;
+}
+
+.app-sheet-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dw-space-4);
+  flex: 1;
+  min-height: 0;
+  padding: 0 var(--dw-space-4) var(--dw-space-4);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* 시작 단추는 판 아래에 붙박이다 — 아무리 길게 붙여넣어도 굴려서 찾지 않는다 */
+.app-sheet-foot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dw-space-3);
+  flex-shrink: 0;
+  padding: var(--dw-space-3) var(--dw-space-4)
+    calc(var(--dw-space-4) + env(safe-area-inset-bottom));
+  background: var(--dw-bg);
+  border-top: 1px solid var(--dw-border-strong);
+}
+
+/* 붙여넣는 칸이 판을 가득 채운다 — 넣는 화면에서 할 일은 그것 하나뿐이다 */
+.app-paste {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 180px;
+}
+
+.app-paste .dw-textarea {
+  flex: 1;
+  resize: none;
+}
+
+/* 붙여넣는 즉시 뜨는 한 줄 — 개수 · 걸리는 시간 · 드는 돈, 그것뿐이다 */
+.app-tape {
+  margin: 0;
+  padding: var(--dw-space-3) var(--dw-space-4);
+  border-radius: var(--dw-radius-control);
+  background: var(--dw-accent-bg);
+  color: var(--dw-info-ink);
+  font-size: var(--dw-size-body);
+  font-weight: var(--dw-weight-bold);
+}
+
+/* ── 상세 맨 위 한 마디 — 사라 / 사지 마라 / 애매하다 ──────────────────────
+   근거를 읽기 전에 답이 먼저 와야 한다. 면 색은 DW alert 가 쓰는 tint·ink 짝을
+   그대로 빌려 쓴다(대비가 이미 맞춰져 있는 조합이다). */
+.app-call {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--dw-space-2) var(--dw-space-4);
+  padding: var(--dw-space-4);
+  border-radius: var(--dw-radius-card);
+}
+
+.app-call[data-call='buy'] {
+  background: var(--dw-success-bg);
+  color: var(--dw-success-ink);
+}
+
+.app-call[data-call='no'] {
+  background: var(--dw-error-bg);
+  color: var(--dw-error-ink);
+}
+
+.app-call[data-call='maybe'] {
+  background: var(--dw-warning-bg);
+  color: var(--dw-warning-ink);
+}
+
+.app-call-mark {
+  font-family: var(--dw-font-display);
+  font-size: calc(var(--dw-size-display) * 1.4);
+  font-weight: var(--dw-weight-black);
+  line-height: var(--dw-leading-tight);
+  letter-spacing: var(--dw-tracking-display);
+  white-space: nowrap;
+}
+
+.app-call-sub {
+  margin: 0;
+  font-size: var(--dw-size-micro);
+  font-weight: var(--dw-weight-bold);
+}
+
+/* ── 그렇게 본 이유 — 번호 하나에 한 줄 ─────────────────────────────────── */
+.app-why {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dw-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.app-why li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: var(--dw-space-3);
+  font-size: var(--dw-size-body);
+  line-height: var(--dw-leading-body);
+}
+
+.app-why-no {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--dw-space-6);
+  height: var(--dw-space-6);
+  border-radius: var(--dw-radius-pill);
+  background: var(--dw-accent-soft);
+  color: var(--dw-accent-strong);
+  font-size: var(--dw-size-micro);
+  font-weight: var(--dw-weight-bold);
+  font-variant-numeric: tabular-nums;
 }
