@@ -463,6 +463,7 @@ const navTabs = [...document.querySelectorAll(".dock-item")];
 navTabs.forEach((b) => { b.onclick = () => show(b.dataset.go); });
 let screenNow = "list";
 function show(name) {
+  const changed = name !== screenNow;
   screenNow = name;
   document.querySelectorAll(".screen").forEach((s) => s.classList.toggle("on", s.id === name));
   navTabs.forEach((b) => {
@@ -477,6 +478,8 @@ function show(name) {
   showFilterHeader();
   // 구르는 것은 페이지가 아니라 뼈대의 가운데 칸이다
   $("main").scrollTop = 0;
+  // 사람이 탭을 눌러 바꾼 것일 때만 발자국을 남긴다 — 뒤로가기가 이 발자국을 밟는다
+  if (changed && !syncingFromPopstate) history.pushState({screen: name, sheet: null}, "");
 }
 function showFilterHeader() {
   $("filterHeader").hidden = !(screenNow === "list" && rows.size > 0);
@@ -488,12 +491,15 @@ let sheetNow = null;
 let sheetOpener = null;   // 판을 연 단추 — 닫으면 커서가 여기로 돌아간다
 function openSheet(id, focusId) {
   // 판 안에서 다음/이전으로 옮겨 다닐 때는 처음 연 자리를 그대로 기억한다
+  const alreadyOpen = sheetNow === id;
   if (!sheetNow) sheetOpener = document.activeElement;
   sheetNow = id;
   $(id).hidden = false;
   $("shell").inert = true;
   const target = $(focusId);
   if (target) target.focus({preventScroll: true});
+  // 이미 열린 판 안에서 도메인만 옆으로 넘기는 것이면 발자국을 또 남기지 않는다
+  if (!alreadyOpen && !syncingFromPopstate) history.pushState({screen: screenNow, sheet: id}, "");
 }
 function closeSheet() {
   if (!sheetNow) return;
@@ -503,7 +509,27 @@ function closeSheet() {
   // 300번째 줄을 열었다 닫아도 맨 위부터 다시 Tab 하지 않게, 연 자리로 돌려보낸다
   if (sheetOpener && sheetOpener.isConnected) sheetOpener.focus({preventScroll: true});
   sheetOpener = null;
+  // 사람이 닫기를 눌러 닫은 것이면, 열 때 남긴 발자국도 지운다(뒤로가기 한 번 몫)
+  if (!syncingFromPopstate) history.back();
 }
+
+/* ---------- 뒤로가기로 메뉴·판 되돌리기 ----------
+   여기서 화면을 바꾸거나 판을 열어도 브라우저는 그걸 모른다. 그래서 설정 화면이나
+   상세 판을 보다가 (휴대폰이나 브라우저의) 뒤로가기를 누르면 메뉴가 이전 자리로
+   안 돌아가고 페이지 자체가 통째로 닫혀 버린다. 화면·판을 바꿀 때마다 발자국을
+   하나씩 남기고, 뒤로가기를 누르면 그 발자국을 밟고 이전 메뉴·판으로 돌아온다. */
+let syncingFromPopstate = false;
+history.replaceState({screen: screenNow, sheet: sheetNow}, "");
+window.addEventListener("popstate", (e) => {
+  syncingFromPopstate = true;
+  const state = e.state || {screen: "list", sheet: null};
+  if (sheetNow && sheetNow !== state.sheet) closeSheet();
+  if (state.sheet && state.sheet !== sheetNow) {
+    openSheet(state.sheet, state.sheet === "sheetDetail" ? "closeDetail" : "raw");
+  }
+  if (state.screen && state.screen !== screenNow) show(state.screen);
+  syncingFromPopstate = false;
+});
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && sheetNow) { e.preventDefault(); closeSheet(); }
   // 상세가 열려 있을 때 좌우 화살표 = 이전/다음 도메인 (글 쓰는 칸 안에서는 안 뺏는다)
