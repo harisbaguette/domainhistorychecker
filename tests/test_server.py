@@ -462,3 +462,43 @@ def test_clear_keys_removes_saved_keys(client, config_path):
     assert data["has_key"]["virustotal"] is False
     assert data["enable_virustotal"] is False
     assert config_module.load(config_path).keys.serper == ""
+
+
+def test_write_results_keeps_earlier_batches(config_path, sample_result):
+    """묶음을 나눠 검사해도 results.json 이 지난 회차를 덮어쓰면 안 된다."""
+    from domainchecker.pipeline import Pipeline
+
+    config = config_module.load(config_path)
+    pipe = Pipeline(config)
+    first = judge(sample_result.model_copy(update={"domain": "first-batch.com"}))
+    second = judge(sample_result.model_copy(update={"domain": "second-batch.com"}))
+    pipe.write_results([first])
+    pipe.write_results([second])
+
+    data = json.loads(
+        (config_module.data_dir(config) / "results.json").read_text(encoding="utf-8")
+    )
+    assert sorted(r["domain"] for r in data["results"]) == [
+        "first-batch.com",
+        "second-batch.com",
+    ]
+    assert data["count"] == 2
+
+
+def test_results_list_unions_saved_file_and_cache(client, config_path, sample_result):
+    """저장 파일과 캐시에 나뉘어 있어도 목록에는 둘 다 나와야 한다.
+
+    예전에는 처음 걸리는 한 곳만 읽어서, 새 검사를 시작하는 순간
+    지난 회차 결과가 화면에서 통째로 사라졌다.
+    """
+    base = config_module.data_dir(config_module.load(config_path))
+    cached = judge(sample_result.model_copy(update={"domain": "cached-only.com"}))
+    cache.save("cached-only.com", cached.model_dump(mode="json"), base)
+    saved = judge(sample_result.model_copy(update={"domain": "saved-only.com"}))
+    (base / "results.json").write_text(
+        json.dumps({"results": [saved.model_dump(mode="json")]}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    listed = client.get("/api/results").json()["results"]
+    assert sorted(r["domain"] for r in listed) == ["cached-only.com", "saved-only.com"]

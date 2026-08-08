@@ -26,7 +26,7 @@ from . import config as config_module
 from .config import MODEL_CHAIN, Config
 from .models import DomainResult
 from .normalize import MAX_DOMAINS, parse_domains
-from .pipeline import Pipeline, clear_run_state, load_run_state, save_run_state
+from .pipeline import Pipeline, clear_run_state, is_stale, load_run_state, save_run_state
 from .report import html as report_html
 
 STATIC_DIR = Path(__file__).resolve().parents[2] / "static"
@@ -298,27 +298,33 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         app.mount("/fonts", StaticFiles(directory=STATIC_DIR / "fonts"), name="fonts")
 
     def stored_results() -> list[DomainResult]:
-        """This run's results, else the last results.json, else whatever is cached.
+        """Union of this run, results.json and the cache — newest source wins.
 
-        앱을 껐다 켠 뒤에도 예전에 검사해 둔 도메인으로 보고서를 만들 수 있어야 한다.
+        예전에는 셋 중 처음 걸리는 한 곳만 읽었다. 그래서 새 검사를 시작하는 순간
+        지난 회차 결과가 화면에서 통째로 사라졌다 — 묶음을 나눠 검사하는 사람이
+        먼저 검사한 것을 잃지 않도록, 세 곳을 도메인별로 합쳐서 돌려준다.
         """
         base_dir = data_root()
-        payloads: list[dict] = list(manager.results.values())
-        if not payloads:
-            path = base_dir / "results.json"
-            if path.exists():
-                try:
-                    payloads = json.loads(path.read_text(encoding="utf-8")).get("results", [])
-                except (OSError, ValueError):
-                    payloads = []
-        if not payloads:
-            payloads = [
-                found
-                for domain in sorted(cache.cached_domains(base_dir))
-                if (found := cache.load(domain, base_dir))
-            ]
+        cache_days = load_config().cache_days
+        merged: dict[str, dict] = {}
+        for domain in sorted(cache.cached_domains(base_dir)):
+            found = cache.load(domain, base_dir)
+            # 믿는 기간(cache_days)이 지난 저장분은 목록에 되살리지 않는다 —
+            # 옛날에 시험 삼아 검사한 도메인이 슬그머니 다시 나타나면 안 된다.
+            if found and not is_stale(found, cache_days, engine_counts=False):
+                merged[str(found.get("domain", domain))] = found
+        path = base_dir / "results.json"
+        if path.exists():
+            try:
+                for payload in json.loads(path.read_text(encoding="utf-8")).get("results", []):
+                    if payload.get("domain"):
+                        merged[str(payload["domain"])] = payload
+            except (OSError, ValueError):
+                pass  # 깨진 파일이면 캐시 몫만 보여 준다
+        for domain, payload in manager.results.items():
+            merged[domain] = payload
         out = []
-        for payload in payloads:
+        for payload in merged.values():
             try:
                 out.append(DomainResult.model_validate(payload))
             except ValueError:

@@ -66,19 +66,23 @@ def clear_run_state(base: Path | str) -> None:
         run_state_path(base).unlink(missing_ok=True)
 
 
-def is_stale(payload: dict, max_days: int) -> bool:
+def is_stale(payload: dict, max_days: int, *, engine_counts: bool = True) -> bool:
     """오래된 저장분은 다시 검사한다.
 
     "지금 등록 가능(주인 없음)" 같은 답은 하루만 지나도 뒤집힌다 — 묵은 답을
     오늘 것처럼 보여 주면 이미 남이 사 간 도메인을 사러 가게 만든다.
     검사 방식이 바뀐 뒤의 저장분도 마찬가지로 믿지 않는다.
     """
-    try:
-        engine = int(payload.get("engine") or 0)
-    except (TypeError, ValueError):
-        engine = 0
-    if engine < ENGINE_VERSION:
-        return True
+    # 검사 방식이 옛날 것인지는 "다시 검사할까"를 정할 때만 본다. 목록에 보여 줄지를
+    # 정하는 쪽(server.stored_results)은 날짜만 본다 — 방식이 옛날 것이어도 결과를
+    # 숨기면 사람이 이미 검사한 것을 잃어버린다.
+    if engine_counts:
+        try:
+            engine = int(payload.get("engine") or 0)
+        except (TypeError, ValueError):
+            engine = 0
+        if engine < ENGINE_VERSION:
+            return True
     if max_days <= 0:
         return False
     stamp = str(payload.get("finished_at") or "")
@@ -376,10 +380,23 @@ class Pipeline:
 
     def write_results(self, results: list[DomainResult]) -> Path:
         path = self.base / "results.json"
+        # 지난 회차 결과 위에 덮어쓰지 않고 합친다 — 묶음을 나눠 검사해도 목록이
+        # 쌓여야 한다. 같은 도메인은 이번 결과가 이긴다(다시 검사한 쪽이 최신).
+        fresh = {r.domain: r.model_dump(mode="json") for r in results}
+        kept: list[dict] = []
+        if path.exists():
+            try:
+                for row in json.loads(path.read_text(encoding="utf-8")).get("results", []):
+                    domain = str(row.get("domain", ""))
+                    if domain and domain not in fresh:
+                        kept.append(row)
+            except (OSError, ValueError):
+                kept = []  # 깨진 파일이면 이번 결과로 새로 만든다
+        merged = kept + list(fresh.values())
         payload = {
             "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
-            "count": len(results),
-            "results": [r.model_dump(mode="json") for r in results],
+            "count": len(merged),
+            "results": merged,
         }
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         return path
