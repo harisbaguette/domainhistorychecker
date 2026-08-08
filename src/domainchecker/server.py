@@ -26,7 +26,7 @@ from . import config as config_module
 from .config import MODEL_CHAIN, Config
 from .models import DomainResult
 from .normalize import MAX_DOMAINS, parse_domains
-from .pipeline import Pipeline, clear_run_state, load_run_state
+from .pipeline import Pipeline, clear_run_state, load_run_state, save_run_state
 from .report import html as report_html
 
 STATIC_DIR = Path(__file__).resolve().parents[2] / "static"
@@ -47,6 +47,12 @@ class RunRequest(BaseModel):
 
 class PreviewRequest(BaseModel):
     raw: str = ""
+
+
+class PurgeRequest(BaseModel):
+    """목록에서 치울 도메인들 — 주인이 있어 살 수 없는 줄을 걷어내는 데 쓴다."""
+
+    domains: list[str] = []
 
 
 class ConfigRequest(BaseModel):
@@ -432,6 +438,60 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         manager.pending.clear()
         return {"cleared": True}
 
+    @app.post("/api/results/purge")
+    async def purge_results(request: PurgeRequest) -> dict:
+        """고른 도메인만 지운다 — 저장분·캐시·화면 사진까지 함께.
+
+        전부 지우기(DELETE /api/results)와 같은 자리를 건드리되 범위만 좁힌다.
+        한 곳만 지우면 다음에 켤 때 지운 줄이 되살아난다(stored_results 가
+        results.json → 캐시 순으로 되읽기 때문).
+        """
+        if manager.running:
+            raise HTTPException(
+                status_code=409, detail="검사가 도는 동안에는 지울 수 없습니다. 먼저 중단해 주세요."
+            )
+        targets = {d.strip().lower() for d in request.domains if d.strip()}
+        if not targets:
+            raise HTTPException(status_code=400, detail="지울 도메인이 없습니다.")
+
+        base_dir = data_root()
+        for domain in targets:
+            cache.cache_path(domain, base_dir).unlink(missing_ok=True)
+
+        path = base_dir / "results.json"
+        if path.exists():
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                kept = [
+                    r for r in payload.get("results", [])
+                    if str(r.get("domain", "")).lower() not in targets
+                ]
+                payload["results"] = kept
+                payload["count"] = len(kept)
+                path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            except (OSError, ValueError):
+                pass  # 파일이 깨져 있으면 캐시만 지운 것으로 둔다 — 여기서 더 부수지 않는다
+
+        captures_dir = base_dir / "captures"
+        if captures_dir.exists():
+            for domain in targets:
+                stem = cache.cache_path(domain, base_dir).stem
+                for shot in captures_dir.glob(f"{stem}_*.png"):
+                    shot.unlink(missing_ok=True)
+
+        for domain in targets:
+            manager.results.pop(domain, None)
+        manager.domains = [d for d in manager.domains if d.lower() not in targets]
+
+        # "이어서 검사" 목록에서도 빼야 한다 — 안 빼면 앱을 다시 켜고 이어서 검사를
+        # 누르는 순간 방금 치운 줄이 그대로 되살아난다.
+        left = [d for d in load_run_state(base_dir) if d.lower() not in targets]
+        if left:
+            save_run_state(base_dir, left)
+        else:
+            clear_run_state(base_dir)
+        return {"removed": len(targets)}
+
     @app.get("/api/results/{domain}")
     async def result_one(domain: str) -> dict:
         return one_result(domain).model_dump(mode="json")
@@ -506,6 +566,8 @@ LOCAL_HOSTS = ("127.0.0.1", "localhost", "::1")
 
 def main() -> None:
     """Entry point used by 시작.command / 시작.bat."""
+    from importlib.util import find_spec
+
     import uvicorn
 
     host = os.environ.get("DOMAINCHECKER_HOST", "127.0.0.1")
@@ -517,7 +579,18 @@ def main() -> None:
             "  DOMAINCHECKER_PASSWORD=원하는비밀번호 DOMAINCHECKER_HOST=0.0.0.0 uv run domainchecker\n"
             "(비밀번호 없이 밖으로 열면 저장해 둔 API 키가 그대로 새어 나갑니다.)"
         )
-    uvicorn.run("domainchecker.server:app", host=host, port=port, log_level="info")
+    # 개발용: DOMAINCHECKER_RELOAD=1 이면 파이썬 파일을 고칠 때마다 서버가 스스로 다시 켜진다.
+    reload = os.environ.get("DOMAINCHECKER_RELOAD", "").strip().lower() in {"1", "true", "yes", "on"}
+    if reload and find_spec("watchfiles") is None:
+        raise SystemExit("자동 재시작을 쓰려면 먼저 `uv sync --group dev` 를 한 번 실행해 주세요.")
+    uvicorn.run(
+        "domainchecker.server:app",
+        host=host,
+        port=port,
+        log_level="info",
+        reload=reload,
+        reload_dirs=[str(Path(__file__).resolve().parent)] if reload else None,
+    )
 
 
 if __name__ == "__main__":

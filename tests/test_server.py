@@ -7,10 +7,11 @@ from typing import ClassVar
 import pytest
 from fastapi.testclient import TestClient
 
+from domainchecker import cache, server
 from domainchecker import config as config_module
-from domainchecker import server
 from domainchecker.analyze.scoring import judge
 from domainchecker.config import Config
+from domainchecker.pipeline import load_run_state, save_run_state
 from domainchecker.server import create_app, estimate
 
 
@@ -404,6 +405,50 @@ def test_clear_results_wipes_files_and_memory(client, fake_run, config_path):
     base = config_module.data_dir(config_module.load(config_path))
     assert not (base / "results.json").exists()
     assert not (base / "run_state.json").exists()
+
+
+def test_purge_results_removes_only_the_named_domains(client, fake_run, sample_result, config_path):
+    """고른 것만 지우기 — 남긴 도메인은 그대로 있고, 지운 것은 다시 켜도 안 살아난다."""
+    client.post("/api/run", json={"raw": "example.com\nfoo.net"})
+    read_sse(client)
+    assert len(client.get("/api/results").json()["results"]) == 2
+
+    # 검사가 끝나면 파이프라인이 남기는 두 자리(저장 파일·도메인별 캐시)를 그대로 깔아 둔다
+    base = config_module.data_dir(config_module.load(config_path))
+    payload = judge(sample_result).model_dump(mode="json")
+    saved = [{**payload, "domain": "example.com"}, {**payload, "domain": "foo.net"}]
+    (base / "results.json").write_text(
+        json.dumps({"count": 2, "results": saved}, ensure_ascii=False), encoding="utf-8"
+    )
+    for one in saved:
+        cache.save(one["domain"], one, base)
+    (base / "captures").mkdir(parents=True, exist_ok=True)
+    (base / "captures" / "foo.net_20200101.png").write_bytes(b"png")
+    save_run_state(base, ["example.com", "foo.net"])
+
+    manager = client.app.state.manager
+    manager.running = True
+    assert client.post("/api/results/purge", json={"domains": ["foo.net"]}).status_code == 409
+    manager.running = False
+
+    assert client.post("/api/results/purge", json={"domains": []}).status_code == 400
+
+    res = client.post("/api/results/purge", json={"domains": ["foo.net"]})
+    assert res.status_code == 200
+    assert res.json()["removed"] == 1
+
+    left = client.get("/api/results").json()["results"]
+    assert [r["domain"] for r in left] == ["example.com"]
+
+    # 저장 파일·캐시·화면 사진 세 자리에서 다 빠져야 앱을 다시 켰을 때도 안 돌아온다
+    on_disk = json.loads((base / "results.json").read_text(encoding="utf-8"))
+    assert [r["domain"] for r in on_disk["results"]] == ["example.com"]
+    assert on_disk["count"] == 1
+    assert not (base / "cache" / "foo.net.json").exists()
+    assert (base / "cache" / "example.com.json").exists()
+    assert not (base / "captures" / "foo.net_20200101.png").exists()
+    # 이어서 검사 목록에도 남으면 안 된다 — 남으면 지운 줄이 다음 검사에 되살아난다
+    assert load_run_state(base) == ["example.com"]
 
 
 def test_clear_keys_removes_saved_keys(client, config_path):
