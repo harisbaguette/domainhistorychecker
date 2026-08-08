@@ -11,10 +11,12 @@
    그래서 여기서도 제목만이 아니라 본문까지 같은 글씨로 간다(운영자 지시 2026-08-07).
    이름을 base.css 의 것과 다르게 지었다 — 같은 이름이면 브라우저가 base.css 에 적힌
    (이 앱에 없는) 경로까지 같이 받으러 가 404 가 난다. */
+/* doweek 원본(src/index.css)처럼 normal 로 등록한다 — "100~900 다 있다"고 적으면
+   브라우저가 굵게 만들기(합성 볼드)를 그만둬서 앱 전체의 굵기 차이가 죽는다. */
 @font-face {
   font-family: 'DoweekHand';
   src: url('fonts/MemomentKkukkukk.woff2') format('woff2');
-  font-weight: 100 900;
+  font-weight: normal;
   font-style: normal;
   font-display: swap;
 }
@@ -22,6 +24,36 @@
 :root {
   --dw-font-display: 'DoweekHand', 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
   --dw-font-body: 'DoweekHand', 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
+  /* 판독용 글자 — 도메인 이름·점수는 읽는 게 일이라 손글씨 대신 이 글꼴을 쓴다 */
+  --font-data: 'Segoe UI', 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
+  /* doweek 원본 카드 그림자(--shadow-sm) — DW 토큰(0.04)보다 한 단 또렷하다 */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+/* 도메인·점수·경로는 판독 대상 데이터다 — 손글씨로 쓰면 1과 0, \ 가 안 읽힌다 */
+.app-domain,
+.app-score,
+#detailTitle {
+  font-family: var(--font-data);
+}
+
+code {
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
+
+/* 흐린 안내 글자도 글자다 — 본문 바닥선(4.5:1)을 지키는 회색만 쓴다 */
+.dw-input::placeholder,
+.dw-textarea::placeholder {
+  color: var(--dw-text-muted-aa);
+}
+
+/* DW 정본은 포커스 표시를 그림자로 만드는데, 제 그림자를 가진 부품이 그걸 덮어
+   지워 버린다. 그림자와 상관없는 바깥 테두리로 다시 세운다. */
+:where(.dock-fab, .dock-item, .dw-list-item, .sub-tab, .app-tally-toggle, .ps-pill):focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--dw-accent-strong) 45%, transparent);
+  outline-offset: 2px;
 }
 
 /* 손글씨는 글자 몸통이 세로로 짧아 같은 크기에서도 작아 보인다. 제목 자리만 키운다. */
@@ -87,7 +119,7 @@ body {
   padding: 0 11px;
   border-radius: var(--dw-radius-pill);
   background: var(--dw-surface);
-  box-shadow: var(--dw-shadow-1);
+  box-shadow: var(--shadow-sm);
   color: var(--dw-text);
 }
 
@@ -122,21 +154,74 @@ body {
   margin-bottom: 0;
   background: var(--dw-surface);
   border-radius: var(--dw-radius-card);
-  box-shadow: var(--dw-shadow-1);
+  box-shadow: var(--shadow-sm);
+  /* 원본 할일 카드의 속 여백(15px 16px) — DW 기본(12px)보다 세로가 한 숨 넉넉하다 */
+  padding: 15px var(--dw-space-4);
   border-left: 3px solid var(--verdict-color, var(--dw-cat-1));
   overflow: hidden;
+  /* 원본의 손맛 — 들어올 때 아래에서 떠오르고, 마우스를 올리면 살짝 뜬다 */
+  animation: cardIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 
+@keyframes cardIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .dw-list-item[data-verdict]:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+  }
+}
+
+.dw-list-item[data-verdict]:active {
+  transform: scale(0.985);
+  transition: transform 0.08s ease;
+}
+
+/* 띠 색을 판정 도장과 같은 잉크로 맞춘다 — 같은 판정이 두 가지 색으로 보이지 않게 */
 .dw-list-item[data-verdict='BUY'] {
-  --verdict-color: var(--dw-success);
+  --verdict-color: var(--dw-success-ink);
 }
 
 .dw-list-item[data-verdict='REVIEW'] {
-  --verdict-color: var(--dw-warning);
+  --verdict-color: var(--dw-warning-ink);
 }
 
 .dw-list-item[data-verdict='REJECT'] {
-  --verdict-color: var(--dw-error);
+  --verdict-color: var(--dw-error-ink);
+}
+
+/* "제외" 판정 줄에서는 초록 강조를 끈다 — 멈추라는 줄에 가라는 색을 같이 켜지 않는다 */
+.dw-list-item[data-verdict='REJECT'] .app-avail[data-buy='yes'] {
+  color: var(--dw-text-muted-aa);
+  font-weight: var(--dw-weight-regular, 400);
+}
+
+/* 한 번 열어 본 줄은 제목을 한 단 눕힌다 — 수백 개를 훑을 때 '본 것' 표시 */
+.dw-list-item[data-seen] .dw-list-item-title {
+  color: var(--dw-text-muted-aa);
+}
+
+/* 한줄평은 두 줄까지만 — 수백 개를 훑는 목록에서 줄 높이가 널뛰면 손이 느려진다.
+   전문은 그 줄을 눌러 상세에서 읽는다. */
+.dw-list-item[data-verdict] .dw-list-item-description {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  white-space: normal;
 }
 
 /* ── 아래 메뉴 = doweek 의 떠 있는 도크 ──────────────────────────────────────
@@ -159,8 +244,10 @@ body {
   --dock-height: 68px;
 }
 
-/* 넣기 단추 = doweek 의 .dock-fab — 도크 한가운데 위 테를 살짝 넘어 앉는 둥근 단추.
-   아래 1/3 이 도크 유리판 뒤로 들어가(z-index 1 < 2) 반쯤 파묻힌 모양이 된다. */
+/* 넣기 단추 = doweek 의 .dock-fab — 도크 한가운데 위 테에 걸쳐 앉는 둥근 단추.
+   원본은 유리판 뒤(z 1<2)에 파묻지만, 여기는 칸이 2개라 + 가 두 칸의 경계선에
+   걸린다 — 뒤에 두면 단추 아래 1/3 을 누를 때 유리판이 가로채 엉뚱한 칸이 열린다
+   (실측으로 확인). 그래서 단추를 유리판 앞(z 3)에 세워 동그라미 전체가 눌리게 한다. */
 .dock-fab {
   position: absolute;
   top: 0;
@@ -177,7 +264,7 @@ body {
   background: var(--dw-accent-strong);
   cursor: pointer;
   padding: 0;
-  z-index: 1;
+  z-index: 3;
   transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.22s;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.35),
@@ -242,8 +329,9 @@ body {
 .dock-page {
   min-width: 100%;
   display: grid;
-  grid-template-columns: repeat(var(--dock-cols, 3), minmax(0, 96px));
-  justify-content: center;
+  /* 원본은 다섯 칸이 바를 끝까지 채운다 — 두 칸도 같은 규칙으로 바를 나눠 갖는다.
+     96px 상한을 두면 절반이 눌러도 반응 없는 빈 흰 판이 된다(실측 44%). */
+  grid-template-columns: repeat(var(--dock-cols, 3), minmax(0, 1fr));
   align-items: center;
   padding: 9px 0 8px;
 }
@@ -258,7 +346,8 @@ body {
   height: 51px;
   gap: 3px;
   padding: 0;
-  color: rgba(0, 0, 0, 0.28);
+  /* 원본 값(0.28)은 흰 바탕에서 2:1 — 글자 바닥선(4.5:1)을 지키는 밝기로 올린다 */
+  color: rgba(0, 0, 0, 0.55);
   background: transparent;
   transition: color 0.18s;
 }
@@ -306,7 +395,7 @@ body {
 
 @media (hover: hover) and (pointer: fine) {
   .dock-item:not([data-current]):hover {
-    color: rgba(0, 0, 0, 0.45);
+    color: rgba(0, 0, 0, 0.72);
   }
 
   .dock-item:not([data-current]):hover::before {
@@ -335,9 +424,15 @@ body {
 .filter-header {
   flex-shrink: 0;
   z-index: 50;
-  /* doweek 머리줄과 같은 간격 — 알약 바와 띠 사이에도 12px 숨이 있다 */
-  padding: var(--dw-space-3) var(--dw-space-4);
+  /* 위 12px 는 doweek 머리줄 간격. 아래 숨은 본문 첫 칸(12px)이 든다 —
+     여기서도 주면 목록 화면만 24px 로 벌어져 화면마다 시작선이 튄다. */
+  padding: var(--dw-space-3) var(--dw-space-4) 0;
   background: var(--dw-bg);
+}
+
+/* 어느 화면이든 본문 첫 글자는 위에서 12px — 목록↔설정을 오가도 시작선이 안 튄다 */
+.dw-block-shell-body {
+  padding-top: var(--dw-space-3);
 }
 
 .task-sub-tabs {
@@ -347,7 +442,7 @@ body {
   padding: 4px;
   background: var(--dw-surface);
   border-radius: 14px;
-  box-shadow: var(--dw-shadow-1);
+  box-shadow: var(--shadow-sm);
 }
 
 .task-sub-tabs::before {
@@ -372,29 +467,23 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  padding: 8px 2px;
+  /* 원본의 보통 탭 값(8px 4px) — 빽빽한 값(dense)은 칸이 다섯 넘을 때만 쓴다 */
+  padding: 8px 4px;
   border-radius: 10px;
   background: transparent;
-  /* doweek 은 칸이 다섯 이상일 때만 0.74rem 으로 좁힌다(dense-tabs). 여기는 넷이라 기본값. */
   font-size: 0.875rem;
   font-weight: var(--dw-weight-medium, 500);
   white-space: nowrap;
   color: var(--dw-text-muted-aa);
   transition: color 0.2s;
+  /* 손가락 표적 바닥선 — 손가락 되는 노트북도 있으니 기기 가리지 않고 44px */
+  min-height: var(--dw-tap);
 }
 
-.sub-tab[aria-pressed='true'] {
+.sub-tab[aria-checked='true'] {
   color: var(--dw-on-accent);
-  font-weight: var(--dw-weight-bold);
-}
-
-/* doweek 원본 높이는 37px 이라 손가락으로는 빗나가기 쉽다. DW 가 작은 단추에 쓰는 것과
-   같은 방법으로, 손가락 기기에서만 44px 로 키운다(마우스 화면은 doweek 그대로). */
-@media (pointer: coarse) {
-  .sub-tab {
-    min-height: var(--dw-tap);
-  }
+  /* 원본 고른 탭 굵기 600 — 700 은 원본보다 한 단 무겁다 */
+  font-weight: 600;
 }
 
 .tab-badge {
@@ -408,7 +497,7 @@ body {
   line-height: 1.4;
 }
 
-.sub-tab[aria-pressed='true'] .tab-badge {
+.sub-tab[aria-checked='true'] .tab-badge {
   background: rgba(0, 0, 0, 0.2);
   color: var(--dw-on-accent);
 }
@@ -462,6 +551,19 @@ body {
 
 .screen.on {
   display: block;
+}
+
+/* 목록 화면은 세로 기둥이다 — 덩이 사이 12px, 빈 안내는 남는 공간 한가운데
+   (원본 .view-empty-wrap 이 하던 일). 개수판과 첫 줄이 붙어 보이던 것도 이 12px 가 푼다. */
+#list.screen.on {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dw-space-3);
+  min-height: 100%;
+}
+
+#emptyRows {
+  margin: auto 0;
 }
 
 /* ── 조작판(검사·설정 화면)의 문단 간격 ────────────────────────────
@@ -613,10 +715,42 @@ body {
   transform: rotate(180deg);
 }
 
+/* 살 수 있는 것이 0인데 목록이 보일 때 — 왜 보이는지 한 줄이 숫자를 해명한다 */
+.app-tally-note {
+  margin: 0;
+  padding: var(--dw-space-3) 0;
+  border-top: 1px solid var(--dw-border-strong);
+  font-size: var(--dw-size-micro);
+  color: var(--dw-text-muted-aa);
+}
+
 /* 내보내기는 목록을 다 훑고 난 끝에 온다 — 맨 아래 한 줄.
-   결과 줄과 같은 흰 카드라 바짝 붙이면 '세 번째 결과'처럼 읽힌다. 한 칸 띄운다. */
+   결과 줄과 같은 흰 카드라 바짝 붙이면 '세 번째 결과'처럼 읽힌다. 화면 기둥의
+   12px 에 이 12px 를 더해 총 24px 를 띄운다. */
 .app-list-foot {
-  margin-top: var(--dw-space-6);
+  margin-top: var(--dw-space-3);
+}
+
+/* ── 찾기 줄 — 결과가 열 개를 넘으면 나타난다. 수백 줄을 손가락으로 다 밀지 않고
+   글자 몇 자로 바로 좁히고, 내보내기도 맨 끝까지 안 내려가고 여기서 바로 한다. */
+.app-search {
+  display: flex;
+  gap: var(--dw-space-2);
+  align-items: stretch;
+}
+
+.app-search .dw-input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── 거른 결과가 0개일 때 — 백지는 "고장"으로 읽힌다. 이유 한 줄을 가운데 띄운다 */
+.app-filter-empty {
+  margin: auto 0;
+  padding: var(--dw-space-6) 0;
+  text-align: center;
+  color: var(--dw-text-muted-aa);
+  font-size: var(--dw-size-body);
 }
 
 /* ── 결과 한 줄(DW list-item)에 붙는 자리 ────────────────────────── */
@@ -721,8 +855,10 @@ a.dw-list-item {
   border-radius: var(--dw-radius-control);
 }
 
-/* ── 키 발급 순서 그림 — 이 화면에만 있는 삽화 ───────────────────── */
-.app-howto svg {
+/* ── 키 발급 순서 그림 — 이 화면에만 있는 삽화 ─────────────────────
+   role='img' 로 좁힌다. 그냥 svg 로 걸면 같은 칸의 여닫는 화살표 아이콘까지
+   상자 모양을 뒤집어써서 두 접는 줄이 서로 다른 모양이 된다(실제로 그랬다). */
+.app-howto svg[role='img'] {
   margin-top: var(--dw-space-3);
   background: var(--dw-surface-raised);
   border: 1px solid var(--dw-border);
@@ -730,34 +866,34 @@ a.dw-list-item {
   height: auto;
 }
 
-.app-howto svg text {
+.app-howto svg[role='img'] text {
   fill: var(--dw-text);
 }
 
-.app-howto svg .face {
+.app-howto svg[role='img'] .face {
   fill: var(--dw-surface-raised);
   stroke: var(--dw-border-strong);
 }
 
-.app-howto svg .field {
+.app-howto svg[role='img'] .field {
   fill: var(--dw-surface);
   stroke: var(--dw-border-strong);
 }
 
-.app-howto svg .goal {
+.app-howto svg[role='img'] .goal {
   fill: var(--dw-success-bg);
   stroke: var(--dw-success);
 }
 
-.app-howto svg .cta {
+.app-howto svg[role='img'] .cta {
   fill: var(--dw-accent-strong);
 }
 
-.app-howto svg .on-cta {
+.app-howto svg[role='img'] .on-cta {
   fill: var(--dw-on-accent);
 }
 
-.app-howto svg .arrow {
+.app-howto svg[role='img'] .arrow {
   fill: var(--dw-text-muted-aa);
 }
 
@@ -767,16 +903,38 @@ a.dw-list-item {
 }
 
 /* ── 덮는 판 — 넣기와 상세 ──────────────────────────────────────────────────
-   둘 다 목록 위를 통째로 덮는다. 화면을 옮겨 다니는 것이 아니라 '위에 얹혔다가
-   치워지는' 것이라, 뒤로 단추 하나면 늘 목록으로 돌아온다. 판이 열려 있는 동안
-   뒤 화면은 inert 라 눈에도 안 보이고 Tab 으로도 안 들어간다(index.html 이 건다). */
+   doweek 원본(add-modal)과 같은 아래 판이다: 어두운 덮개가 스르르 깔리고, 흰 판이
+   아래에서 미끄러져 올라온다. 위에 남는 덮개를 누르거나, Esc, 뒤로 단추로 닫는다.
+   판이 열려 있는 동안 뒤 화면은 inert 라 Tab 으로도 안 들어간다(index.html 이 건다). */
+@keyframes sheet-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes sheet-slide-up {
+  from {
+    transform: translateY(100%);
+  }
+
+  to {
+    transform: translateY(0);
+  }
+}
+
 .app-sheet {
   position: fixed;
   inset: 0;
   z-index: 100;
   display: flex;
   justify-content: center;
+  align-items: flex-end;
   background: var(--dw-scrim);
+  animation: sheet-fade-in 0.18s ease;
 }
 
 .app-sheet-panel {
@@ -784,8 +942,25 @@ a.dw-list-item {
   flex-direction: column;
   width: 100%;
   max-width: var(--dw-app-max-width);
-  height: 100%;
+  max-height: calc(100dvh - env(safe-area-inset-top) - 12px);
   background: var(--dw-bg);
+  border-radius: var(--dw-radius-modal) var(--dw-radius-modal) 0 0;
+  animation: sheet-slide-up 0.26s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* 판 맨 위 손잡이 — 원본과 같은 32×4 회색 막대. "아래에서 올라온 판"이라는 표시다 */
+.modal-handle {
+  width: 32px;
+  height: 4px;
+  flex-shrink: 0;
+  margin: 10px auto 0;
+  border-radius: 2px;
+  background: var(--dw-border-strong);
+}
+
+/* 판 머리줄은 노치 여백이 필요 없다 — 판이 화면 위 끝까지 안 올라간다 */
+.app-sheet .dw-block-shell-bar {
+  padding-top: var(--dw-space-2);
 }
 
 /* DW 제목 줄은 제목이 먼저 오는 것을 전제로 만들어졌다. 이 판은 뒤로 단추가
@@ -841,6 +1016,9 @@ a.dw-list-item {
   color: var(--dw-info-ink);
   font-size: var(--dw-size-body);
   font-weight: var(--dw-weight-bold);
+  /* 두 번째 줄(버린 도메인 이름)은 줄바꿈으로 온다 */
+  white-space: pre-line;
+  overflow-wrap: anywhere;
 }
 
 /* ── 상세 맨 위 한 마디 — 사라 / 사지 마라 / 애매하다 ──────────────────────
@@ -868,6 +1046,12 @@ a.dw-list-item {
 .app-call[data-call='maybe'] {
   background: var(--dw-warning-bg);
   color: var(--dw-warning-ink);
+}
+
+/* 남이 쥐고 있어 지금은 못 사는 것 — 경고도 추천도 아닌 잿빛 사실 */
+.app-call[data-call='hold'] {
+  background: var(--dw-surface-sunken);
+  color: var(--dw-text);
 }
 
 .app-call-mark {
