@@ -40,10 +40,10 @@ body {
 }
 
 .dw-block-shell {
-  /* 뜬 단추(.app-fab)가 이 기둥 안에서 도크 위에 앉아야 한다 — 화면 전체가 아니라
-     440px 기둥을 기준으로 자리를 잡게 하는 기준점이다. */
   position: relative;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.02), 0 20px 40px rgba(0, 0, 0, 0.1);
+  /* doweek 본체는 폰 기둥(#root)에 노치 여백을 준다 — 맨 위 알약 바가 노치에 가리지 않게 */
+  padding-top: env(safe-area-inset-top);
 }
 
 /* doweek 은 폰 크기에서는 책상 색과 테두리 그림자를 뺀다(폰에서는 앱이 화면을 다 쓴다) */
@@ -72,8 +72,9 @@ body {
   flex-shrink: 0;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   height: 40px;
-  padding: calc(4px + env(safe-area-inset-top)) var(--dw-space-4) 4px;
+  padding: 4px var(--dw-space-4);
   background: var(--dw-bg);
 }
 
@@ -145,7 +146,8 @@ body {
   display: flex;
   justify-content: center;
   flex-shrink: 0;
-  padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
+  /* 위 36px 는 뜬 + 단추가 앉는 자리다 — doweek 원본 그대로 */
+  padding: 36px 14px calc(12px + env(safe-area-inset-bottom));
   background: var(--dw-bg);
 }
 
@@ -155,6 +157,66 @@ body {
   max-width: 420px;
   isolation: isolate;
   --dock-height: 68px;
+}
+
+/* 넣기 단추 = doweek 의 .dock-fab — 도크 한가운데 위 테를 살짝 넘어 앉는 둥근 단추.
+   아래 1/3 이 도크 유리판 뒤로 들어가(z-index 1 < 2) 반쯤 파묻힌 모양이 된다. */
+.dock-fab {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translate(-50%, -66%);
+  width: 54px;
+  height: 54px;
+  border-radius: var(--dw-radius-pill);
+  color: var(--dw-on-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 4px solid var(--dw-bg);
+  background: var(--dw-accent-strong);
+  cursor: pointer;
+  padding: 0;
+  z-index: 1;
+  transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.22s;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 0 0 1px rgba(15, 23, 42, 0.08),
+    0 8px 20px -4px color-mix(in srgb, var(--dw-accent-strong) 58%, transparent),
+    0 3px 8px -2px rgba(0, 0, 0, 0.15);
+}
+
+.dock-fab::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--dw-radius-pill);
+  border: 1.5px solid rgba(255, 255, 255, 0.3);
+  pointer-events: none;
+}
+
+.dock-fab svg {
+  transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .dock-fab:hover {
+    transform: translate(-50%, -68%);
+  }
+
+  .dock-fab:hover svg {
+    transform: rotate(90deg);
+  }
+}
+
+.dock-fab:active {
+  transform: translate(-50%, -66%) scale(0.94);
+  transition: transform 0.1s;
+}
+
+.dock-fab:active svg {
+  transform: rotate(45deg);
+  transition: transform 0.1s;
 }
 
 .dock-glass {
@@ -225,7 +287,7 @@ body {
 }
 
 .dock-item[data-current] {
-  color: var(--dw-cat-1);
+  color: var(--dw-accent-strong);
 }
 
 .dock-item svg {
@@ -273,7 +335,8 @@ body {
 .filter-header {
   flex-shrink: 0;
   z-index: 50;
-  padding: 0 var(--dw-space-4) var(--dw-space-3);
+  /* doweek 머리줄과 같은 간격 — 알약 바와 띠 사이에도 12px 숨이 있다 */
+  padding: var(--dw-space-3) var(--dw-space-4);
   background: var(--dw-bg);
 }
 
@@ -335,8 +398,8 @@ body {
 }
 
 .tab-badge {
-  margin-left: 2px;
-  padding: 0 4px;
+  margin-left: 4px;
+  padding: 1px 5px;
   border-radius: 20px;
   background: var(--dw-accent-bg);
   color: var(--dw-cat-1);
@@ -368,7 +431,7 @@ body {
 
   .dock-nav,
   .filter-header,
-  .app-fab,
+  .dock-fab,
   .app-runbar,
   .dw-block-shell-action {
     display: none;
@@ -701,25 +764,6 @@ a.dw-list-item {
 .app-howto ol {
   margin: var(--dw-space-2) 0;
   padding-left: var(--dw-space-6);
-}
-
-/* ── 뜬 단추 — 넣기는 탭이 아니다 ────────────────────────────────────────────
-   넣는 일은 한 번, 고르는 일은 수백 번이다. 그래서 넣기에는 탭 한 칸을 내주지
-   않고, 목록 위에 떠 있는 단추 하나만 둔다. 도크 바로 위에 앉는다
-   (도크 높이 = 위아래 여백 12px 두 번 + 알약 68px). */
-.app-fab {
-  position: absolute;
-  right: var(--dw-space-4);
-  bottom: calc(68px + var(--dw-space-3) * 3 + env(safe-area-inset-bottom));
-  z-index: 20;
-  width: auto;
-  border-radius: var(--dw-radius-pill);
-  box-shadow: var(--dw-shadow-2);
-}
-
-/* 마지막 줄이 뜬 단추에 가리지 않게 목록 끝에 그만큼 숨을 둔다 */
-#list {
-  padding-bottom: calc(52px + var(--dw-space-6));
 }
 
 /* ── 덮는 판 — 넣기와 상세 ──────────────────────────────────────────────────

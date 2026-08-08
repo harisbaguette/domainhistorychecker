@@ -90,7 +90,7 @@
         </span>
         <!-- 빈 화면 제목은 DW 가 손글씨를 쓰라고 지정한 세 자리 중 하나다 -->
         <p class="dw-empty-state-title">아직 검사한 것이 없어요</p>
-        <p class="dw-empty-state-description">오른쪽 아래 단추로 도메인을 넣어 보세요.</p>
+        <p class="dw-empty-state-description">아래 파란 + 단추로 도메인을 넣어 보세요.</p>
       </div>
     </div>
 
@@ -271,18 +271,17 @@
 
   </main>
 
-  <!-- 넣기는 탭이 아니다 — 목록 위에 뜬 단추 하나. 넣는 일은 한 번, 고르는 일은 수백 번. -->
-  <button type="button" class="dw-button app-fab" data-variant="primary" data-size="lg" id="addFab">
-    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
-         stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
-         aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
-    도메인 넣기
-  </button>
-
   <!-- doweek 의 떠 있는 도크 — 흰 알약 한 장이 배경 위에 뜨고, 고른 칸에는 둥근
-       틴트가 깔리며 그림이 살짝 위로 올라간다(원본: Z:\Doweek\src\shared\components\BottomNav.jsx) -->
+       틴트가 깔리며 그림이 살짝 위로 올라간다. 넣기 단추는 doweek 그대로 도크
+       한가운데 위 테에 반쯤 파묻혀 앉는 둥근 + 단추다
+       (원본: Z:\Doweek\src\shared\components\BottomNav.jsx 의 .dock-fab) -->
   <nav class="dock-nav" aria-label="화면 이동">
     <div class="dock-wrap">
+      <button type="button" class="dock-fab" id="addFab" aria-label="도메인 넣기">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+      </button>
       <div class="dock-glass">
         <div class="dock-page" style="--dock-cols:2">
           <button type="button" class="dock-item" data-go="list" data-current="true" aria-current="page">
