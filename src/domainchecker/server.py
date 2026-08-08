@@ -59,7 +59,6 @@ class ConfigRequest(BaseModel):
     model: str | None = None
     speed_mode: str | None = None
     enable_safebrowsing: bool | None = None
-    enable_virustotal: bool | None = None
     enable_capture: bool | None = None
 
 
@@ -419,10 +418,12 @@ def create_app(config_path: Path | None = None) -> FastAPI:
             config.model = request.model
         if request.speed_mode in ("adaptive", "safe"):
             config.speed_mode = request.speed_mode
-        for flag in ("enable_safebrowsing", "enable_virustotal", "enable_capture"):
+        for flag in ("enable_safebrowsing", "enable_capture"):
             value = getattr(request, flag)
             if value is not None:
                 setattr(config, flag, value)
+        # 바이러스토탈은 켤지 물어보지 않는다 — 키를 넣었으면 켜고, 없으면 끈다.
+        config.enable_virustotal = bool(config.keys.virustotal)
         config_module.save(config, app.state.config_path)
         return {"saved": True, "missing_keys": config.missing_required_keys()}
 

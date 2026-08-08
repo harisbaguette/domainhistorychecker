@@ -18,15 +18,6 @@
 <!-- DW 블록 app-shell-mobile: 붙어 있는 제목 줄 · 가운데만 구르는 본문 · 엄지가 닿는 탭 줄 -->
 <div class="dw-block-shell" id="shell">
 
-  <!-- doweek 의 맨 위 알약 바 — 색 점 + 지금 보고 있는 화면 이름
-       (원본: Z:\Doweek\src\shared\components\ProjectSwitcher.jsx 의 .ps-bar / .ps-pill) -->
-  <header class="ps-bar">
-    <div class="ps-pill">
-      <span class="ps-dot" aria-hidden="true"></span>
-      <h1 class="ps-name" id="shellTitle">낙장도메인</h1>
-    </div>
-  </header>
-
   <!-- 진행률 — 검사가 도는 동안에만 화면에 있다. 안 돌 때는 DOM 에서 숨겨 자리를
        한 픽셀도 차지하지 않는다(멈춰 있는 0% 막대는 아무것도 알려 주지 않는다). -->
   <div class="app-runbar" id="runbar" hidden>
@@ -170,12 +161,14 @@
         </div>
       </section>
 
-      <!-- 나머지 설정은 기본값 그대로 두면 되는 것들이라 접어 둔다 -->
+      <!-- 남은 설정은 다른 검사 키뿐이다 — 있으면 넣고, 없으면 접힌 채 그대로 두면 된다.
+           고를 것(속도·검사 켜고 끄기)은 전부 화면에서 뺐다: 속도는 막히면 스스로
+           늦추고, 바이러스토탈은 키가 있으면 서버가 알아서 켠다. -->
       <section class="dw-block-settings-group">
         <div class="dw-block-settings-rows">
           <div class="dw-collapsible" data-open="false">
             <button type="button" class="dw-collapsible-trigger" aria-expanded="false" aria-controls="advanced">
-              고급 설정 — 안 넣어도 됩니다
+              다른 검사 키 — 없어도 됩니다
               <svg class="dw-collapsible-chevron" xmlns="http://www.w3.org/2000/svg" width="20" height="20"
                    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                    stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
@@ -183,21 +176,6 @@
             <div class="dw-collapsible-region" id="advanced" inert>
               <div class="dw-collapsible-content">
                 <div class="dw-field-group">
-                  <div class="dw-field">
-                    <label class="dw-label" for="speed">검사 속도</label>
-                    <div class="dw-field-content">
-                      <span class="dw-native-select">
-                        <select class="dw-native-select-field" id="speed">
-                          <option value="adaptive">빠르게 (막히면 자동으로 늦춤)</option>
-                          <option value="safe">처음부터 천천히</option>
-                        </select>
-                        <svg class="dw-native-select-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18"
-                             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
-                      </span>
-                    </div>
-                  </div>
-
                   <!-- 이 둘은 없어도 검사가 그대로 돈다. 키가 없으면 파이프라인이 무료 공개
                        자료로 갈아 끼운다(pipeline.py `_index_check` · config.py `free_fallbacks`).
                        예전 문구는 "없으면 필수 검사를 못 한다"였는데 그건 지금 코드와 다르다. -->
@@ -229,32 +207,12 @@
                   <div class="dw-field">
                     <label class="dw-label" for="k_virustotal">바이러스토탈 키</label>
                     <div class="dw-field-content">
-                      <input type="password" class="dw-input" id="k_virustotal" autocomplete="off">
+                      <input type="password" class="dw-input" id="k_virustotal" autocomplete="off"
+                             aria-describedby="k_virustotal-desc">
+                      <p class="dw-field-description" id="k_virustotal-desc">넣으면 그 검사가 저절로 켜집니다 — 켜기 단추는 따로 없습니다.</p>
                     </div>
                   </div>
                 </div>
-
-                <fieldset class="dw-field-set">
-                  <legend class="dw-sr-only">선택 검사</legend>
-                  <label class="dw-checkbox">
-                    <span class="dw-checkbox-box">
-                      <input type="checkbox" class="dw-checkbox-input" id="enable_virustotal">
-                      <svg class="dw-checkbox-mark" xmlns="http://www.w3.org/2000/svg" width="15" height="15"
-                           viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2"
-                           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
-                    </span>
-                    바이러스토탈 검사 켜기 (느려집니다)
-                  </label>
-                  <label class="dw-checkbox">
-                    <span class="dw-checkbox-box">
-                      <input type="checkbox" class="dw-checkbox-input" id="enable_capture">
-                      <svg class="dw-checkbox-mark" xmlns="http://www.w3.org/2000/svg" width="15" height="15"
-                           viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2"
-                           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
-                    </span>
-                    화면 사진 찍기
-                  </label>
-                </fieldset>
               </div>
             </div>
           </div>
@@ -262,9 +220,8 @@
       </section>
 
       <div class="app-actions">
-        <button type="button" class="dw-button" data-variant="primary" data-size="lg" data-block
-                id="saveCfg">설정 저장</button>
-        <p class="muted" id="cfgMsg" role="status"></p>
+        <!-- 저장 단추도 없앴다 — 키를 붙여넣으면 잠깐 뒤 저절로 저장된다 -->
+        <p class="muted" id="cfgMsg" role="status">키는 붙여넣으면 저절로 저장됩니다.</p>
       </div>
     </div>
   </section>
@@ -439,7 +396,6 @@ function freshen(text) {
 }
 
 /* ---------- 화면 전환 (doweek 도크) ---------- */
-const SCREEN_TITLE = {list: "낙장도메인", settings: "설정"};
 const navTabs = [...document.querySelectorAll(".dock-item")];
 navTabs.forEach((b) => { b.onclick = () => show(b.dataset.go); });
 let screenNow = "list";
@@ -451,7 +407,6 @@ function show(name) {
     if (on) { b.dataset.current = "true"; b.setAttribute("aria-current", "page"); }
     else { delete b.dataset.current; b.removeAttribute("aria-current"); }
   });
-  $("shellTitle").textContent = SCREEN_TITLE[name] || SCREEN_TITLE.list;
   // 넣기 단추와 판정 띠는 목록 화면의 것이다(검사가 도는 동안에는 그것도 치운다)
   $("addFab").hidden = name !== "list" || running;
   showFilterHeader();
@@ -957,39 +912,52 @@ async function openDetail(domain) {
 
 /* ---------- 설정 ---------- */
 const KEY_FIELDS = ["openrouter", "serper", "openpagerank", "safebrowsing", "virustotal"];
+// 좁은 화면에서 잘리지 않도록 가림표는 4칸만 보여 준다(뒤 4글자는 그대로 확인용).
+function keyHint(el, data, name) {
+  el.placeholder = data.has_key[name]
+    ? "저장돼 있음 (●●●● " + data.keys_masked[name].slice(-4) + ")"
+    : "아직 없음";
+}
 async function loadConfig() {
   const data = await (await fetch("/api/config")).json();
   KEY_FIELDS.forEach((name) => {
     const el = $("k_" + name);
-    // 좁은 화면에서 잘리지 않도록 가림표는 4칸만 보여 준다(뒤 4글자는 그대로 확인용).
-    el.placeholder = data.has_key[name]
-      ? "저장돼 있음 (●●●● " + data.keys_masked[name].slice(-4) + ")"
-      : "아직 없음";
+    keyHint(el, data, name);
     el.value = "";
   });
-  $("speed").value = data.speed_mode;
-  $("enable_virustotal").checked = data.enable_virustotal;
-  $("enable_capture").checked = data.enable_capture;
   $("cfgPath").textContent = data.config_path;
   // 목록 화면에는 아무 알림도 띄우지 않는다. 키가 없어도 검사는 다 돌고 판정도 나오므로,
   // "괜찮습니다" 라고 알리는 상자는 결과를 밀어낼 뿐이다. 그 설명은 이 설정 화면에만 둔다.
 }
-$("saveCfg").onclick = async () => {
-  const body = {
-    speed_mode: $("speed").value,
-    // 모델은 실패하면 알아서 다음 것으로 넘어가고, 세이프 브라우징은 키만 있으면 도는 검사다.
-    // 사용자가 고를 이유가 없어 화면에서 뺐다 — 예전에 꺼 둔 설정이 남아 있으면 여기서 되살린다.
-    enable_safebrowsing: true,
-    enable_virustotal: $("enable_virustotal").checked,
-    enable_capture: $("enable_capture").checked
-  };
-  KEY_FIELDS.forEach((name) => { body[name] = $("k_" + name).value.trim(); });
+
+/* 저장 단추 없음 — 키를 붙여넣으면 잠깐 뒤 저절로 저장된다.
+   화면에서 뺀 설정(검사 속도·세이프 브라우징·화면 사진)은 저장할 때마다 기본값으로
+   되돌린다 — 예전 판에서 바꿔 둔 값이 몰래 남지 않게. 바이러스토탈을 켤지는
+   서버가 키가 있는지로 스스로 정한다(server.py set_config). */
+let cfgTimer = null;
+KEY_FIELDS.forEach((name) => {
+  const el = $("k_" + name);
+  el.addEventListener("input", () => { clearTimeout(cfgTimer); cfgTimer = setTimeout(saveConfig, 900); });
+  el.addEventListener("change", saveConfig);
+});
+async function saveConfig() {
+  clearTimeout(cfgTimer);
+  const body = {speed_mode: "adaptive", enable_safebrowsing: true, enable_capture: true};
+  const filled = KEY_FIELDS.filter((name) => $("k_" + name).value.trim());
+  filled.forEach((name) => { body[name] = $("k_" + name).value.trim(); });
   const res = await fetch("/api/config", {
     method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)
   });
-  $("cfgMsg").textContent = res.ok ? "저장했습니다." : "저장하지 못했습니다.";
-  await loadConfig();
-};
+  if (!res.ok) { $("cfgMsg").textContent = "저장하지 못했습니다 — 잠시 뒤 다시 붙여넣어 주세요."; return; }
+  const data = await (await fetch("/api/config")).json();
+  filled.forEach((name) => {
+    const el = $("k_" + name);
+    if (el === document.activeElement) return;  // 아직 쓰는 중인 칸은 건드리지 않는다
+    el.value = "";
+    keyHint(el, data, name);
+  });
+  $("cfgMsg").textContent = "저장했습니다.";
+}
 
 /* ---------- 시작 ---------- */
 loadConfig();

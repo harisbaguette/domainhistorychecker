@@ -105,6 +105,18 @@ def test_config_saves_keys_and_keeps_them_when_left_blank(client, config_path):
     assert config_module.load(config_path).keys.serper == "serper-secret-1234"
 
 
+def test_config_derives_virustotal_from_its_key(client):
+    """켜기 단추는 없어졌다 — 바이러스토탈 검사는 키가 있으면 켜지고 없으면 꺼진다."""
+    assert client.get("/api/config").json()["enable_virustotal"] is False
+
+    client.post("/api/config", json={"virustotal": "vt-secret-9999"})
+    assert client.get("/api/config").json()["enable_virustotal"] is True
+
+    # 옛 화면이 보내던 끄기 값은 이제 무시된다 — 기준은 키가 있는지뿐이다
+    client.post("/api/config", json={"enable_virustotal": False})
+    assert client.get("/api/config").json()["enable_virustotal"] is True
+
+
 def test_run_requires_domains(client):
     assert client.post("/api/run", json={"raw": "   "}).status_code == 400
 
