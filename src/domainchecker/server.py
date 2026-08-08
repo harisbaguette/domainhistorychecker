@@ -12,6 +12,7 @@ import json
 import math
 import os
 import secrets
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -25,7 +26,7 @@ from . import config as config_module
 from .config import MODEL_CHAIN, Config
 from .models import DomainResult
 from .normalize import MAX_DOMAINS, parse_domains
-from .pipeline import Pipeline, load_run_state
+from .pipeline import Pipeline, clear_run_state, load_run_state
 from .report import html as report_html
 
 STATIC_DIR = Path(__file__).resolve().parents[2] / "static"
@@ -56,6 +57,8 @@ class ConfigRequest(BaseModel):
     openpagerank: str | None = None
     safebrowsing: str | None = None
     virustotal: str | None = None
+    # 이름을 담아 보내면 그 키를 지운다 — 빈 문자열은 '바꾸지 않음'이라 지우기에 못 쓴다
+    clear_keys: list[str] | None = None
     model: str | None = None
     speed_mode: str | None = None
     enable_safebrowsing: bool | None = None
@@ -75,6 +78,9 @@ class RunManager:
         self.running = False
         self.error = ""
         self.base: Path | None = None  # run_state.json 을 찾을 데이터 폴더
+        # 검사가 도는 동안 들어온 다음 묶음들 — 지금 검사가 끝나면 차례로 자동 시작한다
+        self.pending: list[list[str]] = []
+        self.config_loader = None  # create_app 이 넣어 준다(대기줄 자동 시작용)
 
     def publish(self, event: dict) -> None:
         self.history.append(event)
@@ -115,6 +121,14 @@ class RunManager:
                 self.publish({"type": "error", "message": self.error})
             finally:
                 self.running = False
+                # 대기줄에 다음 묶음이 있으면 이어서 자동 시작한다.
+                # 터져서 끝났을 때는 시작하지 않는다 — 같은 원인으로 줄줄이 터진다.
+                if self.pending and not self.error and self.config_loader is not None:
+                    next_domains = self.pending.pop(0)
+                    # 참조를 self.task 에 쥔다 — 안 쥐면 GC 가 도는 중에 지울 수 있다
+                    self.task = asyncio.create_task(
+                        self.start(self.config_loader(), next_domains, use_cache=True)
+                    )
 
         self.task = asyncio.create_task(runner())
 
@@ -138,6 +152,8 @@ class RunManager:
             "error": self.error,
             "finished": self.finished,
             "resumable": bool(self.resume_domains()),
+            "queued_batches": len(self.pending),
+            "queued_domains": sum(len(batch) for batch in self.pending),
         }
 
 
@@ -326,11 +342,22 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         domains = request.domains or parse_domains(request.raw, config.max_domains).domains
         if not domains:
             raise HTTPException(status_code=400, detail="검사할 도메인이 없습니다.")
+        # 이미 검사가 도는 중이면 거절하지 않고 대기줄에 세운다 — 지금 검사가
+        # 끝나는 즉시 자동으로 이어서 돈다(사람이 폰을 다시 볼 필요가 없게).
+        if manager.running:
+            manager.pending.append(domains)
+            return {
+                "queued": True,
+                "count": len(domains),
+                "position": len(manager.pending),
+            }
+        manager.config_loader = load_config
         await manager.start(config, domains, request.use_cache)
         return {"started": True, "count": len(domains), "estimate": estimate(config, len(domains))}
 
     @app.post("/api/stop")
     async def stop() -> dict:
+        manager.pending.clear()  # 멈추라는 말은 대기줄까지 포함한다
         manager.stop()
         return {"stopped": True, "note": "끝난 도메인은 저장돼 있어 '이어서 검사'로 재개할 수 있습니다."}
 
@@ -341,6 +368,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         if not domains:
             raise HTTPException(status_code=400, detail="이어서 검사할 목록이 없습니다.")
         config = load_config()
+        manager.config_loader = load_config
         await manager.start(config, domains, use_cache=True)
         return {"started": True, "count": len(domains)}
 
@@ -380,6 +408,30 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     async def results() -> dict:
         return {"results": [r.model_dump(mode="json") for r in stored_results()]}
 
+    @app.delete("/api/results")
+    async def clear_results() -> dict:
+        """저장된 검사 결과를 전부 지운다 — 목록·저장 파일·캐시·화면 사진까지."""
+        if manager.running:
+            raise HTTPException(
+                status_code=409, detail="검사가 도는 동안에는 지울 수 없습니다. 먼저 중단해 주세요."
+            )
+        base_dir = data_root()
+        (base_dir / "results.json").unlink(missing_ok=True)
+        clear_run_state(base_dir)
+        cache_root = cache.cache_dir(base_dir)
+        if cache_root.exists():
+            for path in cache_root.glob("*.json"):
+                path.unlink(missing_ok=True)
+        captures_dir = base_dir / "captures"
+        if captures_dir.exists():
+            shutil.rmtree(captures_dir, ignore_errors=True)
+            captures_dir.mkdir(parents=True, exist_ok=True)
+        manager.history = []
+        manager.domains = []
+        manager.results = {}
+        manager.pending.clear()
+        return {"cleared": True}
+
     @app.get("/api/results/{domain}")
     async def result_one(domain: str) -> dict:
         return one_result(domain).model_dump(mode="json")
@@ -414,6 +466,10 @@ def create_app(config_path: Path | None = None) -> FastAPI:
             value = getattr(request, name)
             if value:  # 빈 값이면 기존 키를 그대로 둔다
                 setattr(config.keys, name, value.strip())
+        # 지우기는 이름을 따로 담아 보낸다 — 빈 값과 '지워라'를 헷갈리지 않게
+        for name in request.clear_keys or []:
+            if name in ("openrouter", "serper", "openpagerank", "safebrowsing", "virustotal"):
+                setattr(config.keys, name, "")
         if request.model:
             config.model = request.model
         if request.speed_mode in ("adaptive", "safe"):

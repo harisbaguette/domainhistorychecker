@@ -328,3 +328,92 @@ def test_report_and_detail_work_from_the_cache_alone(client, config_path, sample
     built = client.post("/api/report")
     assert built.status_code == 200
     assert (base / "report" / "example.com.html").exists()
+
+
+def test_run_queues_when_a_run_is_already_going(client, fake_run):
+    """검사 중에 들어온 다음 묶음은 거절하지 않고 대기줄에 세운다."""
+    manager = client.app.state.manager
+    manager.running = True
+    try:
+        res = client.post("/api/run", json={"raw": "queued.com"})
+        assert res.status_code == 200
+        assert res.json()["queued"] is True
+        assert manager.pending == [["queued.com"]]
+
+        # 중단은 대기줄까지 함께 비운다 — 멈추라는 말은 전부 멈추라는 뜻이다
+        client.post("/api/stop")
+        assert manager.pending == []
+    finally:
+        manager.running = False
+
+
+def test_queue_autostarts_the_next_batch(monkeypatch):
+    """지금 검사가 끝나면 대기줄의 다음 묶음이 저절로 시작된다."""
+    started: list[list[str]] = []
+
+    class QuickPipeline:
+        def __init__(self, config, on_event=None, **kwargs):
+            self.on_event = on_event
+
+        def stop(self):
+            pass
+
+        async def run(self, domains, use_cache=True):
+            started.append(list(domains))
+            self.on_event({"type": "finished", "done": len(domains), "total": len(domains), "stopped": False})
+            return []
+
+    monkeypatch.setattr(server, "Pipeline", QuickPipeline)
+
+    async def scenario():
+        manager = server.RunManager()
+        manager.config_loader = Config
+        await manager.start(Config(), ["a.com"], use_cache=True)
+        first = manager.task
+        manager.pending.append(["b.com"])
+        await first
+        # runner 의 뒷정리가 다음 묶음 task 를 만든다 — 그 task 가 잡힐 때까지 양보
+        for _ in range(20):
+            await asyncio.sleep(0)
+            if manager.task is not first:
+                break
+        assert manager.task is not first
+        await manager.task
+        assert started == [["a.com"], ["b.com"]]
+        assert manager.pending == []
+
+    asyncio.run(scenario())
+
+
+def test_clear_results_wipes_files_and_memory(client, fake_run, config_path):
+    """지우기 단추 — 저장 파일·캐시·메모리가 다 비어야 하고, 검사 중에는 못 지운다."""
+    client.post("/api/run", json={"raw": "example.com"})
+    read_sse(client)
+    assert client.get("/api/results").json()["results"]
+
+    manager = client.app.state.manager
+    manager.running = True
+    assert client.delete("/api/results").status_code == 409
+    manager.running = False
+
+    res = client.delete("/api/results")
+    assert res.status_code == 200
+    assert res.json()["cleared"] is True
+    assert client.get("/api/results").json()["results"] == []
+
+    base = config_module.data_dir(config_module.load(config_path))
+    assert not (base / "results.json").exists()
+    assert not (base / "run_state.json").exists()
+
+
+def test_clear_keys_removes_saved_keys(client, config_path):
+    """키 빼기 — 이름을 담아 보내면 그 키가 지워지고, 바이러스토탈 검사도 꺼진다."""
+    client.post("/api/config", json={"serper": "serper-secret-1234", "virustotal": "vt-secret-9999"})
+    assert client.get("/api/config").json()["enable_virustotal"] is True
+
+    client.post("/api/config", json={"clear_keys": ["serper", "virustotal"]})
+    data = client.get("/api/config").json()
+    assert data["has_key"]["serper"] is False
+    assert data["has_key"]["virustotal"] is False
+    assert data["enable_virustotal"] is False
+    assert config_module.load(config_path).keys.serper == ""
