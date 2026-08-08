@@ -29,20 +29,6 @@
     </div>
   </header>
 
-  <!-- 진행률 — 검사가 도는 동안에만 화면에 있다. 안 돌 때는 DOM 에서 숨겨 자리를
-       한 픽셀도 차지하지 않는다(멈춰 있는 0% 막대는 아무것도 알려 주지 않는다). -->
-  <div class="app-runbar" id="runbar" hidden>
-    <div class="dw-progress">
-      <span class="dw-progress-label" id="progressText" aria-live="polite">준비 중…</span>
-      <span class="dw-progress-value" id="progressPct" data-numeric></span>
-      <div class="dw-progress-track" role="progressbar" id="track"
-           aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-labelledby="progressText">
-        <div class="dw-progress-indicator" id="bar" aria-hidden="true" style="width:0%"></div>
-      </div>
-    </div>
-    <button type="button" class="dw-button" data-variant="secondary" data-size="sm" id="stop">중단</button>
-  </div>
-
   <!-- doweek 의 필터 머리줄 — 흰 띠 안에서 색칠된 알약이 고른 칸으로 미끄러진다.
        구르는 본문 바깥에 붙어 있어 목록을 내려도 안 사라진다. -->
   <header class="filter-header" id="filterHeader" hidden>
@@ -86,11 +72,18 @@
       <p class="app-tally-note" id="tallyNote" role="status" hidden></p>
     </div>
 
-    <!-- 결과가 열 개를 넘으면 나타나는 찾기 줄 — 수백 줄을 다 밀지 않게 -->
+    <!-- 찾기 + 내보내기 줄 — 결과가 있으면 늘 맨 위에 있다. 수백 줄을 손가락으로
+         다 밀지 않고 글자로 좁히고, 엑셀 뽑기도 여기서 바로 한다(아이콘 하나). -->
     <div class="app-search" id="searchRow" hidden>
       <label class="dw-label dw-sr-only" for="q">도메인 이름으로 찾기</label>
-      <input type="search" class="dw-input" id="q" placeholder="도메인 이름으로 찾기" autocomplete="off">
-      <button type="button" class="dw-button" data-variant="secondary" id="csvTop">내보내기</button>
+      <input type="search" class="dw-input" id="q" placeholder="도메인 이름으로 찾기"
+             autocomplete="off" enterkeyhint="search">
+      <button type="button" class="dw-button" data-variant="secondary" data-icon id="csvTop"
+              aria-label="엑셀로 내보내기 (CSV)" title="엑셀로 내보내기 (CSV)">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>
+      </button>
     </div>
 
     <div class="dw-empty-state" id="emptyRows">
@@ -104,7 +97,6 @@
         </span>
         <!-- 빈 화면 제목은 DW 가 손글씨를 쓰라고 지정한 세 자리 중 하나다 -->
         <p class="dw-empty-state-title">아직 검사한 것이 없어요</p>
-        <p class="dw-empty-state-description">아래 파란 + 단추로 도메인을 넣어 보세요.</p>
       </div>
     </div>
 
@@ -112,11 +104,6 @@
 
     <!-- 거르거나 찾은 결과가 0개일 때 — 백지 대신 이유 한 줄 -->
     <p class="app-filter-empty" id="filterEmpty" role="status" hidden></p>
-
-    <div class="app-list-foot" id="listFoot" hidden>
-      <button type="button" class="dw-button" data-variant="secondary" data-block
-              id="csv">엑셀로 내보내기 (CSV)</button>
-    </div>
   </section>
 
   <!-- ② 설정 화면 -->
@@ -265,6 +252,20 @@
 
   </main>
 
+  <!-- 진행률 — 검사가 도는 동안에만 화면에 있다(안 돌 때는 DOM 에서 숨김).
+       엄지가 닿는 도크 바로 위에 둔다 — 중단 단추를 화면 꼭대기까지 뻗어 누르지 않게. -->
+  <div class="app-runbar" id="runbar" hidden>
+    <div class="dw-progress">
+      <span class="dw-progress-label" id="progressText" aria-live="polite">준비 중…</span>
+      <span class="dw-progress-value" id="progressPct" data-numeric></span>
+      <div class="dw-progress-track" role="progressbar" id="track"
+           aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-labelledby="progressText">
+        <div class="dw-progress-indicator" id="bar" aria-hidden="true" style="width:0%"></div>
+      </div>
+    </div>
+    <button type="button" class="dw-button" data-variant="secondary" data-size="sm" id="stop">중단</button>
+  </div>
+
   <!-- doweek 의 떠 있는 도크 — 흰 알약 한 장이 배경 위에 뜨고, 고른 칸에는 둥근
        틴트가 깔리며 그림이 살짝 위로 올라간다. 넣기 단추는 doweek 그대로 도크
        한가운데 위 테에 반쯤 파묻혀 앉는 둥근 + 단추다
@@ -314,6 +315,17 @@
         </button>
       </span>
       <h2 class="dw-block-shell-title" id="sheetInputTitle">도메인 넣기</h2>
+      <!-- 파일에서 가져오기 — 폭을 다 먹던 글자 단추 대신 클립 아이콘 하나 -->
+      <span class="dw-block-shell-action">
+        <input type="file" id="file" class="dw-sr-only app-file-input" accept=".txt,.csv,text/plain">
+        <label for="file" class="dw-button app-file-label" data-variant="ghost" data-icon
+               aria-label="글자 파일에서 가져오기 (.txt · .csv)" title="글자 파일에서 가져오기 (.txt · .csv)">
+          <svg xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+               aria-hidden="true"><path d="M13.234 20.252 21 12.3"/>
+            <path d="m16 6-8.414 8.586a2 2 0 0 0 0 2.828 2 2 0 0 0 2.828 0l8.414-8.586a4 4 0 0 0-5.657-5.656l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551"/></svg>
+        </label>
+      </span>
     </header>
 
     <div class="app-sheet-body">
@@ -324,10 +336,6 @@
       </div>
 
       <div class="app-file-row">
-        <input type="file" id="file" class="dw-sr-only app-file-input" accept=".txt,.csv,text/plain">
-        <label for="file" class="dw-button app-file-label" data-variant="secondary" data-block>
-          글자 파일에서 가져오기 (.txt · .csv)
-        </label>
         <p class="muted" id="fileName" hidden></p>
         <p class="dw-field-error" id="fileMsg" role="alert" hidden></p>
       </div>
@@ -337,8 +345,8 @@
       <p class="app-tape" id="preview" role="status" hidden></p>
       <button type="button" class="dw-button" data-variant="primary" data-size="lg" data-block
               id="start">검사 시작</button>
-      <p class="muted">검사가 돌기 시작하면 이 화면(브라우저)을 닫아도 컴퓨터가 계속 검사합니다.
-        컴퓨터를 끄면 멈추고, 다시 켜면 "이어서 검사"로 재개합니다.</p>
+      <p class="muted">검사가 시작되면 이 화면을 닫아도 컴퓨터가 계속 검사합니다 —
+        컴퓨터를 끄면 멈추고, 켜면 "이어서 검사"로 재개합니다.</p>
     </footer>
   </div>
 </div>
@@ -381,7 +389,7 @@
 
       <div class="dw-collapsible" id="detailMoreBox" data-open="false">
         <button type="button" class="dw-collapsible-trigger" aria-expanded="false" aria-controls="detailMore">
-          점수 내역과 못 본 검사까지 다 보기
+          점수 내역 · 못 본 검사 보기
           <svg class="dw-collapsible-chevron" xmlns="http://www.w3.org/2000/svg" width="20" height="20"
                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
@@ -640,7 +648,6 @@ $("start").onclick = async () => {
   rows.clear(); $("rows").innerHTML = "";
   $("emptyRows").hidden = false;
   $("tally").hidden = true;
-  $("listFoot").hidden = true;
   closeSheet();
   countVisible();
   resumable = true;
@@ -711,7 +718,8 @@ function setRunning(on) {
   running = on;
   $("runbar").hidden = !on;
   // 도는 동안에도 넣기 판은 쓸 수 있다 — 대신 단추가 "대기줄에 넣기"로 바뀐다
-  $("start").textContent = on ? "대기줄에 넣기 — 지금 검사가 끝나면 자동 시작" : "검사 시작";
+  // (폰 폭에서 한 줄에 서게 짧게. 자동으로 이어진다는 말은 누른 뒤 진행 줄이 해 준다)
+  $("start").textContent = on ? "대기줄에 넣기" : "검사 시작";
   $("addFab").hidden = screenNow !== "list";
   showResume([]);
 }
@@ -785,7 +793,6 @@ function expiresText(result) {
 function addRow(result, cached) {
   if (!result) return;
   $("emptyRows").hidden = true;
-  $("listFoot").hidden = false;
   let entry = rows.get(result.domain);
   let row;
   if (!entry) {
@@ -876,8 +883,8 @@ function countVisible() {
   showFilterHeader();
   const total = rows.size;
   $("tally").hidden = total === 0;
-  $("listFoot").hidden = total === 0;
-  $("searchRow").hidden = total <= 10 && !searchNeedle;  // 열 개까지는 눈이 더 빠르다
+  // 내보내기 아이콘이 이 줄에 있으니, 결과가 있으면 늘 보인다(맨 아래 큰 단추는 없앰)
+  $("searchRow").hidden = total === 0;
   if (!total) { $("filterEmpty").hidden = true; return; }
   const {buyable, taken} = tallyCounts();
   $("tallyNum").textContent = buyable;
@@ -1003,8 +1010,7 @@ const exportCsv = () => {
   link.click();
   URL.revokeObjectURL(link.href);
 };
-$("csv").onclick = exportCsv;
-$("csvTop").onclick = exportCsv;  // 수백 줄을 다 내리지 않아도 위에서 바로 뽑는다
+$("csvTop").onclick = exportCsv;
 
 /* ---------- 상세 ----------
    맨 위 한 마디가 답이다. 이유는 최대 셋. 점수 내역과 못 본 검사는 접어 둔다. */
