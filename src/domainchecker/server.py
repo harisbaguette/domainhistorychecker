@@ -30,6 +30,24 @@ from .pipeline import Pipeline, clear_run_state, load_run_state, save_run_state
 from .report import html as report_html
 
 STATIC_DIR = Path(__file__).resolve().parents[2] / "static"
+SOURCE_TREE = Path(__file__).resolve().parents[2] / "pyproject.toml"
+
+
+def dev_mode() -> bool:
+    """Am I running from a checkout with the dev tools installed?
+
+    개발 중이면 파일을 고칠 때마다 알아서 다시 켜지고 브라우저 캐시도 끈다.
+    배포본은 소스 트리도 watchfiles 도 없어서 절대 켜지지 않는다.
+    DOMAINCHECKER_RELOAD 로 직접 켜고 끌 수도 있다.
+    """
+    from importlib.util import find_spec
+
+    raw = os.environ.get("DOMAINCHECKER_RELOAD", "").strip().lower()
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    return SOURCE_TREE.exists() and find_spec("watchfiles") is not None
 
 # AI 단가(2026-08-04 확인, deepseek-v4-flash-0731 기준, 100만 토큰당 달러)
 AI_INPUT_PRICE = 0.09
@@ -257,6 +275,14 @@ def create_app(config_path: Path | None = None) -> FastAPI:
                     headers={"WWW-Authenticate": 'Basic realm="domainchecker"'},
                 )
         return await call_next(request)
+
+    if dev_mode():
+        # 개발 중에는 브라우저가 옛 화면을 붙들고 있으면 안 된다 — 그냥 새로고침으로 최신이 뜨게 한다.
+        @app.middleware("http")
+        async def no_browser_cache(request, call_next):
+            response = await call_next(request)
+            response.headers["Cache-Control"] = "no-store"
+            return response
 
     base = data_root()
     manager.base = base
@@ -579,10 +605,11 @@ def main() -> None:
             "  DOMAINCHECKER_PASSWORD=원하는비밀번호 DOMAINCHECKER_HOST=0.0.0.0 uv run domainchecker\n"
             "(비밀번호 없이 밖으로 열면 저장해 둔 API 키가 그대로 새어 나갑니다.)"
         )
-    # 개발용: DOMAINCHECKER_RELOAD=1 이면 파이썬 파일을 고칠 때마다 서버가 스스로 다시 켜진다.
-    reload = os.environ.get("DOMAINCHECKER_RELOAD", "").strip().lower() in {"1", "true", "yes", "on"}
+    reload = dev_mode()
     if reload and find_spec("watchfiles") is None:
         raise SystemExit("자동 재시작을 쓰려면 먼저 `uv sync --group dev` 를 한 번 실행해 주세요.")
+    if reload:
+        print("[개발 모드] 파일을 고치면 서버가 알아서 다시 켜집니다. 끄려면 DOMAINCHECKER_RELOAD=0")
     uvicorn.run(
         "domainchecker.server:app",
         host=host,
