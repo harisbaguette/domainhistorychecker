@@ -20,9 +20,20 @@ DEFAULT_USER = "domainchecker"
 REMEMBER_SECONDS = 30 * 24 * 60 * 60  # "로그인 유지"에 체크했을 때
 SESSION_SECONDS = 12 * 60 * 60  # 체크 안 했을 때(창을 닫으면 그때 사라진다)
 
-# 로그인 잠금 없이 지나갈 수 있는 자리 — 로그인 화면 자체와 그 모양·글꼴뿐이다.
-PUBLIC_PATHS = ("/login", "/api/login", "/api/logout", "/style.css", "/favicon.ico")
-PUBLIC_PREFIXES = ("/fonts/",)
+# 로그인 잠금 없이 지나갈 수 있는 자리 — 로그인 화면 자체와 그 모양·글꼴,
+# 그리고 홈 화면 앱으로 담는 데 필요한 표지(설명서·아이콘·심부름꾼)까지다.
+# 이 셋은 앱 이름과 그림일 뿐 비밀이 없고, 막아 두면 브라우저가 로그인 쪽지를
+# 안 실어 보내는 경우에 "홈 화면에 추가" 단추 자체가 뜨지 않는다.
+PUBLIC_PATHS = (
+    "/login",
+    "/api/login",
+    "/api/logout",
+    "/style.css",
+    "/favicon.ico",
+    "/manifest.webmanifest",
+    "/sw.js",
+)
+PUBLIC_PREFIXES = ("/fonts/", "/static/icons/")
 
 
 def account() -> tuple[str, str]:

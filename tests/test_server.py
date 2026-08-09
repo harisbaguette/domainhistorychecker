@@ -310,6 +310,43 @@ def test_external_access_requires_a_login(config_path, monkeypatch):
         assert guarded.get("/api/status").status_code == 200
 
 
+def test_home_screen_app_files_are_served(client):
+    """홈 화면에 담아 앱처럼 쓰려면 이 셋이 주소 맨 앞자리에서 나와야 한다."""
+    page = client.get("/")
+    assert 'rel="manifest" href="/manifest.webmanifest"' in page.text
+    assert "serviceWorker.register" in page.text
+
+    manifest = client.get("/manifest.webmanifest")
+    assert manifest.status_code == 200
+    data = manifest.json()
+    assert data["start_url"] == "/" and data["scope"] == "/"
+    assert data["display"] == "standalone"
+    sizes = {icon["sizes"] for icon in data["icons"]}
+    assert {"192x192", "512x512"} <= sizes  # 크롬이 설치 단추를 띄우는 최소 조건
+    assert any("maskable" in (icon.get("purpose") or "") for icon in data["icons"])
+    for icon in data["icons"]:
+        assert client.get(icon["src"]).status_code == 200
+
+    worker = client.get("/sw.js")
+    assert worker.status_code == 200
+    # 범위가 좁아지면 앱 전체를 못 감싼다 / 심부름꾼이 캐시에 눌어붙으면 갱신이 막힌다
+    assert worker.headers["Service-Worker-Allowed"] == "/"
+    # 개발 중에는 위쪽 미들웨어가 no-store 로 한 번 더 덮는다 — 둘 다 "쟁여 두지 마라"다
+    assert worker.headers["Cache-Control"] in {"no-cache", "no-store"}
+    assert client.get("/favicon.ico").status_code == 200
+
+
+def test_home_screen_app_files_stay_open_while_locked(config_path, monkeypatch):
+    """잠가 둬도 표지(설명서·아이콘·심부름꾼)는 열려 있어야 설치 단추가 뜬다."""
+    monkeypatch.setenv("DOMAINCHECKER_PASSWORD", "열쇠말")
+    with TestClient(create_app(config_path)) as guarded:
+        assert guarded.get("/api/status").status_code == 401  # 알맹이는 여전히 잠겨 있다
+        for path in ("/manifest.webmanifest", "/sw.js", "/favicon.ico"):
+            assert guarded.get(path).status_code == 200, path
+        for icon in guarded.get("/manifest.webmanifest").json()["icons"]:
+            assert guarded.get(icon["src"]).status_code == 200, icon["src"]
+
+
 def test_serving_outside_localhost_without_a_password_refuses_to_start(monkeypatch):
     monkeypatch.setenv("DOMAINCHECKER_HOST", "0.0.0.0")
     monkeypatch.delenv("DOMAINCHECKER_PASSWORD", raising=False)

@@ -32,7 +32,9 @@ self.addEventListener("install", (event) => {
         PRECACHE.map(async (url) => {
           try {
             const res = await fetch(url, { cache: "no-cache" });
-            if (res.ok) await cache.put(url, res);
+            // 로그인 화면으로 넘겨진 답장은 담지 않는다 — 담아 두면 나중에 꺼내 줄 때
+            // 브라우저가 화면 자체를 거부해서 끊긴 상태에서 아무것도 안 뜬다.
+            if (res.ok && !res.redirected) await cache.put(url, res);
           } catch (_) {
             /* 지금 못 받으면 다음에 쓸 때 받는다 */
           }
