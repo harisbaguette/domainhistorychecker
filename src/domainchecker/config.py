@@ -1,15 +1,30 @@
-"""User config stored at ~/.domainchecker/config.json (plain text, local single-user tool)."""
+"""User config stored at ~/.domainchecker/config.json (plain text, local single-user tool).
+
+배포한 서버(서버리스)는 자기 폴더가 잠깐 있다 지워져서 저 파일이 남지 않는다.
+그래서 키는 서버 설정값(환경변수)에서도 읽어 온다 — 파일에 적힌 키가 먼저,
+비어 있을 때만 환경변수 값을 쓴다.
+"""
 
 from __future__ import annotations
 
 import contextlib
 import json
+import os
 from pathlib import Path
 
 from pydantic import BaseModel
 
 CONFIG_DIR = Path.home() / ".domainchecker"
 CONFIG_PATH = CONFIG_DIR / "config.json"
+
+# 키 이름 → 서버 설정값(환경변수) 이름
+KEY_ENV_NAMES = {
+    "openrouter": "OPENROUTER_API_KEY",
+    "serper": "SERPER_API_KEY",
+    "openpagerank": "OPENPAGERANK_API_KEY",
+    "safebrowsing": "SAFEBROWSING_API_KEY",
+    "virustotal": "VIRUSTOTAL_API_KEY",
+}
 
 # AI model fallback chain — 기본 모델이 실패하면 아래 순서로 갈아탄다.
 # 2026-08-04 live probe: "deepseek-v4-flash-latest" is not a real OpenRouter id
@@ -70,21 +85,41 @@ class Config(BaseModel):
         return notes
 
 
+def env_keys() -> dict[str, str]:
+    """서버 설정값(환경변수)에 들어 있는 키만 모아서 돌려준다."""
+    found = {}
+    for name, env_name in KEY_ENV_NAMES.items():
+        value = os.environ.get(env_name, "").strip()
+        if value:
+            found[name] = value
+    return found
+
+
+def _fill_from_env(config: Config) -> Config:
+    """비어 있는 키만 서버 설정값으로 채운다(사용자가 직접 넣은 키가 우선)."""
+    for name, value in env_keys().items():
+        if not getattr(config.keys, name):
+            setattr(config.keys, name, value)
+    # 바이러스토탈은 키가 있으면 켜는 규칙 — 환경변수로 들어온 경우도 같게 맞춘다.
+    config.enable_virustotal = config.enable_virustotal or bool(config.keys.virustotal)
+    return config
+
+
 def load(path: Path | None = None) -> Config:
     """Read config; a missing or damaged file yields safe defaults."""
     target = Path(path) if path else CONFIG_PATH
     if not target.exists():
-        return Config()
+        return _fill_from_env(Config())
     try:
         raw = json.loads(target.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return Config()
+        return _fill_from_env(Config())
     if not isinstance(raw, dict):
-        return Config()
+        return _fill_from_env(Config())
     try:
-        return Config.model_validate(raw)
+        return _fill_from_env(Config.model_validate(raw))
     except ValueError:
-        return Config()
+        return _fill_from_env(Config())
 
 
 def save(config: Config, path: Path | None = None) -> Path:
@@ -95,10 +130,14 @@ def save(config: Config, path: Path | None = None) -> Path:
     """
     target = Path(path) if path else CONFIG_PATH
     target.parent.mkdir(parents=True, exist_ok=True)
+    data = config.model_dump()
+    # 서버 설정값에서 온 키는 파일에 다시 적지 않는다 — 나중에 키를 바꿨을 때
+    # 파일에 남은 옛 키가 이겨서 새 키가 안 먹는 일을 막는다.
+    for name, value in env_keys().items():
+        if data["keys"].get(name) == value:
+            data["keys"][name] = ""
     tmp = target.with_suffix(".json.tmp")
-    tmp.write_text(
-        json.dumps(config.model_dump(), ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     tmp.replace(target)
     with contextlib.suppress(OSError):
         target.chmod(0o600)

@@ -134,6 +134,20 @@ DOMAINCHECKER_SECRET=$(python -c "import secrets;print(secrets.token_urlsafe(32)
 # "로그인 상태 유지"에 체크하면 30일 동안 다시 묻지 않습니다(그 기기에서만).
 ```
 
+**인터넷에 올려 둔 서버(베르셀)에서 쓸 때는 API 키를 서버 설정값으로 넣습니다.** 올려 둔 서버는
+설정 파일을 저장해도 잠깐 있다 지워지기 때문에, 화면에서 키를 넣어 두면 얼마 뒤 사라집니다.
+아래처럼 서버 쪽에 넣어 두면 그 서버에서는 키가 늘 붙어 있습니다(값은 베르셀이 잠가서 보관하고,
+코드나 저장소에는 절대 적지 않습니다).
+
+```bash
+vercel env add OPENROUTER_API_KEY production   # 붙여 넣으라고 물어봅니다
+vercel --prod                                  # 새로 올려야 반영됩니다
+```
+
+넣을 수 있는 이름: `OPENROUTER_API_KEY` · `SERPER_API_KEY` · `OPENPAGERANK_API_KEY` ·
+`SAFEBROWSING_API_KEY` · `VIRUSTOTAL_API_KEY`. 화면에서 직접 넣은 키가 있으면 그쪽이 먼저입니다.
+접속 비밀번호를 걸어 둔 서버에만 넣으세요 — 잠금이 없으면 아무나 들어와 내 키로 돈을 씁니다.
+
 `DOMAINCHECKER_SECRET` 은 로그인 쪽지(쿠키)에 찍는 도장의 재료입니다. 사람이 외울 필요 없는 긴
 무작위 글자를 한 번 정해 두면, 쪽지를 주운 사람이 비밀번호를 거꾸로 맞혀 보는 일을 막습니다.
 

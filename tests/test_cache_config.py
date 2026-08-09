@@ -58,6 +58,28 @@ def test_model_chain_puts_the_chosen_model_first():
     assert set(chain) == set(MODEL_CHAIN)
 
 
+def test_key_comes_from_the_server_setting_when_the_file_has_none(tmp_path, monkeypatch):
+    """배포한 서버는 설정 파일이 남지 않는다 — 환경변수에 넣어 둔 키를 써야 한다."""
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-from-env")
+    assert load(tmp_path / "none.json").keys.openrouter == "sk-from-env"
+
+
+def test_a_key_typed_by_the_user_beats_the_server_setting(tmp_path, monkeypatch):
+    path = tmp_path / "config.json"
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    save(Config(keys=ApiKeys(openrouter="sk-typed")), path)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-from-env")
+    assert load(path).keys.openrouter == "sk-typed"
+
+
+def test_the_server_setting_key_is_not_written_back_into_the_file(tmp_path, monkeypatch):
+    """파일에 베껴 두면 나중에 키를 바꿔도 옛 키가 계속 이긴다 — 그래서 안 적는다."""
+    path = tmp_path / "config.json"
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-from-env")
+    save(load(tmp_path / "none.json"), path)
+    assert json.loads(path.read_text(encoding="utf-8"))["keys"]["openrouter"] == ""
+
+
 def test_no_key_blocks_a_buy_verdict_any_more():
     """필수 검사는 전부 키 없이 돈다 — 키 하나 없다고 초록이 막히면 안 된다."""
     assert Config().missing_required_keys() == []
