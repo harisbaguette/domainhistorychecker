@@ -2,7 +2,6 @@ import pytest
 
 from domainchecker.models import (
     AIAnalysis,
-    Authority,
     CheckState,
     CheckStatus,
     DomainResult,
@@ -45,7 +44,6 @@ def sample_result() -> DomainResult:
         ),
         spamhaus=Reputation(check=CheckState(status=CheckStatus.OK, note="블랙리스트에 없습니다.")),
         index=IndexInfo(check=OK, indexed_count=12, titles=["동네 빵집 이야기"]),
-        authority=Authority(check=OK, page_rank=3.5),
         ai=AIAnalysis(
             check=OK,
             model="deepseek/deepseek-v4-flash-0731",

@@ -197,39 +197,8 @@
                     </div>
                   </div>
 
-                  <!-- 아래 키들은 없어도 검사가 그대로 돈다. 키가 없으면 파이프라인이 무료 공개
-                       자료로 갈아 끼운다(pipeline.py `_index_check` · config.py `free_fallbacks`). -->
-                  <div class="dw-field">
-                    <label class="dw-label" for="k_serper">Serper 키</label>
-                    <div class="dw-field-content">
-                      <input type="password" class="dw-input" id="k_serper" autocomplete="off"
-                             aria-describedby="k_serper-desc">
-                      <p class="dw-field-description" id="k_serper-desc"><a href="https://serper.dev/api-key" target="_blank" rel="noopener">serper.dev/api-key</a></p>
-                    </div>
-                  </div>
-
-                  <div class="dw-field">
-                    <label class="dw-label" for="k_openpagerank">Open PageRank 키</label>
-                    <div class="dw-field-content">
-                      <input type="password" class="dw-input" id="k_openpagerank" autocomplete="off"
-                             aria-describedby="k_openpagerank-desc">
-                      <p class="dw-field-description" id="k_openpagerank-desc"><a href="https://www.domcop.com/openpagerank/" target="_blank" rel="noopener">domcop.com/openpagerank</a></p>
-                    </div>
-                  </div>
-
-                  <div class="dw-field">
-                    <label class="dw-label" for="k_safebrowsing">구글 세이프 브라우징 키</label>
-                    <div class="dw-field-content">
-                      <input type="password" class="dw-input" id="k_safebrowsing" autocomplete="off">
-                    </div>
-                  </div>
-
-                  <div class="dw-field">
-                    <label class="dw-label" for="k_virustotal">바이러스토탈 키</label>
-                    <div class="dw-field-content">
-                      <input type="password" class="dw-input" id="k_virustotal" autocomplete="off">
-                    </div>
-                  </div>
+                  <!-- 키는 AI 분석용 OpenRouter 하나뿐이다. 나머지 검사는 전부
+                       키 없는 공개 자료로 돈다(config.py `free_fallbacks`). -->
                 </div>
 
                 <!-- 그림 안내는 꼭 필요한 키 하나에만 -->
@@ -1289,7 +1258,7 @@ async function openDetail(domain) {
 }
 
 /* ---------- 설정: 키 ---------- */
-const KEY_FIELDS = ["openrouter", "serper", "openpagerank", "safebrowsing", "virustotal"];
+const KEY_FIELDS = ["openrouter"];
 // 좁은 화면에서 잘리지 않도록 가림표는 4칸만 보여 준다(뒤 4글자는 그대로 확인용).
 function keyHint(el, data, name) {
   el.placeholder = data.has_key[name]
@@ -1313,8 +1282,7 @@ $("logout").onclick = async () => {
 };
 
 /* 저장 단추 없음 — 키를 붙여넣으면 잠깐 뒤 저절로 저장된다.
-   화면에서 뺀 설정(검사 속도·세이프 브라우징·화면 사진)은 저장할 때마다 기본값으로
-   되돌린다. 바이러스토탈을 켤지는 서버가 키가 있는지로 스스로 정한다. */
+   화면에서 뺀 설정(검사 속도·화면 사진)은 저장할 때마다 기본값으로 되돌린다. */
 let cfgTimer = null;
 KEY_FIELDS.forEach((name) => {
   const el = $("k_" + name);
@@ -1323,7 +1291,7 @@ KEY_FIELDS.forEach((name) => {
 });
 async function saveConfig() {
   clearTimeout(cfgTimer);
-  const body = {speed_mode: "adaptive", enable_safebrowsing: true, enable_capture: true};
+  const body = {speed_mode: "adaptive", enable_capture: true};
   const filled = KEY_FIELDS.filter((name) => $("k_" + name).value.trim());
   filled.forEach((name) => { body[name] = $("k_" + name).value.trim(); });
   const res = await fetch("/api/config", {

@@ -24,13 +24,14 @@ def test_cache_filename_is_sanitised(tmp_path):
     assert "/" not in path.name
 
 
-def test_config_roundtrip(tmp_path):
+def test_config_roundtrip(tmp_path, monkeypatch):
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     path = tmp_path / "config.json"
-    original = Config(keys=ApiKeys(serper="abc"), speed_mode="safe")
+    original = Config(keys=ApiKeys(openrouter="abc"), speed_mode="safe")
     save(original, path)
 
     loaded = load(path)
-    assert loaded.keys.serper == "abc"
+    assert loaded.keys.openrouter == "abc"
     assert loaded.start_rpm == 12
     assert json.loads(path.read_text(encoding="utf-8"))["speed_mode"] == "safe"
 
@@ -85,11 +86,9 @@ def test_no_key_blocks_a_buy_verdict_any_more():
     assert Config().missing_required_keys() == []
 
 
-def test_free_fallbacks_are_listed_only_when_the_key_is_absent():
+def test_free_fallbacks_are_listed_only_when_the_key_is_absent(monkeypatch):
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     notes = Config().free_fallbacks()
-    assert len(notes) == 3
-    assert any("공개 크롤 기록" in n for n in notes)
-    assert any("규칙 검사" in n for n in notes)
-    assert Config(
-        keys=ApiKeys(serper="a", openpagerank="b", openrouter="c")
-    ).free_fallbacks() == []
+    assert len(notes) == 1
+    assert "규칙 검사" in notes[0]
+    assert Config(keys=ApiKeys(openrouter="c")).free_fallbacks() == []

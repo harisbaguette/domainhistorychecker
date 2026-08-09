@@ -8,6 +8,7 @@ import httpx
 import pytest
 import respx
 
+from domainchecker.clients import freeindex
 from domainchecker.config import ApiKeys, Config
 from domainchecker.models import CheckStatus, Verdict
 from domainchecker.pipeline import Pipeline
@@ -15,6 +16,7 @@ from domainchecker.ratelimit import AdaptiveRateLimiter
 
 DOMAIN = "example.com"
 YEARS = list(range(2015, 2025))
+CDX = "https://index.commoncrawl.org/CC-MAIN-2026-30-index"
 
 # 연도마다 겹치지 않는 낱말 묶음 — 실제 사이트처럼 내용이 해마다 달라진다.
 POOLS = [
@@ -50,16 +52,16 @@ RDAP_JSON = {
     "entities": [],
 }
 
-SERPER_JSON = {
-    "searchInformation": {"totalResults": "24"},
-    "organic": [{"title": "빵집 이야기", "snippet": "동네 빵집의 기록"}],
-}
+# 커먼크롤에 남은 주소 24건 — 색인 수는 이 목록의 길이로 센다.
+CRAWL_TEXT = "\n".join(
+    f'{{"url": "https://{DOMAIN}/post/{i}", "status": "200"}}' for i in range(24)
+)
 
-OPR_JSON = {
-    "response": [
-        {"domain": DOMAIN, "status_code": 200, "page_rank_decimal": "3.0", "rank": "120000"}
-    ]
-}
+# 세이프 브라우징 공개 조회 응답(키 없음) — 맨 앞 ")]}'" 는 구글이 일부러 붙이는 글자.
+SAFEBROWSING_CLEAN = (
+    ")]}'\n\n"
+    f'[["sb.ssr",1,false,false,false,false,false,1786277573219,"{DOMAIN}"]]'
+)
 
 AI_JSON = {
     "topic_history": "2015년 빵집 기록으로 시작해 취미 기록으로 이어짐",
@@ -95,11 +97,20 @@ def mock_all() -> None:
     respx.get(f"https://rdap.org/domain/{DOMAIN}").mock(
         return_value=httpx.Response(200, json=RDAP_JSON)
     )
-    respx.post("https://google.serper.dev/search").mock(
-        return_value=httpx.Response(200, json=SERPER_JSON)
+    # 색인 검사(키 없음): 커먼크롤 회차 목록 → 크롤 기록 → 현재 페이지
+    respx.get(freeindex.COLLINFO_URL).mock(
+        return_value=httpx.Response(200, json=[{"id": "CC-MAIN-2026-30", "cdx-api": CDX}])
     )
-    respx.get(url__startswith="https://openpagerank.com/api/v1.0/getPageRank").mock(
-        return_value=httpx.Response(200, json=OPR_JSON)
+    respx.get(url__startswith=CDX).mock(return_value=httpx.Response(200, text=CRAWL_TEXT))
+    respx.get(f"https://{DOMAIN}/").mock(
+        return_value=httpx.Response(
+            200,
+            html="<html><head><title>빵집 이야기</title></head><body>동네 빵집의 기록</body></html>",
+        )
+    )
+    # 세이프 브라우징(키 없음)
+    respx.get(url__startswith="https://transparencyreport.google.com/").mock(
+        return_value=httpx.Response(200, text=SAFEBROWSING_CLEAN)
     )
     respx.post("https://openrouter.ai/api/v1/chat/completions").mock(
         return_value=httpx.Response(
@@ -116,12 +127,15 @@ def mock_all() -> None:
 
 @pytest.fixture
 def config(tmp_path):
-    return Config(
-        keys=ApiKeys(serper="s-key", openpagerank="o-key", openrouter="r-key"),
-        enable_safebrowsing=False,
-        enable_virustotal=False,
-        data_dir=str(tmp_path / "data"),
-    )
+    return Config(keys=ApiKeys(openrouter="r-key"), data_dir=str(tmp_path / "data"))
+
+
+@pytest.fixture(autouse=True)
+def _fresh_collection():
+    # 커먼크롤 회차 주소는 모듈에 하루 동안 기억된다 — 시험끼리 새지 않게 비운다.
+    freeindex.reset_collection_cache()
+    yield
+    freeindex.reset_collection_cache()
 
 
 async def no_whois(domain, server):
@@ -155,7 +169,6 @@ async def test_full_run_produces_a_buy_verdict(config, tmp_path):
     assert result.spamhaus.check.status is CheckStatus.OK
     assert result.index.check.status is CheckStatus.OK
     assert result.ai.check.status is CheckStatus.OK
-    assert result.authority.check.status is CheckStatus.OK
 
     # 수집 내용
     assert result.wayback.total_captures == len(YEARS)
@@ -163,14 +176,13 @@ async def test_full_run_produces_a_buy_verdict(config, tmp_path):
     assert result.wayback.selected[-1].timestamp.startswith("2024")  # 말기 포함
     assert result.registration.created == "2014-05-01"
     assert result.registration.acquisition == "삭제 대기(곧 등록 가능)"
-    assert result.authority.page_rank == pytest.approx(3.0)
     assert result.index.indexed_count == 24
     assert result.ai.model == "deepseek/deepseek-v4-flash-0731"
     assert result.ai.fallback_used is False
 
-    # 옵션 검사는 미실시로 남고 ✅를 막지 않는다
-    assert result.safebrowsing.check.status is CheckStatus.NOT_RUN
-    assert result.virustotal.check.status is CheckStatus.NOT_RUN
+    # 세이프 브라우징도 키 없이 돌아 확인으로 남는다
+    assert result.safebrowsing.check.status is CheckStatus.OK
+    assert result.safebrowsing.listed is False
 
     assert result.fatal_reasons == []
     assert result.warn_reasons == []
@@ -325,8 +337,10 @@ async def test_failed_checks_degrade_to_unchecked_and_block_buy(config):
         side_effect=httpx.ConnectError("boom")
     )
     respx.get(f"https://rdap.org/domain/{DOMAIN}").mock(return_value=httpx.Response(500))
-    respx.post("https://google.serper.dev/search").mock(return_value=httpx.Response(500))
-    respx.get(url__startswith="https://openpagerank.com/api/v1.0/getPageRank").mock(
+    respx.get(freeindex.COLLINFO_URL).mock(return_value=httpx.Response(500))
+    respx.get(f"https://{DOMAIN}/").mock(side_effect=httpx.ConnectError("boom"))
+    respx.get(f"http://{DOMAIN}/").mock(side_effect=httpx.ConnectError("boom"))
+    respx.get(url__startswith="https://transparencyreport.google.com/").mock(
         return_value=httpx.Response(500)
     )
     respx.post("https://openrouter.ai/api/v1/chat/completions").mock(

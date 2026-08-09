@@ -17,13 +17,10 @@ from pydantic import BaseModel
 CONFIG_DIR = Path.home() / ".domainchecker"
 CONFIG_PATH = CONFIG_DIR / "config.json"
 
-# 키 이름 → 서버 설정값(환경변수) 이름
+# 키 이름 → 서버 설정값(환경변수) 이름. 키는 AI 분석용 OpenRouter 딱 하나다 —
+# 나머지 검사는 전부 키 없는 공개 자료로 돈다(관리할 키를 늘리지 않는다).
 KEY_ENV_NAMES = {
     "openrouter": "OPENROUTER_API_KEY",
-    "serper": "SERPER_API_KEY",
-    "openpagerank": "OPENPAGERANK_API_KEY",
-    "safebrowsing": "SAFEBROWSING_API_KEY",
-    "virustotal": "VIRUSTOTAL_API_KEY",
 }
 
 # AI model fallback chain — 기본 모델이 실패하면 아래 순서로 갈아탄다.
@@ -38,18 +35,12 @@ MODEL_CHAIN = (
 
 class ApiKeys(BaseModel):
     openrouter: str = ""
-    serper: str = ""
-    openpagerank: str = ""
-    safebrowsing: str = ""
-    virustotal: str = ""
 
 
 class Config(BaseModel):
     keys: ApiKeys = ApiKeys()
     model: str = MODEL_CHAIN[0]
     speed_mode: str = "adaptive"  # "adaptive" (30/min 시작) | "safe" (12/min 고정)
-    enable_safebrowsing: bool = True
-    enable_virustotal: bool = False
     enable_capture: bool = True  # 화면 캡쳐(전 검사 완료 후 후행 실행)
     max_domains: int = 1000
     max_snapshots: int = 6
@@ -75,14 +66,9 @@ class Config(BaseModel):
 
     def free_fallbacks(self) -> list[str]:
         """키가 없어 대신 도는 것들(정확도만 조금 낮다)."""
-        notes = []
-        if not self.keys.serper:
-            notes.append("색인 검사 — 공개 크롤 기록과 도메인 현재 페이지로 대신 봅니다")
         if not self.keys.openrouter:
-            notes.append("과거 내용 판단 — AI 없이 규칙 검사(기계적 판단)만으로 봅니다")
-        if not self.keys.openpagerank:
-            notes.append("권위 점수 — 보조 지표라 비워 둡니다(판정에는 쓰지 않습니다)")
-        return notes
+            return ["과거 내용 판단 — AI 없이 규칙 검사(기계적 판단)만으로 봅니다"]
+        return []
 
 
 def env_keys() -> dict[str, str]:
@@ -100,8 +86,6 @@ def _fill_from_env(config: Config) -> Config:
     for name, value in env_keys().items():
         if not getattr(config.keys, name):
             setattr(config.keys, name, value)
-    # 바이러스토탈은 키가 있으면 켜는 규칙 — 환경변수로 들어온 경우도 같게 맞춘다.
-    config.enable_virustotal = config.enable_virustotal or bool(config.keys.virustotal)
     return config
 
 

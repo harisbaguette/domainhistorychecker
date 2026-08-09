@@ -90,12 +90,12 @@ def test_index_marks_partial_misses_with_a_count(sample_result):
     other.unchecked = []
     other.not_run = []
     sample_result.unchecked = ["AI 분석"]
-    sample_result.not_run = ["권위 점수"]
+    sample_result.not_run = ["세이프 브라우징"]
 
     html = render_index([sample_result, other])
 
     assert "AI 분석 — 도메인 2개 중 1개에서" in html
-    assert "권위 점수 — 도메인 2개 중 1개에서" in html
+    assert "세이프 브라우징 — 도메인 2개 중 1개에서" in html
 
 
 def test_index_lists_an_all_domain_miss_without_a_count(sample_result):
@@ -123,23 +123,18 @@ def test_write_report_creates_index_and_detail_pages(sample_result, tmp_path):
 
 
 def test_unmeasured_numbers_say_so_instead_of_showing_zero(sample_result):
-    """못 잰 값을 0으로 보여 주면 '권위 0인 나쁜 도메인'으로 오해한다(심사 C4)."""
-    from domainchecker.models import Authority, IndexInfo
+    """못 잰 값을 0으로 보여 주면 '기록이 0인 나쁜 도메인'으로 오해한다(심사 C4)."""
+    from domainchecker.models import IndexInfo
 
-    sample_result.authority = Authority(
-        check=CheckState(status=CheckStatus.UNCHECKED, note="권위 점수 조회에 실패했습니다.")
-    )
     sample_result.index = IndexInfo(
-        check=CheckState(status=CheckStatus.NOT_RUN, note="Serper 키가 없습니다.")
+        check=CheckState(status=CheckStatus.UNCHECKED, note="색인 검사를 못 했습니다.")
     )
     judge(sample_result)
     html = detail_fragment(sample_result)
 
-    assert "0.00 / 10" not in html
     assert "색인 0건" not in html
-    assert html.count("못 쟀음") == 2
-    assert "권위 점수 조회에 실패했습니다." in html
-    assert "Serper 키가 없습니다." in html
+    assert "못 쟀음" in html
+    assert "색인 검사를 못 했습니다." in html
 
 
 def test_plain_words_are_spelled_out_for_the_reader(sample_result):
@@ -147,7 +142,6 @@ def test_plain_words_are_spelled_out_for_the_reader(sample_result):
     judge(sample_result)
     html = detail_fragment(sample_result)
 
-    assert "링크로 밀어주는 힘" in html
     assert "웹에 남아 있는 페이지(색인)" in html
     assert "다른 곳으로 넘겨보낸 비율(리다이렉트)" in html
     assert "임시 화면이던 비중(파킹)" in html

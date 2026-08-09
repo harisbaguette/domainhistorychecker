@@ -1,6 +1,6 @@
-"""키 없이 도는 색인 검사 — 커먼크롤 공개 색인 + 도메인 현재 페이지.
+"""색인 검사 — 커먼크롤 공개 색인 + 도메인 현재 페이지. 키 없이 돈다.
 
-Serper(유료 키)가 없을 때 이 검사가 대신 돈다. 공개 자료 두 가지를 합친다.
+공개 자료 두 가지를 합친다.
   1) 커먼크롤 색인 — 누구나 키 없이 조회할 수 있는 세계 크롤 기록. 이 도메인 밑에
      어떤 주소가 남아 있었는지 알려 준다(제목·요약은 없다).
   2) 도메인 현재 페이지 — 지금 실제로 열어 본다. 파킹(판매용 빈 페이지)인지,
@@ -23,7 +23,75 @@ import httpx
 
 from ..analyze.extract import extract_text
 from ..models import CheckState, CheckStatus, IndexInfo
-from .serper import PARKING_PHRASES_KO, PARKING_TERMS, contamination_hits
+
+# 색인 오염 판단용 최소 표지. 현재 파킹 문구와는 구분해서 쓴다.
+# 오염어 하나가 곧바로 "제외(빨강)" 치명 사유가 되므로, 홀로 쓰이면 뜻이 넓은 낱말은
+# 넣지 않는다 — "성인"은 성인교육·성인병·성인식을, "슬롯"은 광고 슬롯을,
+# "xxx"는 XXXL 을 잡아 멀쩡한 도메인을 제외시킨다(합법 업종 오폭 방지).
+CONTAMINATION_TERMS = (
+    "카지노",
+    "바카라",
+    "토토사이트",
+    "먹튀",
+    "슬롯머신",
+    "성인용품",
+    "성인화상",
+    "야동",
+    "비아그라",
+    "casino",
+    "baccarat",
+    "poker",
+    "viagra",
+    "cialis",
+    "porn",
+    "escort",
+    "replica watch",
+    "オンラインカジノ",
+    "エロ動画",
+    "赌场",
+    "博彩",
+    "色情",
+)
+
+# 영문 오염어는 단어 경계로만 맞춘다("Escorted tour"·"XXXL"이 걸리지 않게).
+# 한국어·일본어·중국어는 낱말 경계가 통하지 않아 구 전체 포함으로 본다.
+_CONTAMINATION_RE = re.compile(
+    "|".join(
+        rf"\b{re.escape(term)}\b" for term in CONTAMINATION_TERMS if term.isascii()
+    ),
+    re.IGNORECASE,
+)
+_CONTAMINATION_CJK = tuple(term for term in CONTAMINATION_TERMS if not term.isascii())
+
+# 파킹 표지 — 영문은 단어 경계로만 맞춘다.
+# 부분 문자열로 세면 "Sedona"가 sedo로, "parking lot"이 parking으로 잘못 잡힌다.
+# 그래서 홀로 쓰이면 뜻이 넓은 낱말(parking)은 파킹 문맥 구(句)로만 남겼다.
+PARKING_TERMS = (
+    "this domain is for sale",
+    "domain for sale",
+    "buy this domain",
+    "domain parking",
+    "parking page",
+    "parked",
+    "sedo",
+    "afternic",
+    "dan.com",
+)
+
+# 한국어는 낱말 경계(\b)가 통하지 않아 구 전체 포함으로 맞춘다.
+PARKING_PHRASES_KO = (
+    "도메인 판매",
+    "판매 중인 도메인",
+    "도메인 팝니다",
+)
+
+
+def contamination_hits(text: str) -> list[str]:
+    """Risk-industry wording still sitting in the live index/page."""
+    lowered = text.lower()
+    hits = {m.group(0).lower() for m in _CONTAMINATION_RE.finditer(lowered)}
+    hits |= {term for term in _CONTAMINATION_CJK if term in text}
+    return sorted(hits)
 
 COLLINFO_URL = "https://index.commoncrawl.org/collinfo.json"
 COLLINFO_TTL = 24 * 3600  # 크롤 회차는 하루에 한 번만 다시 확인한다
@@ -253,7 +321,7 @@ def _path_text(urls: list[str]) -> str:
 
 
 async def check(domain: str, http: httpx.AsyncClient) -> IndexInfo:
-    """Serper 대체 — 키 없이 색인·현재 상태를 확인한다."""
+    """키 없이 색인·현재 상태를 확인한다."""
     result = IndexInfo()
     urls, crawl_ok = await crawl_urls(domain, http)
     page = await live_page(domain, http)

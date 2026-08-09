@@ -80,42 +80,36 @@ def test_estimate_matches_the_plan_budget():
     assert numbers["slow_minutes"] == pytest.approx(75.0)
 
 
-def test_config_saves_keys_and_keeps_them_when_left_blank(client, config_path):
+def test_config_saves_keys_and_keeps_them_when_left_blank(client, config_path, monkeypatch):
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     saved = client.post(
         "/api/config",
-        json={"serper": "serper-secret-1234", "speed_mode": "safe", "enable_capture": False},
+        json={"openrouter": "sk-or-secret-1234", "speed_mode": "safe", "enable_capture": False},
     )
     assert saved.status_code == 200
 
     data = client.get("/api/config").json()
-    assert data["has_key"]["serper"] is True
-    assert data["keys_masked"]["serper"].endswith("1234")
-    assert "serper-secret" not in json.dumps(data)  # 원문 키는 화면에 내려보내지 않는다
+    assert data["has_key"]["openrouter"] is True
+    assert data["keys_masked"]["openrouter"].endswith("1234")
+    assert "sk-or-secret" not in json.dumps(data)  # 원문 키는 화면에 내려보내지 않는다
     assert data["speed_mode"] == "safe"
     assert data["enable_capture"] is False
     # 키는 전부 선택이 됐다 — 하나도 없어도 판정이 나온다.
     assert data["missing_keys"] == []
-    # 대신 "키가 없어 무엇으로 보고 있는지"를 화면에 알려 줄 수 있어야 한다.
-    assert any("규칙 검사" in note for note in data["free_fallbacks"])
 
     # 빈 값으로 저장하면 기존 키가 살아 있어야 한다
-    client.post("/api/config", json={"serper": "", "model": "deepseek/deepseek-v3.2"})
+    client.post("/api/config", json={"openrouter": "", "model": "deepseek/deepseek-v3.2"})
     again = client.get("/api/config").json()
-    assert again["has_key"]["serper"] is True
+    assert again["has_key"]["openrouter"] is True
     assert again["model"] == "deepseek/deepseek-v3.2"
-    assert config_module.load(config_path).keys.serper == "serper-secret-1234"
+    assert config_module.load(config_path).keys.openrouter == "sk-or-secret-1234"
 
 
-def test_config_derives_virustotal_from_its_key(client):
-    """켜기 단추는 없어졌다 — 바이러스토탈 검사는 키가 있으면 켜지고 없으면 꺼진다."""
-    assert client.get("/api/config").json()["enable_virustotal"] is False
-
-    client.post("/api/config", json={"virustotal": "vt-secret-9999"})
-    assert client.get("/api/config").json()["enable_virustotal"] is True
-
-    # 옛 화면이 보내던 끄기 값은 이제 무시된다 — 기준은 키가 있는지뿐이다
-    client.post("/api/config", json={"enable_virustotal": False})
-    assert client.get("/api/config").json()["enable_virustotal"] is True
+def test_config_lists_what_runs_instead_when_the_ai_key_is_absent(client, monkeypatch):
+    """키가 없어도 '무엇으로 대신 보는지'를 화면에 알려 줄 수 있어야 한다."""
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    data = client.get("/api/config").json()
+    assert any("규칙 검사" in note for note in data["free_fallbacks"])
 
 
 def test_run_requires_domains(client):
@@ -495,17 +489,16 @@ def test_purge_results_removes_only_the_named_domains(client, fake_run, sample_r
     assert load_run_state(base) == ["example.com"]
 
 
-def test_clear_keys_removes_saved_keys(client, config_path):
-    """키 빼기 — 이름을 담아 보내면 그 키가 지워지고, 바이러스토탈 검사도 꺼진다."""
-    client.post("/api/config", json={"serper": "serper-secret-1234", "virustotal": "vt-secret-9999"})
-    assert client.get("/api/config").json()["enable_virustotal"] is True
+def test_clear_keys_removes_saved_keys(client, config_path, monkeypatch):
+    """키 빼기 — 이름을 담아 보내면 그 키가 지워진다."""
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    client.post("/api/config", json={"openrouter": "sk-or-secret-1234"})
+    assert client.get("/api/config").json()["has_key"]["openrouter"] is True
 
-    client.post("/api/config", json={"clear_keys": ["serper", "virustotal"]})
+    client.post("/api/config", json={"clear_keys": ["openrouter"]})
     data = client.get("/api/config").json()
-    assert data["has_key"]["serper"] is False
-    assert data["has_key"]["virustotal"] is False
-    assert data["enable_virustotal"] is False
-    assert config_module.load(config_path).keys.serper == ""
+    assert data["has_key"]["openrouter"] is False
+    assert config_module.load(config_path).keys.openrouter == ""
 
 
 def test_write_results_keeps_earlier_batches(config_path, sample_result):

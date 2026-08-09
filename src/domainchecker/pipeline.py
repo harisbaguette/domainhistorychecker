@@ -17,12 +17,12 @@ from .analyze import ai as ai_analyze
 from .analyze import rules as rules_analyze
 from .analyze import scoring
 from .analyze.extract import snapshot_from_page
-from .clients import freeindex, openpagerank, safebrowsing, serper, spamhaus, virustotal
+from .clients import freeindex, safebrowsing, spamhaus
 from .clients.openrouter import OpenRouterClient
 from .clients.rdap import RdapClient
 from .clients.wayback import WaybackClient
 from .config import Config, data_dir
-from .models import Authority, CheckState, CheckStatus, DomainResult
+from .models import CheckState, CheckStatus, DomainResult
 from .ratelimit import AdaptiveRateLimiter
 from .report import html as report_html
 
@@ -33,7 +33,9 @@ RUN_STATE_NAME = "run_state.json"
 # 검사 방식이 바뀌면 올린다. 저장분에 찍힌 번호가 이보다 낮으면 다시 검사한다 —
 # 안 그러면 "키가 없어 못 했습니다"라고 적힌 예전 결과를 일주일 동안 계속 보여 준다.
 # 4: 주제 시기별 역사(topic_periods)와 시기별 캡쳐가 추가됨(2026-08-09)
-ENGINE_VERSION = 4
+# 5: 유료 키 검사(Serper·권위 점수·바이러스토탈)를 없애고, 세이프 브라우징을
+#    키 없는 공개 조회로 바꿈(2026-08-09)
+ENGINE_VERSION = 5
 
 
 def run_state_path(base: Path | str) -> Path:
@@ -115,7 +117,6 @@ class Pipeline:
         self.whois_query = whois_query
         self.base = Path(base_dir) if base_dir else data_dir(config)
         self.wayback_limiter = AdaptiveRateLimiter(rpm=config.start_rpm)
-        self.vt_limiter = virustotal.make_limiter()
         self.cancel = asyncio.Event()
         self._done = 0
         self._total = 0
@@ -175,7 +176,6 @@ class Pipeline:
                         continue
                 pending.append(domain)
 
-            authority = await self._authority_for(pending, http)
             semaphore = asyncio.Semaphore(max(1, self.config.concurrency))
 
             async def worker(domain: str) -> DomainResult | None:
@@ -185,7 +185,7 @@ class Pipeline:
                     if self.cancel.is_set():
                         return None
                     await self._emit("domain_start", domain=domain)
-                    result = await self.check_domain(domain, http, authority.get(domain))
+                    result = await self.check_domain(domain, http)
                     self._cache(result)
                     self._done += 1
                     await self._emit(
@@ -233,29 +233,7 @@ class Pipeline:
         await self._emit("finished", stopped=stopped, failed=list(self._failed))
         return results
 
-    async def _authority_for(
-        self, pending: list[str], http: httpx.AsyncClient
-    ) -> dict[str, Authority]:
-        """권위 점수 한 번에 조회. 여기서 터지면 검사가 통째로 죽으므로 반드시 삼킨다.
-
-        선택 검사다 — 키가 없으면 그냥 비워 두고, 판정에는 쓰지 않는다.
-        """
-        try:
-            return await openpagerank.fetch_batch(pending, self.config.keys.openpagerank, http)
-        except Exception as exc:  # noqa: BLE001 — 어떤 응답이 와도 나머지 검사는 계속한다
-            state = CheckState(
-                status=CheckStatus.UNCHECKED,
-                note=f"권위 점수 조회에 실패했습니다({type(exc).__name__}).",
-            )
-            return {d: Authority(check=state) for d in pending}
-
-    async def _index_check(self, domain: str, http: httpx.AsyncClient):
-        """색인 검사. 키가 있으면 Serper, 없으면 키 없이 도는 무료 공개 자료."""
-        if self.config.keys.serper:
-            return await serper.check(domain, self.config.keys.serper, http)
-        return await freeindex.check(domain, http)
-
-    def _finish_taken(self, result: DomainResult, authority: Authority | None) -> DomainResult:
+    def _finish_taken(self, result: DomainResult) -> DomainResult:
         """주인이 있는 도메인 — 살 수 없으니 남은 분석에 시간과 호출량을 쓰지 않는다."""
         note = "주인이 있는 도메인이라 나머지 분석은 하지 않았습니다(살 수 없음)."
         for section in (
@@ -263,21 +241,15 @@ class Pipeline:
             result.spamhaus,
             result.index,
             result.safebrowsing,
-            result.virustotal,
             result.ai,
             result.rules,
         ):
             section.check = CheckState(status=CheckStatus.NOT_RUN, note=note)
-        result.authority = authority or Authority(
-            check=CheckState(status=CheckStatus.NOT_RUN, note=note)
-        )
         scoring.judge(result)
         result.finished_at = datetime.now(UTC).isoformat(timespec="seconds")
         return result
 
-    async def check_domain(
-        self, domain: str, http: httpx.AsyncClient, authority: Authority | None = None
-    ) -> DomainResult:
+    async def check_domain(self, domain: str, http: httpx.AsyncClient) -> DomainResult:
         """All checks for one domain. Any single failure degrades to 미확인.
 
         등록 정보(주인이 있나)를 맨 먼저 본다 — 주인이 있으면 어차피 살 수 없어서,
@@ -294,28 +266,17 @@ class Pipeline:
                 note=f"검사 중 오류가 났습니다({type(exc).__name__}).",
             )
         if scoring.availability_of(result.registration.acquisition) == "taken":
-            return self._finish_taken(result, authority)
+            return self._finish_taken(result)
 
         wayback = WaybackClient(http, self.wayback_limiter, self.config.max_snapshots)
         collected = await asyncio.gather(
             wayback.collect(domain),
             spamhaus.check(domain, self.resolver),
-            self._index_check(domain, http),
-            safebrowsing.check(
-                domain,
-                self.config.keys.safebrowsing if self.config.enable_safebrowsing else "",
-                http,
-            ),
-            virustotal.check(
-                domain,
-                self.config.keys.virustotal,
-                http,
-                self.vt_limiter,
-                self.config.enable_virustotal,
-            ),
+            freeindex.check(domain, http),
+            safebrowsing.check(domain, http),
             return_exceptions=True,
         )
-        names = ("wayback", "spamhaus", "index", "safebrowsing", "virustotal")
+        names = ("wayback", "spamhaus", "index", "safebrowsing")
         for name, value in zip(names, collected, strict=True):
             if isinstance(value, BaseException):
                 result.errors.append(f"{name}: {type(value).__name__}: {value}")
@@ -324,15 +285,6 @@ class Pipeline:
                 )
             else:
                 setattr(result, name, value)
-
-        if not self.config.enable_safebrowsing and result.safebrowsing.check.status is CheckStatus.NOT_RUN:
-            result.safebrowsing.check = CheckState(
-                status=CheckStatus.NOT_RUN, note="세이프 브라우징 검사를 껐습니다."
-            )
-
-        result.authority = authority or Authority(
-            check=CheckState(status=CheckStatus.NOT_RUN, note="권위 점수를 조회하지 않았습니다.")
-        )
 
         snapshots = [
             snapshot_from_page(page, domain, self.config.snapshot_text_limit)

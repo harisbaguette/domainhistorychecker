@@ -51,9 +51,9 @@ AVAILABILITY_LABEL = {
 
 # Names of the checks that must all be OK before a ✅ verdict may be issued.
 # 전부 키 없이 도는 것들이다 — 판정의 뼈대는 기계적 검사(파이썬)로 세우고,
-# AI·권위 점수는 있으면 더 정확해지는 보조로 내렸다.
+# AI는 키(OpenRouter)를 넣었을 때만 도는 보조로 내렸다.
 REQUIRED_CHECKS = ("wayback", "registration", "spamhaus", "index", "rules")
-OPTIONAL_CHECKS = ("ai", "authority", "safebrowsing", "virustotal")
+OPTIONAL_CHECKS = ("ai", "safebrowsing")
 
 # 미확인·미실시 목록에 이름을 올릴 검사 전부. 여기 빠지면 "검사를 못 했다"는 사실이
 # 화면 어디에도 안 나와, 못 한 것이 "깨끗함"으로 읽힌다(rules 가 그랬다).
@@ -63,10 +63,8 @@ CHECK_LABEL = {
     "spamhaus": "스팸하우스 블랙리스트",
     "index": "웹 색인·현재 상태",
     "ai": "AI 분석",
-    "authority": "권위 점수",
     "rules": "운영방식 규칙 검사",
     "safebrowsing": "세이프 브라우징",
-    "virustotal": "바이러스토탈",
 }
 
 
@@ -147,20 +145,6 @@ class IndexInfo(BaseModel):
     current_parking: bool = False  # today's parking page, not a past-history signal
     contaminated: bool = False
     contamination_terms: list[str] = Field(default_factory=list)
-
-
-class Authority(BaseModel):
-    check: CheckState = CheckState()
-    page_rank: float = 0.0  # 0~10
-    rank: int | None = None
-    # False면 "자료가 없음"이지 "권위가 0"이 아니다 — 화면에 0.00을 찍으면 안 된다.
-    has_data: bool = True
-
-
-class MalwareScan(BaseModel):
-    check: CheckState = CheckState()
-    malicious: int = 0
-    suspicious: int = 0
 
 
 class SpamJudgement(BaseModel):
@@ -250,9 +234,7 @@ class DomainResult(BaseModel):
     registration: Registration = Registration()
     spamhaus: Reputation = Reputation()
     safebrowsing: Reputation = Reputation()
-    virustotal: MalwareScan = MalwareScan()
     index: IndexInfo = IndexInfo()
-    authority: Authority = Authority()
     ai: AIAnalysis = AIAnalysis()
     rules: RuleFindings = RuleFindings()
     captures: Captures = Captures()

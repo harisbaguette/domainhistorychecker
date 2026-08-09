@@ -9,7 +9,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
-import math
 import os
 import shutil
 from pathlib import Path
@@ -127,15 +126,10 @@ class ConfigRequest(BaseModel):
     """빈 문자열로 온 키는 '바꾸지 않음'을 뜻한다."""
 
     openrouter: str | None = None
-    serper: str | None = None
-    openpagerank: str | None = None
-    safebrowsing: str | None = None
-    virustotal: str | None = None
     # 이름을 담아 보내면 그 키를 지운다 — 빈 문자열은 '바꾸지 않음'이라 지우기에 못 쓴다
     clear_keys: list[str] | None = None
     model: str | None = None
     speed_mode: str | None = None
-    enable_safebrowsing: bool | None = None
     enable_capture: bool | None = None
 
 
@@ -243,20 +237,10 @@ def estimate(config: Config, count: int) -> dict:
         AI_INPUT_TOKENS * AI_INPUT_PRICE + AI_OUTPUT_TOKENS * AI_OUTPUT_PRICE
     ) / 1_000_000
     quota = []
-    if config.keys.serper:
-        quota.append(f"Serper 검색 {count}번 (무료로 쓸 수 있는 횟수는 2,500번)")
-    if config.keys.openpagerank:
-        quota.append(
-            f"Open PageRank {math.ceil(count / 100)}번 물어봄 (한 달에 도메인 3만 개까지 무료)"
-        )
     if config.keys.openrouter:
         quota.append(f"AI 분석 {count}번, 드는 돈 {_money(ai_cost)}")
     # 키를 안 넣은 검사는 무엇으로 대신 도는지 함께 알려 준다.
     quota += [f"{note} — 공개 자료라 키도 돈도 안 듭니다" for note in config.free_fallbacks()]
-    if config.enable_virustotal:
-        quota.append(
-            f"바이러스토탈 {count}개 (1분에 4개까지만 되어서 약 {count / 4:.0f}분 더 걸립니다)"
-        )
     return {
         "count": count,
         "wayback_requests": count * per_domain,
@@ -696,8 +680,6 @@ def create_app(config_path: Path | None = None) -> FastAPI:
             "model": config.model,
             "models": list(MODEL_CHAIN),
             "speed_mode": config.speed_mode,
-            "enable_safebrowsing": config.enable_safebrowsing,
-            "enable_virustotal": config.enable_virustotal,
             "enable_capture": config.enable_capture,
             "missing_keys": config.missing_required_keys(),
             "free_fallbacks": config.free_fallbacks(),
@@ -709,24 +691,17 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     @app.post("/api/config")
     async def set_config(request: ConfigRequest) -> dict:
         config = load_config()
-        for name in ("openrouter", "serper", "openpagerank", "safebrowsing", "virustotal"):
-            value = getattr(request, name)
-            if value:  # 빈 값이면 기존 키를 그대로 둔다
-                setattr(config.keys, name, value.strip())
+        if request.openrouter:  # 빈 값이면 기존 키를 그대로 둔다
+            config.keys.openrouter = request.openrouter.strip()
         # 지우기는 이름을 따로 담아 보낸다 — 빈 값과 '지워라'를 헷갈리지 않게
-        for name in request.clear_keys or []:
-            if name in ("openrouter", "serper", "openpagerank", "safebrowsing", "virustotal"):
-                setattr(config.keys, name, "")
+        if "openrouter" in (request.clear_keys or []):
+            config.keys.openrouter = ""
         if request.model:
             config.model = request.model
         if request.speed_mode in ("adaptive", "safe"):
             config.speed_mode = request.speed_mode
-        for flag in ("enable_safebrowsing", "enable_capture"):
-            value = getattr(request, flag)
-            if value is not None:
-                setattr(config, flag, value)
-        # 바이러스토탈은 켤지 물어보지 않는다 — 키를 넣었으면 켜고, 없으면 끈다.
-        config.enable_virustotal = bool(config.keys.virustotal)
+        if request.enable_capture is not None:
+            config.enable_capture = request.enable_capture
         config_module.save(config, app.state.config_path)
         return {"saved": True, "missing_keys": config.missing_required_keys()}
 

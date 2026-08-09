@@ -6,7 +6,6 @@ from domainchecker.analyze.scoring import availability_of, compute_score, judge
 from domainchecker.models import (
     AVAILABILITY_LABEL,
     AIAnalysis,
-    Authority,
     CheckState,
     CheckStatus,
     DomainResult,
@@ -37,7 +36,6 @@ def healthy(**overrides) -> DomainResult:
         registration=Registration(check=OK, created="2008-01-01", acquisition="구매 가능(미등록)"),
         spamhaus=Reputation(check=OK),
         index=IndexInfo(check=OK, indexed_count=25, titles=["동네 빵집 이야기"]),
-        authority=Authority(check=OK, page_rank=4.0),
         ai=AIAnalysis(
             check=OK,
             model="deepseek/deepseek-v4-flash-0731",
@@ -238,7 +236,6 @@ def test_low_score_rejects_only_when_everything_was_checked():
             last_seen="20230601000000",
             redirect_ratio=0.9,
         ),
-        authority=Authority(check=OK, page_rank=0.0),
         index=IndexInfo(check=OK, indexed_count=0),
         ai=AIAnalysis(
             check=OK,
@@ -265,7 +262,6 @@ def test_low_partial_score_is_not_rejected_when_evidence_is_missing():
             check=OK, doorway=True, hidden_text=True, language_shift=True,
             sensitive_terms=["도박:카지노"],
         ),
-        authority=Authority(check=OK, page_rank=0.0),
         index=IndexInfo(check=OK, indexed_count=0),
     )
     result = judge(thin)
@@ -280,7 +276,6 @@ def test_partial_score_normalises_over_confirmed_items_only():
         wayback=WaybackHistory(check=CheckState(status=CheckStatus.UNCHECKED)),
         ai=AIAnalysis(check=CheckState(status=CheckStatus.UNCHECKED)),
         rules=RuleFindings(check=CheckState(status=CheckStatus.UNCHECKED)),
-        authority=Authority(check=OK, page_rank=5.0),
         index=IndexInfo(check=OK, indexed_count=50),
     )
     score = compute_score(thin)
@@ -288,22 +283,21 @@ def test_partial_score_normalises_over_confirmed_items_only():
 
     assert [i.name for i in counted] == ["inheritance"]  # 승계 자산만 확인됨
     assert score.partial is True
-    # 10(중립) + 7(권위 상한) + 3(색인) = 20 / 20 → 100
-    assert score.total == pytest.approx(100.0)
+    # 10(중립) + 3(색인) = 13 / 20 → 65
+    assert score.total == pytest.approx(65.0)
 
 
 def test_a_domain_can_be_bought_with_no_api_keys_at_all():
-    """키가 하나도 없어도(=AI·권위 점수 없이) 초록 판정이 나와야 한다."""
+    """키가 하나도 없어도(=AI 없이) 초록 판정이 나와야 한다."""
     keyless = judge(
         healthy(
             ai=AIAnalysis(check=CheckState(status=CheckStatus.NOT_RUN, note="키 없음")),
-            authority=Authority(check=CheckState(status=CheckStatus.NOT_RUN, note="키 없음")),
         )
     )
 
     assert keyless.verdict is Verdict.BUY
     assert keyless.warn_reasons == []
-    assert "AI 분석" in keyless.not_run and "권위 점수" in keyless.not_run
+    assert "AI 분석" in keyless.not_run
     assert keyless.one_liner  # 기계적으로 만든 한 줄 평가가 대신 들어간다
 
 
@@ -407,16 +401,12 @@ def test_the_plain_one_liner_only_states_what_was_actually_counted():
     assert "판매용 빈 화면" in result.one_liner
 
 
-def test_no_authority_data_is_neutral_not_a_zero_score():
-    """자료가 없는 것을 0.00 으로 적으면 '권위가 바닥인 도메인'으로 잘못 읽힌다."""
-    thin = healthy(
-        authority=Authority(check=OK, has_data=False, page_rank=0.0),
-        index=IndexInfo(check=OK, indexed_count=0),
-    )
+def test_empty_index_is_neutral_not_a_zero_score():
+    """색인 0건은 만료 도메인의 기본값 — 감점이 아니라 중립(10점)이어야 한다."""
+    thin = healthy(index=IndexInfo(check=OK, indexed_count=0))
     item = next(i for i in compute_score(thin).items if i.name == "inheritance")
 
-    assert "권위 자료 없음(중립)" in item.note
-    assert "0.00" not in item.note
+    assert "색인 없음(중립)" in item.note
     assert item.earned == pytest.approx(10.0)  # 중립 그대로
 
 

@@ -34,17 +34,16 @@ DISCLAIMER = (
 
 LIMITS = [
     "저장된 이력이 없는 것과 열람이 차단된 것은 다릅니다 — 뒤쪽은 이력을 숨겼을 가능성이 있습니다.",
-    "백링크 상세는 무료로 받을 수 있는 자료가 없어 근거가 얇습니다(권위 점수와 색인 잔존으로 갈음).",
+    "백링크 상세는 무료로 받을 수 있는 자료가 없어 근거가 얇습니다(색인 잔존으로 갈음).",
     "상표 검사는 도메인 이름 문자열과 AI 소견 수준의 보조 검사입니다.",
     "OpenRouter 키가 없으면 과거 본문은 AI가 아니라 규칙 검사(기계적 판단)만으로 봅니다 — 문맥을 읽어야 잡히는 것은 놓칠 수 있습니다.",
-    "색인 수는 추정치입니다 — Serper 키가 있으면 구글 site: 검색 기준, 없으면 공개 크롤 기록에 남은 주소 수(최대 200)입니다.",
+    "색인 수는 추정치입니다 — 공개 크롤 기록에 남은 주소 수(최대 200)입니다.",
     "구매 가격·경매 시세와 주인이 몇 번 바뀌었는지는 다루지 않습니다.",
 ]
 
 SCORE_GUIDE = "75점부터 매입 후보(초록) · 50점 밑은 제외(빨강) · 나머지는 검토 필요(노랑)"
 
 # 어려운 낱말은 제목·라벨에서 곧바로 풀어 준다(따로 용어집을 찾아가지 않게).
-AUTHORITY_LABEL = "권위 점수(다른 사이트들이 링크로 밀어주는 힘, 0~10)"
 INDEX_LABEL = "웹에 남아 있는 페이지(색인)"
 REDIRECT_LABEL = "다른 곳으로 넘겨보낸 비율(리다이렉트)"
 PARKING_LABEL = "‘도메인 팝니다’ 임시 화면이던 비중(파킹)"
@@ -410,16 +409,6 @@ def detail_fragment(result: DomainResult, capture_base: str = "../captures") -> 
         if result.ai.fallback_used
         else ""
     )
-    # 못 잰 값을 0으로 보여 주면 "권위가 0인 나쁜 도메인"으로 오해한다.
-    # 조회는 됐지만 자료가 없는 경우(has_data=False)도 숫자가 아니라 말로 적는다.
-    if not result.authority.check.ok:
-        authority_value = "못 쟀음 — " + (result.authority.check.note or "확인하지 못했습니다.")
-    elif not result.authority.has_data:
-        authority_value = "자료 없음 — " + (
-            result.authority.check.note or "권위 점수 자료가 없습니다."
-        )
-    else:
-        authority_value = f"{result.authority.page_rank:.2f} / 10"
     index_line = (
         f"색인 {result.index.indexed_count}건"
         + (" · " + _t(result.index.check.note) if result.index.check.note else "")
@@ -445,7 +434,6 @@ def detail_fragment(result: DomainResult, capture_base: str = "../captures") -> 
         ),
         ("재등록(드랍) 이력", "있음" if registration.redropped else "확인 안 됨"),
         ("등록 자료 출처", _t(registration.source or "없음")),
-        (AUTHORITY_LABEL, _t(authority_value)),
     ]
     fact_cards = "".join(
         '<div class="dw-card" data-elevation="float" data-size="sm">'
@@ -501,8 +489,7 @@ def detail_fragment(result: DomainResult, capture_base: str = "../captures") -> 
 {_list(result.index.titles[:10], "색인된 제목 없음")}
 <h3>블랙리스트</h3>
 <p>스팸하우스: {_check_line(result.spamhaus.check)}<br>
-세이프 브라우징: {_check_line(result.safebrowsing.check)}<br>
-바이러스토탈: {_check_line(result.virustotal.check)}</p>
+세이프 브라우징: {_check_line(result.safebrowsing.check)}</p>
 
 <h2>8. 확인하지 못한 것</h2>
 <h3>미확인(검사했지만 답을 못 받음)</h3>{_list(result.unchecked, "없음")}

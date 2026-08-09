@@ -6,64 +6,15 @@
 
 from datetime import UTC, datetime, timedelta
 
-import httpx
 import pytest
-import respx
 
 from domainchecker.analyze.scoring import judge
-from domainchecker.clients import http_reason, openpagerank, serper
+from domainchecker.clients import freeindex, http_reason
 from domainchecker.models import CheckState, CheckStatus, DomainResult
 from domainchecker.pipeline import ENGINE_VERSION, is_stale
 from domainchecker.report import html as report_html
 
 OK = CheckState(status=CheckStatus.OK)
-
-
-@pytest.fixture
-async def http():
-    async with httpx.AsyncClient() as client:
-        yield client
-
-
-# ── 권위 점수 조회가 검사 전체를 죽이던 문제 ─────────────────────────────
-@respx.mock
-async def test_authority_lookup_never_kills_the_run(http):
-    """OPR 응답이 어긋나면 예외가 밖으로 나와 도메인 1,000개가 통째로 죽었다."""
-    respx.get("https://openpagerank.com/api/v1.0/getPageRank").mock(
-        return_value=httpx.Response(200, json=["엉뚱한 모양"])
-    )
-    found = await openpagerank.fetch_batch(["a.com"], "key", http)
-    assert found["a.com"].check.status is CheckStatus.UNCHECKED
-
-
-@respx.mock
-async def test_authority_row_with_text_status_code_is_survivable(http):
-    """status_code 자리에 숫자가 아닌 글자가 와도 int() 로 터지면 안 된다."""
-    respx.get("https://openpagerank.com/api/v1.0/getPageRank").mock(
-        return_value=httpx.Response(
-            200, json={"response": [{"domain": "a.com", "status_code": "ok"}]}
-        )
-    )
-    found = await openpagerank.fetch_batch(["a.com"], "key", http)
-    assert found["a.com"].has_data is False
-    assert found["a.com"].page_rank == 0.0
-
-
-@respx.mock
-async def test_authority_without_data_is_not_reported_as_zero(http):
-    """자료가 없는 것을 0.00 으로 보여 주면 '권위 0인 나쁜 도메인'으로 읽힌다."""
-    respx.get("https://openpagerank.com/api/v1.0/getPageRank").mock(
-        return_value=httpx.Response(
-            200, json={"response": [{"domain": "new.com", "status_code": 404}]}
-        )
-    )
-    found = await openpagerank.fetch_batch(["new.com"], "key", http)
-    assert found["new.com"].has_data is False
-
-    result = DomainResult(domain="new.com", authority=found["new.com"])
-    fragment = report_html.detail_fragment(result)
-    assert "0.00 / 10" not in fragment
-    assert "자료 없음" in fragment
 
 
 # ── 색인 오염 오탐 ────────────────────────────────────────────────────
@@ -78,7 +29,7 @@ async def test_authority_without_data_is_not_reported_as_zero(http):
 )
 def test_legal_wording_is_not_treated_as_contamination(title):
     """오염어 하나가 곧바로 '제외' 치명 사유라, 오탐은 멀쩡한 도메인을 죽인다."""
-    assert serper.contamination_hits(title) == []
+    assert freeindex.contamination_hits(title) == []
 
 
 @pytest.mark.parametrize(
@@ -86,7 +37,7 @@ def test_legal_wording_is_not_treated_as_contamination(title):
     ["온라인 카지노 먹튀 검증", "Buy viagra online no prescription", "성인용품 쇼핑몰"],
 )
 def test_real_contamination_is_still_caught(title):
-    assert serper.contamination_hits(title)
+    assert freeindex.contamination_hits(title)
 
 
 # ── 오류 번호를 사람 말로 ──────────────────────────────────────────────
@@ -105,7 +56,7 @@ def test_score_below_cut_says_so_even_when_a_required_check_is_missing():
     result.wayback.total_captures = 20
     result.wayback.first_seen = "20100101000000"
     result.wayback.last_seen = "20240101000000"
-    for part in ("registration", "index", "ai", "authority", "rules"):
+    for part in ("registration", "index", "ai", "rules"):
         getattr(result, part).check = OK
     result.rules.doorway = True
     result.rules.hidden_text = True
@@ -136,7 +87,6 @@ def test_rule_check_failure_shows_up_instead_of_reading_as_clean():
 def test_blacklist_checks_that_never_ran_say_so():
     result = DomainResult(domain="skipped.com")
     result.safebrowsing.check = CheckState(status=CheckStatus.NOT_RUN)
-    result.virustotal.check = CheckState(status=CheckStatus.NOT_RUN)
 
     fragment = report_html.detail_fragment(result)
     assert "브라우징: -" not in fragment

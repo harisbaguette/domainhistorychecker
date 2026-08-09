@@ -53,10 +53,8 @@ def _check_of(result: DomainResult, name: str):
         "spamhaus": result.spamhaus.check,
         "index": result.index.check,
         "ai": result.ai.check,
-        "authority": result.authority.check,
         "rules": result.rules.check,
         "safebrowsing": result.safebrowsing.check,
-        "virustotal": result.virustotal.check,
     }[name]
 
 
@@ -209,30 +207,20 @@ def _transition_item(result: DomainResult) -> ScoreItem:
 def _inheritance_item(result: DomainResult) -> ScoreItem:
     """가점형 — 색인 0은 만료 도메인의 기본값이므로 중립에서 시작한다."""
     item = ScoreItem(name="inheritance", label="승계 자산", max_points=20)
-    authority_ok = result.authority.check.ok
-    index_ok = result.index.check.ok
-    if not (authority_ok or index_ok):
+    if not result.index.check.ok:
         item.note = "승계 자산 자료가 없어 채점에서 제외했습니다."
         return item
 
     points = 10.0  # 중립
     notes = []
-    if authority_ok:
-        # 자료가 없는 것은 "권위 0점"이 아니다 — 0.00 을 적으면 나쁜 점수처럼 읽힌다.
-        if result.authority.has_data:
-            points += min(7.0, result.authority.page_rank * 1.4)
-            notes.append(f"권위 점수 {result.authority.page_rank:.2f}")
-        else:
-            notes.append("권위 자료 없음(중립)")
-    if index_ok:
-        if result.index.indexed_count >= 10:
-            points += 3
-            notes.append(f"색인 {result.index.indexed_count}건 잔존")
-        elif result.index.indexed_count >= 1:
-            points += 1.5
-            notes.append(f"색인 {result.index.indexed_count}건 잔존")
-        else:
-            notes.append("색인 없음(중립)")
+    if result.index.indexed_count >= 10:
+        points += 3
+        notes.append(f"색인 {result.index.indexed_count}건 잔존")
+    elif result.index.indexed_count >= 1:
+        points += 1.5
+        notes.append(f"색인 {result.index.indexed_count}건 잔존")
+    else:
+        notes.append("색인 없음(중립)")
 
     item.earned = max(0.0, min(20.0, points))
     item.note = ", ".join(notes)
@@ -446,8 +434,4 @@ def warn_reasons(result: DomainResult) -> list[str]:
         reasons.append("웨이백 열람이 차단되어 과거를 볼 수 없습니다(이력 은폐 가능성).")
     if result.wayback.check.ok and not result.wayback.has_history:
         reasons.append("저장된 과거 이력이 아예 없습니다 — 좋은 것도 나쁜 것도 아니므로 신중히 판단하세요.")
-    if result.virustotal.check.ok and (result.virustotal.malicious or result.virustotal.suspicious):
-        reasons.append(
-            f"바이러스토탈 악성 {result.virustotal.malicious}건·의심 {result.virustotal.suspicious}건."
-        )
     return reasons
