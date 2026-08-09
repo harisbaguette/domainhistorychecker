@@ -8,7 +8,9 @@ from domainchecker import config as config_module
 from domainchecker.config import Config
 from domainchecker.server import create_app
 
-ACCOUNT = {"user": "ghd12zxc", "password": "rudgh501"}
+# 시험용 가짜 계정 — 진짜로 쓰는 아이디·비밀번호는 여기에 절대 적지 않는다.
+# 이 저장소는 누구나 볼 수 있어서, 적는 순간 자물쇠를 열어 둔 것과 같아진다.
+ACCOUNT = {"user": "tester", "password": "test-secret-1234"}
 
 
 @pytest.fixture
@@ -110,3 +112,40 @@ def test_the_note_is_marked_secure_behind_https(locked):
         "/api/login", json=ACCOUNT, headers={"x-forwarded-proto": "https"}
     )
     assert "Secure" in behind_proxy.headers["set-cookie"]
+
+
+def test_the_block_starts_over_after_it_cools_down(monkeypatch):
+    """어제 다섯 번 틀린 사람이 오늘 한 번 잘못 눌렀다고 바로 갇히면 안 된다."""
+    now = [10_000.0]
+    monkeypatch.setattr(auth.time, "time", lambda: now[0])
+    attempts = auth.Attempts()
+    for _ in range(auth.Attempts.LIMIT):
+        attempts.failed("나")
+    assert attempts.blocked("나") is True
+
+    now[0] += auth.Attempts.COOLDOWN + 1  # 잠긴 시간이 다 지났다
+    assert attempts.blocked("나") is False
+    attempts.failed("나")
+    assert attempts.blocked("나") is False  # 처음부터 다시 세니 한 번으로는 안 잠긴다
+
+
+def test_old_records_do_not_pile_up(monkeypatch):
+    now = [10_000.0]
+    monkeypatch.setattr(auth.time, "time", lambda: now[0])
+    attempts = auth.Attempts()
+    for name in ("가", "나", "다"):
+        attempts.failed(name)
+    now[0] += auth.Attempts.COOLDOWN + 1
+    attempts.failed("라")
+    assert list(attempts._fails) == ["라"]
+
+
+def test_a_long_secret_changes_the_stamp(monkeypatch):
+    """따로 정한 긴 글자를 섞으므로, 비밀번호가 같아도 도장이 달라진다."""
+    monkeypatch.setenv("DOMAINCHECKER_USER", ACCOUNT["user"])
+    monkeypatch.setenv("DOMAINCHECKER_PASSWORD", ACCOUNT["password"])
+    monkeypatch.delenv("DOMAINCHECKER_SECRET", raising=False)
+    plain = auth.make_token(ACCOUNT["user"], 60)
+    monkeypatch.setenv("DOMAINCHECKER_SECRET", "아주-긴-무작위-글자")
+    assert auth.valid_token(plain) is False  # 재료가 달라지면 예전 쪽지는 못 쓴다
+    assert auth.valid_token(auth.make_token(ACCOUNT["user"], 60)) is True

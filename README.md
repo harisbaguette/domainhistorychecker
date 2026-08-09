@@ -128,10 +128,15 @@ uv run playwright install chromium             # 캡쳐용 브라우저
 저장해 둔 API 키가 그대로 새어 나가므로, 프로그램이 아예 켜지지 않습니다.
 
 ```bash
-DOMAINCHECKER_HOST=0.0.0.0 DOMAINCHECKER_USER=원하는아이디 DOMAINCHECKER_PASSWORD=원하는비밀번호 uv run domainchecker
+DOMAINCHECKER_HOST=0.0.0.0 DOMAINCHECKER_USER=원하는아이디 DOMAINCHECKER_PASSWORD=원하는비밀번호 \
+DOMAINCHECKER_SECRET=$(python -c "import secrets;print(secrets.token_urlsafe(32))") uv run domainchecker
 # 접속하면 우리 로그인 화면이 뜹니다. 아이디를 안 정하면 domainchecker 가 기본값입니다.
 # "로그인 상태 유지"에 체크하면 30일 동안 다시 묻지 않습니다(그 기기에서만).
 ```
 
-비밀번호를 바꾸면 이미 로그인해 둔 기기들도 전부 다시 로그인해야 합니다 — 로그인 쪽지의 도장을
-비밀번호로 만들기 때문입니다.
+`DOMAINCHECKER_SECRET` 은 로그인 쪽지(쿠키)에 찍는 도장의 재료입니다. 사람이 외울 필요 없는 긴
+무작위 글자를 한 번 정해 두면, 쪽지를 주운 사람이 비밀번호를 거꾸로 맞혀 보는 일을 막습니다.
+
+**폰을 잃어버렸거나 남의 기기에 로그인한 채로 두고 왔다면 비밀번호를 바꾸세요.** 서버가 누가
+로그인해 있는지 목록을 들고 있지 않아서, 이미 나간 쪽지를 하나씩 취소할 방법은 없습니다.
+비밀번호를 바꾸면 도장 재료가 달라져 **모든 기기의 쪽지가 한꺼번에 무효**가 됩니다.

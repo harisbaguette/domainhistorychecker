@@ -50,8 +50,16 @@ def check_login(user: str, password: str) -> bool:
 
 
 def _secret() -> bytes:
-    raw = os.environ.get("DOMAINCHECKER_SECRET", "") or account()[1]
-    return hashlib.sha256(f"domainchecker-session:{raw}".encode()).digest()
+    """쪽지에 찍을 도장의 재료 — 따로 정해 둔 긴 글자 + 비밀번호.
+
+    비밀번호만 재료로 쓰면, 쪽지 한 장을 주운 사람이 비밀번호 후보를 하나씩
+    넣어 보며 답을 맞혀 볼 수 있다(짧은 비밀번호는 금방 뚫린다). 그래서
+    DOMAINCHECKER_SECRET(사람이 외울 필요 없는 긴 무작위 글자)를 함께 섞는다.
+    비밀번호도 계속 섞어 두는 이유는, 비밀번호를 바꾸면 예전 쪽지가 저절로
+    못 쓰게 되는 안전장치를 잃지 않기 위해서다.
+    """
+    extra = os.environ.get("DOMAINCHECKER_SECRET", "")
+    return hashlib.sha256(f"domainchecker-session:{extra}|{account()[1]}".encode()).digest()
 
 
 def _b64(raw: bytes) -> str:
@@ -108,8 +116,16 @@ class Attempts:
         return count >= self.LIMIT and time.time() < until
 
     def failed(self, who: str) -> None:
-        count, _ = self._fails.get(who, (0, 0.0))
-        self._fails[who] = (count + 1, time.time() + self.COOLDOWN)
+        now = time.time()
+        # 오래 쉰 뒤에 다시 틀린 것은 처음부터 다시 센다 — 안 그러면 어제 다섯 번
+        # 틀린 주인이 오늘 한 번만 잘못 눌러도 곧바로 또 갇힌다.
+        count, until = self._fails.get(who, (0, 0.0))
+        if now >= until:
+            count = 0
+        self._fails[who] = (count + 1, now + self.COOLDOWN)
+        # 다 식은 옛 기록은 버린다(서버를 오래 켜 둬도 목록이 계속 불어나지 않게)
+        for key in [k for k, (_, gone) in self._fails.items() if gone < now and k != who]:
+            del self._fails[key]
 
     def passed(self, who: str) -> None:
         self._fails.pop(who, None)

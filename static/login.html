@@ -58,11 +58,17 @@ const $ = (id) => document.getElementById(id);
 const msg = $("msg");
 
 /* 로그인 뒤 돌아갈 자리 — 주소창에 실려 온 값이라 그대로 믿지 않는다.
-   우리 집 안의 자리(/ 로 시작하고 // 가 아닌 것)만 받는다. 그러지 않으면
-   남이 만든 주소를 링크에 실어 보내 엉뚱한 사이트로 튕겨 보낼 수 있다. */
+   글자 모양으로 거르지 않고 브라우저에게 직접 "이 주소가 어느 집이냐" 물어본 뒤,
+   우리 집일 때만 받는다. 글자로만 거르면 /\남의집 같은 변형을 놓친다 — 브라우저가
+   역슬래시를 슬래시로 바꿔 읽어서, 로그인하자마자 남의 사이트로 튕겨 나간다. */
 function safeNext() {
   const raw = new URLSearchParams(location.search).get("next") || "/";
-  return /^\/(?!\/)/.test(raw) ? raw : "/";
+  try {
+    const url = new URL(raw, location.origin);
+    return url.origin === location.origin ? url.pathname + url.search : "/";
+  } catch (error) {
+    return "/";
+  }
 }
 
 $("loginForm").addEventListener("submit", async (event) => {
