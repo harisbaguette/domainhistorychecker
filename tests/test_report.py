@@ -15,12 +15,13 @@ def test_detail_fragment_holds_every_required_section(sample_result):
     judge(sample_result)
     html = detail_fragment(sample_result)
 
-    for heading in ("왜 이렇게 판정했나", "나이와 등록 정보", "타임라인", "주제 변천", "캡쳐",
-                    "신호와 근거", "확인하지 못한 것", "이어가면 좋을 주제", "다시 확인할 곳"):
+    for heading in ("왜 이렇게 판정했나", "나이와 등록 정보", "타임라인",
+                    "과거에 무엇을 하던 도메인인가", "캡쳐",
+                    "신호와 근거", "확인하지 못한 것", "이어가기 좋은 주제", "다시 확인할 곳"):
         assert heading in html
     assert "2009-04-01" in html  # 등록일
     assert "삭제 대기(곧 등록 가능)" in html  # 취득 상태
-    assert "빵집 블로그로 시작해" in html  # 주제 변천
+    assert "빵집 블로그로 시작해" in html  # 주제 역사(줄글)
     assert "홈베이킹" in html  # 추천 주제
 
 

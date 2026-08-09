@@ -27,6 +27,25 @@ def test_plans_the_terminal_shot_only_when_there_is_no_risk(sample_result):
     assert targets[0][1] == "20240601000000"  # 마지막 스냅샷
 
 
+def test_plans_one_shot_per_topic_period(sample_result):
+    """주제가 바뀐 시기마다 그 시기의 화면 사진을 한 장씩 찍는다."""
+    sample_result.wayback.selected.insert(
+        1, Snapshot(timestamp="20150601000000", original="http://example.com/")
+    )
+    sample_result.ai.topic_periods = [
+        {"start": "2010", "end": "2014", "topic": "빵집 블로그"},
+        {"start": "2015", "end": "2024", "topic": "베이킹 강좌"},
+    ]
+    targets = plan_targets(sample_result)
+
+    labels = [t[0] for t in targets]
+    assert labels[0] == "말기"
+    assert "빵집 블로그 (2010~2014)" in labels
+    # 말기(2024)와 같은 스냅샷이 걸리는 시기는 두 번 찍지 않는다
+    timestamps = [t[1] for t in targets]
+    assert len(timestamps) == len(set(timestamps))
+
+
 def test_plans_a_second_shot_for_the_risk_period(sample_result):
     sample_result.wayback.selected.insert(
         1, Snapshot(timestamp="20150601000000", original="http://example.com/")

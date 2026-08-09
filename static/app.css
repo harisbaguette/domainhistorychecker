@@ -51,7 +51,7 @@ code {
 
 /* DW 정본은 포커스 표시를 그림자로 만드는데, 제 그림자를 가진 부품이 그걸 덮어
    지워 버린다. 그림자와 상관없는 바깥 테두리로 다시 세운다. */
-:where(.dock-fab, .dock-item, .dw-list-item, .sub-tab, .ps-pill):focus-visible {
+:where(.dock-item, .dw-list-item, .sub-tab, .app-pick, .ps-pill):focus-visible {
   outline: 3px solid color-mix(in srgb, var(--dw-accent-strong) 45%, transparent);
   outline-offset: 2px;
 }
@@ -228,8 +228,8 @@ body {
   display: flex;
   justify-content: center;
   flex-shrink: 0;
-  /* 위 36px 는 뜬 + 단추가 앉는 자리다 — doweek 원본 그대로 */
-  padding: 36px 14px calc(12px + env(safe-area-inset-bottom));
+  /* 예전에는 위 36px 가 뜬 + 단추의 자리였다 — 단추를 빼서 자리도 줄였다(2026-08-09) */
+  padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
   background: var(--dw-bg);
 }
 
@@ -241,67 +241,8 @@ body {
   --dock-height: 68px;
 }
 
-/* 넣기 단추 = doweek 의 .dock-fab — 도크 한가운데 위 테에 걸쳐 앉는 둥근 단추.
-   원본대로 흰 바(유리판) 뒤에 두어(z 1 < 2) 동그라미 아랫부분이 바에 파묻히게 한다.
-   앞(z 3)에 세우면 바 위에 동그라미가 통째로 얹혀 바를 가린다. 파묻힌 아랫부분은
-   바가 눌림을 받으므로, 눌러야 할 곳은 바 위로 솟은 윗부분(약 36px)이다. */
-.dock-fab {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  transform: translate(-50%, -66%);
-  width: 54px;
-  height: 54px;
-  border-radius: var(--dw-radius-pill);
-  color: var(--dw-on-accent);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 4px solid var(--dw-bg);
-  background: var(--dw-accent-strong);
-  cursor: pointer;
-  padding: 0;
-  z-index: 1;
-  transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.22s;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.35),
-    0 0 0 1px rgba(15, 23, 42, 0.08),
-    0 8px 20px -4px color-mix(in srgb, var(--dw-accent-strong) 58%, transparent),
-    0 3px 8px -2px rgba(0, 0, 0, 0.15);
-}
-
-.dock-fab::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: var(--dw-radius-pill);
-  border: 1.5px solid rgba(255, 255, 255, 0.3);
-  pointer-events: none;
-}
-
-.dock-fab svg {
-  transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .dock-fab:hover {
-    transform: translate(-50%, -68%);
-  }
-
-  .dock-fab:hover svg {
-    transform: rotate(90deg);
-  }
-}
-
-.dock-fab:active {
-  transform: translate(-50%, -66%) scale(0.94);
-  transition: transform 0.1s;
-}
-
-.dock-fab:active svg {
-  transform: rotate(45deg);
-  transition: transform 0.1s;
-}
+/* doweek 의 .dock-fab(도크 위 둥근 + 단추)은 뺐다 — '분석 의뢰'가 도크의 첫 칸이 되면서
+   넣는 곳이 두 군데가 될 이유가 없어졌다(운영자 지시 2026-08-09). */
 
 .dock-glass {
   position: relative;
@@ -536,7 +477,6 @@ body {
 
   .dock-nav,
   .filter-header,
-  .dock-fab,
   .app-runbar,
   .dw-block-shell-action {
     display: none;
@@ -571,15 +511,90 @@ body {
 
 /* 목록 화면은 세로 기둥이다 — 덩이 사이 12px, 빈 안내는 남는 공간 한가운데
    (원본 .view-empty-wrap 이 하던 일). 개수판과 첫 줄이 붙어 보이던 것도 이 12px 가 푼다. */
-#list.screen.on {
+#results.screen.on,
+#planned.screen.on {
   display: flex;
   flex-direction: column;
   gap: var(--dw-space-3);
   min-height: 100%;
 }
 
-#emptyRows {
+#emptyRows,
+#emptyPlanned {
   margin: auto 0;
+}
+
+/* ── 분석 의뢰 화면 — 붙여넣는 칸이 화면을 가득 채운다. 할 일이 그것 하나뿐이다. */
+#request.screen.on {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.app-request {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: var(--dw-space-3);
+}
+
+.app-request-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--dw-space-2);
+}
+
+.app-request .app-paste {
+  flex: 1;
+}
+
+/* ── 결과 한 줄 + 체크 단추 — 단추 안에 단추를 못 넣어(HTML 규칙) 옆에 세운다 */
+.app-row {
+  display: flex;
+  align-items: stretch;
+  gap: var(--dw-space-2);
+}
+
+.app-row > .dw-list-item {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 매입 예정 담기 — 카드 옆 동그란 도장 자리. 안 담김은 + 가 든 점선 원,
+   담김은 초록으로 꽉 채운 원에 흰 체크(면 채움이라 멀리서도 갈린다).
+   테두리는 비문자 대비 바닥선(3:1)을 넘는 잉크로 긋는다. 표적 44px. */
+.app-pick {
+  flex: none;
+  align-self: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: var(--dw-radius-pill);
+  border: 2px dashed var(--dw-text-muted-aa);
+  background: var(--dw-surface);
+  color: var(--dw-text-muted-aa);
+  cursor: pointer;
+  transition: background 0.18s, border-color 0.18s, color 0.18s, transform 0.1s;
+}
+
+.app-pick:active {
+  transform: scale(0.92);
+}
+
+.app-pick[aria-pressed='true'] {
+  border: 2px solid var(--dw-success-ink);
+  background: var(--dw-success-ink);
+  color: var(--dw-on-accent);
+}
+
+/* 담기 원이 없는 줄이 비워 두는 같은 폭의 자리 — 오른끝을 한 줄로 세운다 */
+.app-pick-slot {
+  flex: none;
+  width: 44px;
 }
 
 /* ── 조작판(검사·설정 화면)의 문단 간격 ────────────────────────────

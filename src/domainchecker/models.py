@@ -181,6 +181,8 @@ class AIAnalysis(BaseModel):
     trademark: str = ""
     trademark_risk: bool = False
     recommended_topics: list[dict] = Field(default_factory=list)  # {topic, reason}
+    # 주제가 바뀐 시기별 역사 — {start, end, topic}. 시기마다 캡쳐 한 장을 찍는다.
+    topic_periods: list[dict] = Field(default_factory=list)
     one_liner: str = ""
 
 

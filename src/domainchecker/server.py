@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
 import json
 import math
 import os
@@ -73,6 +74,43 @@ class PurgeRequest(BaseModel):
     domains: list[str] = []
 
 
+class PlannedRequest(BaseModel):
+    """매입 예정 표시 — planned=True 면 넣고, False 면 뺀다."""
+
+    domain: str = ""
+    planned: bool = True
+
+
+PLANNED_NAME = "planned.json"
+
+
+def load_planned(base: Path) -> list[str]:
+    """매입 예정으로 골라 둔 도메인들 — 앱을 껐다 켜도 남아야 해서 파일로 산다."""
+    path = base / PLANNED_NAME
+    if not path.exists():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    if not isinstance(data, dict):
+        return []
+    out: list[str] = []
+    for one in data.get("domains") or []:
+        name = str(one).strip().lower()
+        if name and name not in out:
+            out.append(name)
+    return out
+
+
+def save_planned(base: Path, domains: list[str]) -> None:
+    # 목록을 못 남겨도 앱은 계속 돌아야 한다.
+    with contextlib.suppress(OSError):
+        (base / PLANNED_NAME).write_text(
+            json.dumps({"domains": domains}, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+
+
 class ConfigRequest(BaseModel):
     """빈 문자열로 온 키는 '바꾸지 않음'을 뜻한다."""
 
@@ -129,7 +167,7 @@ class RunManager:
 
     async def start(self, config: Config, domains: list[str], use_cache: bool) -> None:
         if self.running:
-            raise HTTPException(status_code=409, detail="이미 검사가 진행 중입니다.")
+            raise HTTPException(status_code=409, detail="이미 분석이 진행 중입니다.")
         self.history = []
         self.error = ""
         self.domains = domains
@@ -182,7 +220,7 @@ class RunManager:
 
 
 def estimate(config: Config, count: int) -> dict:
-    """예상 소요 시간과 무료 쿼터 소진량 (PLAN §4·§5)."""
+    """예상 소요 시간과 무료 쿼터 소진량."""
     per_domain = 1 + config.max_snapshots + (2 if config.enable_capture else 0)
     table_per_domain = 1 + config.max_snapshots
     rpm = config.start_rpm
@@ -214,7 +252,7 @@ def estimate(config: Config, count: int) -> dict:
         "table_minutes": round(table_minutes, 1),
         "slow_minutes": round(slow_minutes, 1),
         "summary": (
-            "검사할 도메인이 없습니다."
+            "분석할 도메인이 없습니다."
             if count == 0
             else (
                 f"도메인 {count}개 · 표 결과는 {_minutes(table_minutes)}, 사진까지 {_minutes(minutes)} 걸립니다. "
@@ -261,7 +299,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
 
     @app.middleware("http")
     async def require_password(request, call_next):
-        """외부 접속 모드에서만 켜지는 접속 비밀번호(키 노출 방지 · PLAN §3)."""
+        """외부 접속 모드에서만 켜지는 접속 비밀번호(키 노출 방지)."""
         password = os.environ.get("DOMAINCHECKER_PASSWORD", "")
         if password:
             # 바이트로 견준다 — 아스키가 아닌 글자가 헤더에 오면 문자열 비교는
@@ -334,7 +372,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     def one_result(domain: str) -> DomainResult:
         payload = manager.results.get(domain) or cache.load(domain, data_root())
         if not payload:
-            raise HTTPException(status_code=404, detail="아직 검사하지 않은 도메인입니다.")
+            raise HTTPException(status_code=404, detail="아직 분석하지 않은 도메인입니다.")
         try:
             return DomainResult.model_validate(payload)
         except ValueError as exc:
@@ -379,7 +417,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         config = load_config()
         domains = request.domains or parse_domains(request.raw, config.max_domains).domains
         if not domains:
-            raise HTTPException(status_code=400, detail="검사할 도메인이 없습니다.")
+            raise HTTPException(status_code=400, detail="분석할 도메인이 없습니다.")
         # 이미 검사가 도는 중이면 거절하지 않고 대기줄에 세운다 — 지금 검사가
         # 끝나는 즉시 자동으로 이어서 돈다(사람이 폰을 다시 볼 필요가 없게).
         if manager.running:
@@ -397,14 +435,14 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     async def stop() -> dict:
         manager.pending.clear()  # 멈추라는 말은 대기줄까지 포함한다
         manager.stop()
-        return {"stopped": True, "note": "끝난 도메인은 저장돼 있어 '이어서 검사'로 재개할 수 있습니다."}
+        return {"stopped": True, "note": "끝난 도메인은 저장돼 있어 '이어서 분석'으로 재개할 수 있습니다."}
 
     @app.post("/api/resume")
     async def resume() -> dict:
         manager.base = data_root()
         domains = manager.resume_domains()
         if not domains:
-            raise HTTPException(status_code=400, detail="이어서 검사할 목록이 없습니다.")
+            raise HTTPException(status_code=400, detail="이어서 분석할 목록이 없습니다.")
         config = load_config()
         manager.config_loader = load_config
         await manager.start(config, domains, use_cache=True)
@@ -446,15 +484,34 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     async def results() -> dict:
         return {"results": [r.model_dump(mode="json") for r in stored_results()]}
 
+    @app.get("/api/planned")
+    async def get_planned() -> dict:
+        return {"domains": load_planned(data_root())}
+
+    @app.post("/api/planned")
+    async def set_planned(request: PlannedRequest) -> dict:
+        domain = request.domain.strip().lower()
+        if not domain:
+            raise HTTPException(status_code=400, detail="도메인이 없습니다.")
+        base_dir = data_root()
+        domains = load_planned(base_dir)
+        if request.planned and domain not in domains:
+            domains.append(domain)
+        elif not request.planned:
+            domains = [d for d in domains if d != domain]
+        save_planned(base_dir, domains)
+        return {"domains": domains}
+
     @app.delete("/api/results")
     async def clear_results() -> dict:
         """저장된 검사 결과를 전부 지운다 — 목록·저장 파일·캐시·화면 사진까지."""
         if manager.running:
             raise HTTPException(
-                status_code=409, detail="검사가 도는 동안에는 지울 수 없습니다. 먼저 중단해 주세요."
+                status_code=409, detail="분석이 도는 동안에는 지울 수 없습니다. 먼저 중단해 주세요."
             )
         base_dir = data_root()
         (base_dir / "results.json").unlink(missing_ok=True)
+        (base_dir / PLANNED_NAME).unlink(missing_ok=True)  # 근거가 사라지면 표시도 지운다
         clear_run_state(base_dir)
         cache_root = cache.cache_dir(base_dir)
         if cache_root.exists():
@@ -480,7 +537,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         """
         if manager.running:
             raise HTTPException(
-                status_code=409, detail="검사가 도는 동안에는 지울 수 없습니다. 먼저 중단해 주세요."
+                status_code=409, detail="분석이 도는 동안에는 지울 수 없습니다. 먼저 중단해 주세요."
             )
         targets = {d.strip().lower() for d in request.domains if d.strip()}
         if not targets:
@@ -514,6 +571,9 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         for domain in targets:
             manager.results.pop(domain, None)
         manager.domains = [d for d in manager.domains if d.lower() not in targets]
+
+        # 매입 예정 표시에서도 뺀다 — 결과가 사라진 도메인이 예정 목록에 유령으로 남지 않게.
+        save_planned(base_dir, [d for d in load_planned(base_dir) if d not in targets])
 
         # "이어서 검사" 목록에서도 빼야 한다 — 안 빼면 앱을 다시 켜고 이어서 검사를
         # 누르는 순간 방금 치운 줄이 그대로 되살아난다.

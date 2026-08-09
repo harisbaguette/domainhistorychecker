@@ -25,6 +25,20 @@ RESPONSE_SCHEMA = {
     "additionalProperties": False,
     "properties": {
         "topic_history": {"type": "string", "description": "연도별 주제 변천을 한국어로 서술"},
+        "topic_periods": {
+            "type": "array",
+            "description": "주제가 바뀐 시기별 목록(오래된 것부터). 주제가 하나뿐이면 한 칸만",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "start": {"type": "string", "description": "시작 연도(YYYY)"},
+                    "end": {"type": "string", "description": "끝 연도(YYYY)"},
+                    "topic": {"type": "string", "description": "그 시기의 주제 한 줄"},
+                },
+                "required": ["start", "end", "topic"],
+            },
+        },
         "spam": {
             "type": "object",
             "additionalProperties": False,
@@ -59,6 +73,7 @@ RESPONSE_SCHEMA = {
     },
     "required": [
         "topic_history",
+        "topic_periods",
         "spam",
         "transition",
         "transition_risk",
@@ -97,6 +112,8 @@ def build_prompt(
         )
     header.append(
         "# 지시\n아래 과거 페이지 본문을 읽고 스키마대로 한국어 JSON을 채워라. "
+        "topic_periods 에는 주제가 바뀐 시기를 오래된 것부터 연도 구간으로 나눠 적어라"
+        "(주제가 하나로 이어졌으면 한 칸만). "
         "추천 주제는 과거 주제와 인접하면서 사람에게 도움이 되는 것으로 3개 이상 제시하고 사유를 붙여라."
     )
 
@@ -164,6 +181,15 @@ async def analyze(
     result.model = model
     result.fallback_used = fallback
     result.topic_history = str(data.get("topic_history", ""))
+    result.topic_periods = [
+        {
+            "start": str(item.get("start", "")).strip()[:4],
+            "end": str(item.get("end", "")).strip()[:4],
+            "topic": str(item.get("topic", "")).strip(),
+        }
+        for item in (data.get("topic_periods") or [])
+        if isinstance(item, dict) and str(item.get("topic", "")).strip()
+    ][:6]
     result.transition = str(data.get("transition", ""))
     result.transition_risk = bool(data.get("transition_risk", False))
     result.content_quality = str(data.get("content_quality", ""))

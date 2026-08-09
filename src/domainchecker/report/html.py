@@ -16,6 +16,7 @@ from html import escape
 from pathlib import Path
 from urllib.parse import quote
 
+from ..capture import period_label
 from ..models import (
     AVAILABILITY_LABEL,
     CHECK_LABEL,
@@ -323,17 +324,54 @@ def _timeline(result: DomainResult) -> str:
     return f'<div class="app-timeline"><div class="app-years">{bars}</div>{scale}</div>{gaps}'
 
 
-def _captures(result: DomainResult, capture_base: str) -> str:
-    if not result.captures.items:
-        return f'<p class="muted">{_t(result.captures.check.note or "저장된 캡쳐가 없습니다.")}</p>'
-    figures = "".join(
+def _figure(shot, capture_base: str) -> str:
+    return (
         f"<figure><img src=\"{_t(capture_base.rstrip('/'))}/{_t(Path(shot.file).name)}\" "
         f'alt="{_t(shot.label)} 캡쳐" loading="lazy">'
         f"<figcaption class=\"muted\">{_t(shot.label)} · {_t(shot.timestamp[:8])} "
         f'(<a href="{_t(shot.url)}" target="_blank" rel="noopener">원본 보기</a>)</figcaption></figure>'
-        for shot in result.captures.items
     )
+
+
+def _captures(result: DomainResult, capture_base: str, skip: set[str] | None = None) -> str:
+    items = [s for s in result.captures.items if s.timestamp not in (skip or set())]
+    if not items:
+        if skip:
+            return '<p class="muted">남은 캡쳐는 위 주제 역사에 다 실었습니다.</p>'
+        return f'<p class="muted">{_t(result.captures.check.note or "저장된 캡쳐가 없습니다.")}</p>'
+    figures = "".join(_figure(shot, capture_base) for shot in items)
     return f'<div class="app-shots">{figures}</div>'
+
+
+def _topic_story(result: DomainResult, capture_base: str) -> tuple[str, set[str]]:
+    """주제 시기별 역사 — 시기 한 줄 + 그 시기에 찍은 캡쳐 한 장씩.
+
+    반환하는 timestamp 묶음은 여기 이미 실은 사진들이다 — 캡쳐 칸이 같은 사진을
+    두 번 보여 주지 않도록 건네준다.
+    """
+    periods = result.ai.topic_periods
+    if not periods:
+        text = result.ai.topic_history or "AI 분석을 하지 않아 주제 역사를 못 읽었습니다."
+        return f"<p>{_t(text)}</p>", set()
+    used: set[str] = set()
+    rows = []
+    for period in periods:
+        label = period_label(period)
+        shot = next((s for s in result.captures.items if s.label == label), None)
+        figure = ""
+        if shot is not None:
+            used.add(shot.timestamp)
+            figure = f'<div class="app-shots">{_figure(shot, capture_base)}</div>'
+        start = str(period.get("start", ""))[:4]
+        end = str(period.get("end", ""))[:4]
+        span = f"{start}~{end}" if start and end and start != end else (start or end)
+        rows.append(
+            f"<li><b>{_t(span)}</b> — {_t(period.get('topic', ''))}{figure}</li>"
+        )
+    summary = (
+        f"<p>{_t(result.ai.topic_history)}</p>" if result.ai.topic_history else ""
+    )
+    return f"<ol>{''.join(rows)}</ol>{summary}", used
 
 
 def detail_fragment(result: DomainResult, capture_base: str = "../captures") -> str:
@@ -415,6 +453,7 @@ def detail_fragment(result: DomainResult, capture_base: str = "../captures") -> 
         f'<p class="dw-card-title">{value}</p></div>'
         for label, value in facts
     )
+    story, shown_shots = _topic_story(result, capture_base)
     # 도메인 이름은 제목 줄(dw-block-shell-title)이 든다 — 붙어 있어서 굴러도 안 사라진다.
     # 여기서 한 번 더 적으면 한 페이지에 h1 이 둘이 되고 첫 화면을 한 줄 낭비한다.
     return f"""
@@ -437,17 +476,20 @@ def detail_fragment(result: DomainResult, capture_base: str = "../captures") -> 
 <p class="muted">총 {result.wayback.total_captures}건 · {REDIRECT_LABEL} {result.wayback.redirect_ratio:.0%} ·
 {PARKING_LABEL} {result.rules.parking_ratio:.0%}</p>
 
-<h2>4. 주제 변천과 전환 방향</h2>
-<p>{_t(result.ai.topic_history or "AI 분석 결과가 없습니다.")}</p>
+<h2>4. 과거에 무엇을 하던 도메인인가</h2>
+{story}
 <p><b>전환 방향:</b> {_t(result.ai.transition or "확인 안 됨")}</p>
 <p><b>콘텐츠 품질:</b> {_t(result.ai.content_quality or "확인 안 됨")}</p>
 <p><b>상표 소견:</b> {_t(result.ai.trademark or "확인 안 됨")}</p>
 {fallback_note}
 
-<h2>5. 캡쳐</h2>
-{_captures(result, capture_base)}
+<h2>5. 사면 이어가기 좋은 주제 (AI 추천)</h2>
+{f"<ul>{topics}</ul>" if topics else '<p class="muted">추천 주제 없음</p>'}
 
-<h2>6. 신호와 근거</h2>
+<h2>6. 그 밖의 캡쳐</h2>
+{_captures(result, capture_base, shown_shots)}
+
+<h2>7. 신호와 근거</h2>
 <h3>운영방식 규칙이 찾은 흔적</h3>{rules_evidence}
 <h3>AI 스팸성 판정</h3>
 <p>{_t(spam_verdict)} · 확신도 {result.ai.spam.confidence:.2f}</p>
@@ -462,12 +504,9 @@ def detail_fragment(result: DomainResult, capture_base: str = "../captures") -> 
 세이프 브라우징: {_check_line(result.safebrowsing.check)}<br>
 바이러스토탈: {_check_line(result.virustotal.check)}</p>
 
-<h2>7. 확인하지 못한 것</h2>
+<h2>8. 확인하지 못한 것</h2>
 <h3>미확인(검사했지만 답을 못 받음)</h3>{_list(result.unchecked, "없음")}
 <h3>미실시(키가 없거나 꺼 둠)</h3>{_list(result.not_run, "없음")}
-
-<h2>8. 이어가면 좋을 주제</h2>
-{f"<ul>{topics}</ul>" if topics else '<p class="muted">추천 주제 없음</p>'}
 
 <h2>9. 사람이 직접 다시 확인할 곳</h2>
 <ul>{links}</ul>

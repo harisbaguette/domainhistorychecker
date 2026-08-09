@@ -1,4 +1,4 @@
-"""Score and verdict — PLAN §2 implemented literally.
+"""Score and verdict.
 
 Points: 45 안전성 / 20 이력 건실성 / 15 전환 방향 / 20 승계 자산.
 An unconfirmed item is neither 0 nor full marks: it leaves the denominator and

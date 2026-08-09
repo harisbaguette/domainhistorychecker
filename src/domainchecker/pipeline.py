@@ -32,7 +32,8 @@ RUN_STATE_NAME = "run_state.json"
 
 # 검사 방식이 바뀌면 올린다. 저장분에 찍힌 번호가 이보다 낮으면 다시 검사한다 —
 # 안 그러면 "키가 없어 못 했습니다"라고 적힌 예전 결과를 일주일 동안 계속 보여 준다.
-ENGINE_VERSION = 3
+# 4: 주제 시기별 역사(topic_periods)와 시기별 캡쳐가 추가됨(2026-08-09)
+ENGINE_VERSION = 4
 
 
 def run_state_path(base: Path | str) -> Path:

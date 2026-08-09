@@ -1,7 +1,7 @@
 """Playwright screenshots of archived pages — runs after every other check.
 
-PLAN §1[F]: one shot of the terminal period (말기) and, when a risk signal was
-found, one of that period. Screenshots share the global Wayback rate limiter,
+One shot of the terminal period (말기), one of the risk period when a signal was
+found, and one per AI topic period. Screenshots share the global Wayback rate limiter,
 and any failure (no browser installed, timeout) is recorded without stopping
 the pipeline.
 """
@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from .models import Capture, Captures, CheckState, CheckStatus, DomainResult
+from .models import Capture, Captures, CheckState, CheckStatus, DomainResult, Snapshot
 from .ratelimit import AdaptiveRateLimiter
 
 TIMEOUT_MS = 20_000
@@ -27,27 +27,65 @@ def playback_url(timestamp: str, original: str) -> str:
     return f"https://web.archive.org/web/{timestamp}/{original}"
 
 
-def plan_targets(result: DomainResult, limit: int = 2) -> list[tuple[str, str, str]]:
-    """Return (label, timestamp, url) for the shots worth taking."""
+def plan_targets(result: DomainResult, limit: int = 6) -> list[tuple[str, str, str]]:
+    """Return (label, timestamp, url) for the shots worth taking.
+
+    말기 · 위험 신호 시기에 더해, AI가 나눈 주제 시기마다 한 장씩 찍는다 —
+    "과거에 무엇으로 운영됐나"를 글이 아니라 사진으로 확인할 수 있게.
+    """
     selected = result.wayback.selected
     if not selected:
         return []
     targets: list[tuple[str, str, str]] = []
-    last = selected[-1]
-    targets.append(("말기", last.timestamp, playback_url(last.timestamp, last.original)))
+    seen: set[str] = set()
 
+    def add(label: str, snapshot: Snapshot) -> None:
+        if snapshot.timestamp in seen:
+            return
+        seen.add(snapshot.timestamp)
+        targets.append(
+            (label, snapshot.timestamp, playback_url(snapshot.timestamp, snapshot.original))
+        )
+
+    add("말기", selected[-1])
     risky = set(result.rules.risk_timestamps)
     for snapshot in selected:
-        if snapshot.timestamp in risky and snapshot.timestamp != last.timestamp:
-            targets.append(
-                (
-                    "위험 신호 시기",
-                    snapshot.timestamp,
-                    playback_url(snapshot.timestamp, snapshot.original),
-                )
-            )
+        if snapshot.timestamp in risky and snapshot.timestamp not in seen:
+            add("위험 신호 시기", snapshot)
             break
+    for period in result.ai.topic_periods:
+        snapshot = _snapshot_for_period(selected, period)
+        if snapshot is not None:
+            add(period_label(period), snapshot)
     return targets[:limit]
+
+
+def period_label(period: dict) -> str:
+    """'사진 복원 블로그 (2005~2012)' — 캡쳐 밑에 붙는 시기 이름."""
+    start = str(period.get("start", ""))[:4]
+    end = str(period.get("end", ""))[:4]
+    topic = str(period.get("topic", "")).strip()
+    span = f"{start}~{end}" if start and end and start != end else (start or end)
+    return f"{topic} ({span})" if span else topic
+
+
+def _snapshot_for_period(selected: list[Snapshot], period: dict) -> Snapshot | None:
+    """그 시기 안의 스냅샷 중 한가운데 것 — 초입은 이전 주제가 남아 있을 수 있다."""
+
+    def year_of(value: object) -> int:
+        try:
+            return int(str(value)[:4])
+        except ValueError:
+            return 0
+
+    start = year_of(period.get("start"))
+    end = year_of(period.get("end"))
+    if not start and not end:
+        return None
+    start = start or end
+    end = end or start
+    inside = [s for s in selected if start <= s.year <= end]
+    return inside[len(inside) // 2] if inside else None
 
 
 def capture_dir(base: Path | str) -> Path:

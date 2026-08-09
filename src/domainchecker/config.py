@@ -11,7 +11,7 @@ from pydantic import BaseModel
 CONFIG_DIR = Path.home() / ".domainchecker"
 CONFIG_PATH = CONFIG_DIR / "config.json"
 
-# AI model fallback chain, fixed by PLAN §3.
+# AI model fallback chain — 기본 모델이 실패하면 아래 순서로 갈아탄다.
 # 2026-08-04 live probe: "deepseek-v4-flash-latest" is not a real OpenRouter id
 # (400) — the un-suffixed "deepseek-v4-flash" is, so the middle rung uses that.
 MODEL_CHAIN = (
@@ -91,7 +91,7 @@ def save(config: Config, path: Path | None = None) -> Path:
     """Write the config file, asking for owner-only permissions (it holds API keys).
 
     `chmod` is a no-op on Windows, so the file is only as private as the user
-    profile folder there — PLAN §3 already assumes plain local storage.
+    profile folder there — a plain local file is this tool's storage model.
     """
     target = Path(path) if path else CONFIG_PATH
     target.parent.mkdir(parents=True, exist_ok=True)
