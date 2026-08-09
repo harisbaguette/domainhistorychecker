@@ -1127,13 +1127,6 @@ a.dw-list-item {
   line-height: var(--dw-leading-tight);
 }
 
-.app-login-sub {
-  margin: calc(var(--dw-space-3) * -1) 0 0;
-  color: var(--dw-text-muted-aa);
-  font-size: var(--dw-size-body);
-  line-height: var(--dw-leading-body);
-}
-
 .app-login-remember {
   margin-top: calc(var(--dw-space-2) * -1);
 }
