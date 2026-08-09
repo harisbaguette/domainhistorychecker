@@ -293,14 +293,21 @@ def test_damaged_run_state_is_ignored(client, config_path):
     assert client.post("/api/resume").status_code == 400
 
 
-def test_external_access_requires_a_password(config_path, monkeypatch):
+def test_external_access_requires_a_login(config_path, monkeypatch):
     """비밀번호를 정했을 때만 밖에서 접속할 수 있게 잠근다(키 노출 방지)."""
     monkeypatch.setenv("DOMAINCHECKER_PASSWORD", "열쇠말")
     with TestClient(create_app(config_path)) as guarded:
+        blocked = guarded.get("/api/status")
+        assert blocked.status_code == 401
+        assert blocked.json()["login"] is True
+        # 브라우저가 띄우는 회색 물음창이 다시 나오면 안 된다 — 그래서 이 머리글을 안 보낸다
+        assert "WWW-Authenticate" not in blocked.headers
+        wrong = guarded.post("/api/login", json={"user": "domainchecker", "password": "틀린값"})
+        assert wrong.status_code == 401
         assert guarded.get("/api/status").status_code == 401
-        allowed = guarded.get("/api/status", auth=("domainchecker", "열쇠말"))
-        assert allowed.status_code == 200
-        assert guarded.get("/api/status", auth=("domainchecker", "틀린값")).status_code == 401
+        right = guarded.post("/api/login", json={"user": "domainchecker", "password": "열쇠말"})
+        assert right.status_code == 200
+        assert guarded.get("/api/status").status_code == 200
 
 
 def test_serving_outside_localhost_without_a_password_refuses_to_start(monkeypatch):

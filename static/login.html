@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>로그인 · 낙장도메인 품질 체커</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+/* 모양은 전부 /style.css (DW 부품 + app.css) 가 진다. 여기 남는 것은 한 줄뿐. */
+[hidden]{display:none !important;}
+</style>
+</head>
+<body>
+
+<main class="app-login">
+  <form class="app-login-card dw-card" data-elevation="float" id="loginForm" novalidate autocomplete="on">
+    <h1 class="app-login-title">낙장도메인 품질 체커</h1>
+    <p class="app-login-sub">이 도구는 주인만 쓰도록 잠가 두었습니다.<br>아이디와 비밀번호를 넣어 주세요.</p>
+
+    <div class="dw-field-group">
+      <div class="dw-field">
+        <label class="dw-label" for="user">아이디</label>
+        <div class="dw-field-content">
+          <input type="text" class="dw-input" id="user" name="username" autocomplete="username"
+                 autocapitalize="off" autocorrect="off" spellcheck="false" required>
+        </div>
+      </div>
+
+      <div class="dw-field">
+        <label class="dw-label" for="password">비밀번호</label>
+        <div class="dw-field-content">
+          <input type="password" class="dw-input" id="password" name="password"
+                 autocomplete="current-password" required>
+        </div>
+      </div>
+    </div>
+
+    <label class="dw-checkbox app-login-remember">
+      <span class="dw-checkbox-box">
+        <input type="checkbox" class="dw-checkbox-input" id="remember" checked>
+        <svg class="dw-checkbox-mark" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+      </span>
+      로그인 상태 유지 (30일)
+    </label>
+
+    <p class="dw-field-error app-login-error" id="msg" role="alert" hidden></p>
+
+    <button type="submit" class="dw-button" data-variant="primary" data-size="lg" data-block
+            id="submit">로그인</button>
+  </form>
+</main>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const msg = $("msg");
+
+/* 로그인 뒤 돌아갈 자리 — 주소창에 실려 온 값이라 그대로 믿지 않는다.
+   우리 집 안의 자리(/ 로 시작하고 // 가 아닌 것)만 받는다. 그러지 않으면
+   남이 만든 주소를 링크에 실어 보내 엉뚱한 사이트로 튕겨 보낼 수 있다. */
+function safeNext() {
+  const raw = new URLSearchParams(location.search).get("next") || "/";
+  return /^\/(?!\/)/.test(raw) ? raw : "/";
+}
+
+$("loginForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const button = $("submit");
+  msg.hidden = true;
+  button.disabled = true;
+  button.textContent = "확인 중…";
+  try {
+    const response = await fetch("/api/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user: $("user").value,
+        password: $("password").value,
+        remember: $("remember").checked,
+      }),
+    });
+    if (response.ok) {
+      location.replace(safeNext());
+      return;
+    }
+    const data = await response.json().catch(() => ({}));
+    msg.textContent = data.detail || "로그인하지 못했습니다.";
+    msg.hidden = false;
+    $("password").value = "";
+    $("password").focus();
+  } catch (error) {
+    msg.textContent = "서버에 닿지 못했습니다. 인터넷 연결을 확인해 주세요.";
+    msg.hidden = false;
+  } finally {
+    button.disabled = false;
+    button.textContent = "로그인";
+  }
+});
+
+$("user").focus();
+</script>
+</body>
+</html>

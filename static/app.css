@@ -1099,3 +1099,45 @@ a.dw-list-item {
     --dw-app-max-width: 640px;
   }
 }
+
+/* ── 로그인 화면 ────────────────────────────────────────────────────────
+   앱 뼈대(도크·제목줄) 밖에 홀로 서는 유일한 화면이라 배치를 여기서 짠다.
+   종이 한 장이 책상 한가운데 놓인 모습 — 카드 하나만 세로 가운데에 둔다. */
+.app-login {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  padding: var(--dw-space-6) var(--dw-space-4);
+}
+
+.app-login-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dw-space-4);
+  width: 100%;
+  max-width: 380px;
+  padding: var(--dw-space-6);
+}
+
+.app-login-title {
+  margin: 0;
+  font-size: var(--dw-size-title);
+  font-weight: var(--dw-weight-bold);
+  line-height: var(--dw-leading-tight);
+}
+
+.app-login-sub {
+  margin: calc(var(--dw-space-3) * -1) 0 0;
+  color: var(--dw-text-muted-aa);
+  font-size: var(--dw-size-body);
+  line-height: var(--dw-leading-body);
+}
+
+.app-login-remember {
+  margin-top: calc(var(--dw-space-2) * -1);
+}
+
+.app-login-error {
+  margin: 0;
+}

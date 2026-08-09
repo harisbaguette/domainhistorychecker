@@ -7,22 +7,26 @@ server must not be reachable from outside the machine unless the user opts in.
 from __future__ import annotations
 
 import asyncio
-import base64
 import contextlib
 import json
 import math
 import os
-import secrets
 import shutil
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
-from fastapi import FastAPI, HTTPException, Response
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.responses import (
+    FileResponse,
+    JSONResponse,
+    RedirectResponse,
+    StreamingResponse,
+)
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import cache
+from . import auth, cache
 from . import config as config_module
 from .config import MODEL_CHAIN, Config
 from .models import DomainResult
@@ -109,6 +113,14 @@ def save_planned(base: Path, domains: list[str]) -> None:
         (base / PLANNED_NAME).write_text(
             json.dumps({"domains": domains}, ensure_ascii=False, indent=2), encoding="utf-8"
         )
+
+
+class LoginRequest(BaseModel):
+    """로그인 화면이 보내는 것 — remember 가 참이면 30일 동안 다시 안 묻는다."""
+
+    user: str = ""
+    password: str = ""
+    remember: bool = True
 
 
 class ConfigRequest(BaseModel):
@@ -297,22 +309,27 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     def data_root() -> Path:
         return config_module.data_dir(load_config())
 
+    attempts = auth.Attempts()
+
     @app.middleware("http")
-    async def require_password(request, call_next):
-        """외부 접속 모드에서만 켜지는 접속 비밀번호(키 노출 방지)."""
-        password = os.environ.get("DOMAINCHECKER_PASSWORD", "")
-        if password:
-            # 바이트로 견준다 — 아스키가 아닌 글자가 헤더에 오면 문자열 비교는
-            # TypeError 로 터져서, 인증 없는 요청 하나로 500 을 낼 수 있다.
-            header = request.headers.get("authorization", "").encode("utf-8", "replace")
-            expected = b"Basic " + base64.b64encode(f"domainchecker:{password}".encode())
-            if not secrets.compare_digest(header, expected):
-                return Response(
-                    "접속 비밀번호가 필요합니다.",
-                    status_code=401,
-                    headers={"WWW-Authenticate": 'Basic realm="domainchecker"'},
-                )
-        return await call_next(request)
+    async def require_login(request: Request, call_next):
+        """접속 비밀번호를 정했을 때만 켜지는 로그인 잠금(키 노출 방지).
+
+        예전에는 브라우저가 띄우는 회색 물음창(기본 인증)을 썼는데, 그 창은
+        모양을 바꿀 수도 없고 '로그인 유지'도 안 된다. 이제 우리 로그인 화면으로
+        보내고, 들어온 사람에게는 쪽지(쿠키)를 맡겨 다음부터 그냥 통과시킨다.
+        """
+        if not auth.locked() or auth.is_public(request.url.path):
+            return await call_next(request)
+        if auth.valid_token(request.cookies.get(auth.COOKIE_NAME, "")):
+            return await call_next(request)
+        wants_page = request.method == "GET" and "text/html" in request.headers.get("accept", "")
+        if wants_page:
+            target = request.url.path + (f"?{request.url.query}" if request.url.query else "")
+            return RedirectResponse(f"/login?next={quote(target, safe='')}", status_code=303)
+        # 화면 뒤에서 오가는 요청은 튕겨 보내지 않고 401 로 알려 준다 — 화면 쪽 글이
+        # 이 표시를 보고 스스로 로그인 화면으로 옮겨 간다.
+        return JSONResponse({"detail": "로그인이 필요합니다.", "login": True}, status_code=401)
 
     if dev_mode():
         # 개발 중에는 브라우저가 옛 화면을 붙들고 있으면 안 된다 — 그냥 새로고침으로 최신이 뜨게 한다.
@@ -385,11 +402,87 @@ def create_app(config_path: Path | None = None) -> FastAPI:
             return JSONResponse({"error": "static/index.html 을 찾을 수 없습니다."}, status_code=500)
         return FileResponse(page)
 
+    @app.get("/login")
+    async def login_page(request: Request) -> Any:
+        # 잠금이 없거나 이미 들어온 사람에게 로그인 화면을 또 보여 줄 이유가 없다.
+        if not auth.locked() or auth.valid_token(request.cookies.get(auth.COOKIE_NAME, "")):
+            return RedirectResponse("/", status_code=303)
+        page = STATIC_DIR / "login.html"
+        if not page.exists():
+            return JSONResponse({"error": "static/login.html 을 찾을 수 없습니다."}, status_code=500)
+        return FileResponse(page, headers={"Cache-Control": "no-store"})
+
+    @app.post("/api/login")
+    async def do_login(body: LoginRequest, request: Request) -> Response:
+        if not auth.locked():
+            return JSONResponse({"ok": True, "locked": False})
+        who = request.client.host if request.client else "?"
+        if attempts.blocked(who):
+            return JSONResponse(
+                {"detail": "여러 번 틀렸습니다. 1분 뒤에 다시 해 주세요."}, status_code=429
+            )
+        if not auth.check_login(body.user, body.password):
+            attempts.failed(who)
+            return JSONResponse(
+                {"detail": "아이디나 비밀번호가 맞지 않습니다."}, status_code=401
+            )
+        attempts.passed(who)
+        ttl = auth.REMEMBER_SECONDS if body.remember else auth.SESSION_SECONDS
+        response = JSONResponse({"ok": True})
+        response.set_cookie(
+            auth.COOKIE_NAME,
+            auth.make_token(auth.account()[0], ttl),
+            # 유지에 체크하면 30일짜리로 저장하고, 아니면 창을 닫을 때 사라지게 둔다
+            max_age=ttl if body.remember else None,
+            httponly=True,  # 화면 글(자바스크립트)이 쪽지를 읽지 못하게
+            samesite="lax",
+            # 인터넷에 올린 곳은 앞에 문지기 서버가 한 겹 있어서, 진짜 https 인지는
+            # 그 문지기가 붙여 주는 표시(x-forwarded-proto)를 봐야 안다.
+            secure=request.headers.get("x-forwarded-proto", request.url.scheme) == "https",
+            path="/",
+        )
+        return response
+
+    @app.post("/api/logout")
+    async def do_logout() -> Response:
+        response = JSONResponse({"ok": True})
+        response.delete_cookie(auth.COOKIE_NAME, path="/")
+        return response
+
     @app.get("/style.css")
     async def style() -> Response:
         """UI와 보고서가 같은 스타일을 쓰도록 한 곳에서 내려준다."""
         # 앱을 켠 채로 모양 규칙을 고쳐도 새로고침만 하면 바로 보이도록 그때그때 읽는다
         return Response(report_html.current_css(), media_type="text/css")
+
+    # ── 홈 화면에 앱으로 담기(PWA) ────────────────────────────────
+    # 두 파일은 반드시 주소 맨 앞자리(/…)에서 내려야 한다. /static/ 밑에 두면
+    # 심부름꾼이 맡는 범위가 그 아래 폴더로 좁아져서 앱 전체를 못 감싼다.
+    @app.get("/manifest.webmanifest")
+    async def manifest() -> Any:
+        path = STATIC_DIR / "manifest.webmanifest"
+        if not path.exists():
+            raise HTTPException(status_code=404, detail="manifest.webmanifest 이 없습니다.")
+        return FileResponse(path, media_type="application/manifest+json")
+
+    @app.get("/sw.js")
+    async def service_worker() -> Any:
+        path = STATIC_DIR / "sw.js"
+        if not path.exists():
+            raise HTTPException(status_code=404, detail="sw.js 가 없습니다.")
+        return FileResponse(
+            path,
+            media_type="text/javascript",
+            # 심부름꾼 파일 자체가 캐시에 눌어붙으면 고쳐도 반영이 안 된다
+            headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"},
+        )
+
+    @app.get("/favicon.ico")
+    async def favicon() -> Any:
+        path = STATIC_DIR / "icons" / "favicon-32.png"
+        if not path.exists():
+            raise HTTPException(status_code=404, detail="favicon 이 없습니다.")
+        return FileResponse(path, media_type="image/png")
 
     @app.post("/api/preview")
     async def preview(request: PreviewRequest) -> dict:
@@ -609,6 +702,8 @@ def create_app(config_path: Path | None = None) -> FastAPI:
             "missing_keys": config.missing_required_keys(),
             "free_fallbacks": config.free_fallbacks(),
             "config_path": str(app.state.config_path or config_module.CONFIG_PATH),
+            # 잠금이 걸린 서버에서만 '로그아웃' 단추를 보여 주려고 함께 내려준다
+            "locked": auth.locked(),
         }
 
     @app.post("/api/config")

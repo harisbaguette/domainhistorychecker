@@ -128,6 +128,10 @@ uv run playwright install chromium             # 캡쳐용 브라우저
 저장해 둔 API 키가 그대로 새어 나가므로, 프로그램이 아예 켜지지 않습니다.
 
 ```bash
-DOMAINCHECKER_HOST=0.0.0.0 DOMAINCHECKER_PASSWORD=원하는비밀번호 uv run domainchecker
-# 접속하면 아이디 칸에 domainchecker, 비밀번호 칸에 정한 비밀번호를 넣습니다.
+DOMAINCHECKER_HOST=0.0.0.0 DOMAINCHECKER_USER=원하는아이디 DOMAINCHECKER_PASSWORD=원하는비밀번호 uv run domainchecker
+# 접속하면 우리 로그인 화면이 뜹니다. 아이디를 안 정하면 domainchecker 가 기본값입니다.
+# "로그인 상태 유지"에 체크하면 30일 동안 다시 묻지 않습니다(그 기기에서만).
 ```
+
+비밀번호를 바꾸면 이미 로그인해 둔 기기들도 전부 다시 로그인해야 합니다 — 로그인 쪽지의 도장을
+비밀번호로 만들기 때문입니다.
