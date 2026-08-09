@@ -964,7 +964,8 @@ a.dw-list-item {
   gap: var(--dw-space-4);
   flex: 1;
   min-height: 0;
-  padding: 0 var(--dw-space-4) var(--dw-space-4);
+  /* 판 맨 아래 단추가 폰 밑변의 홈 막대와 겹치지 않게 그만큼 더 띄운다 */
+  padding: 0 var(--dw-space-4) calc(var(--dw-space-4) + env(safe-area-inset-bottom));
   overflow-y: auto;
   overscroll-behavior: contain;
 }
