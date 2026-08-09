@@ -287,6 +287,39 @@ async def test_run_state_survives_a_stop_and_is_cleared_on_success(config, tmp_p
 
 
 @respx.mock
+async def test_taken_domain_skips_the_rest_of_the_analysis(config):
+    """주인이 있으면 웨이백·색인·AI 같은 나머지 분석을 아예 안 한다 — 살 수 없는 도메인이다."""
+    mock_all()
+    # 같은 주소를 다시 걸면 나중 것이 이긴다 — 주인 있는 RDAP 응답으로 갈아 끼운다.
+    respx.get(f"https://rdap.org/domain/{DOMAIN}").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "events": [
+                    {"eventAction": "registration", "eventDate": "2014-05-01T00:00:00Z"},
+                    {"eventAction": "expiration", "eventDate": "2027-05-01T00:00:00Z"},
+                ],
+                "status": ["active"],
+                "entities": [],
+            },
+        )
+    )
+
+    results = await fast_pipeline(config, []).run([DOMAIN], use_cache=False)
+    result = results[0]
+
+    assert result.availability == "taken"
+    assert result.wayback.check.status is CheckStatus.NOT_RUN
+    assert result.index.check.status is CheckStatus.NOT_RUN
+    assert result.ai.check.status is CheckStatus.NOT_RUN
+    assert "주인이 있는 도메인" in result.wayback.check.note
+    # 네트워크로도 안 나갔는지 — 웨이백·AI 호출 0건
+    called = [str(call.request.url) for call in respx.calls]
+    assert not any("web.archive.org" in url for url in called)
+    assert not any("openrouter.ai" in url for url in called)
+
+
+@respx.mock
 async def test_failed_checks_degrade_to_unchecked_and_block_buy(config):
     respx.get(url__startswith="https://web.archive.org/cdx/search/cdx").mock(
         side_effect=httpx.ConnectError("boom")

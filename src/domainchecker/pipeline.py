@@ -255,17 +255,50 @@ class Pipeline:
             return await serper.check(domain, self.config.keys.serper, http)
         return await freeindex.check(domain, http)
 
+    def _finish_taken(self, result: DomainResult, authority: Authority | None) -> DomainResult:
+        """주인이 있는 도메인 — 살 수 없으니 남은 분석에 시간과 호출량을 쓰지 않는다."""
+        note = "주인이 있는 도메인이라 나머지 분석은 하지 않았습니다(살 수 없음)."
+        for section in (
+            result.wayback,
+            result.spamhaus,
+            result.index,
+            result.safebrowsing,
+            result.virustotal,
+            result.ai,
+            result.rules,
+        ):
+            section.check = CheckState(status=CheckStatus.NOT_RUN, note=note)
+        result.authority = authority or Authority(
+            check=CheckState(status=CheckStatus.NOT_RUN, note=note)
+        )
+        scoring.judge(result)
+        result.finished_at = datetime.now(UTC).isoformat(timespec="seconds")
+        return result
+
     async def check_domain(
         self, domain: str, http: httpx.AsyncClient, authority: Authority | None = None
     ) -> DomainResult:
-        """All checks for one domain. Any single failure degrades to 미확인."""
-        result = DomainResult(domain=domain)
-        wayback = WaybackClient(http, self.wayback_limiter, self.config.max_snapshots)
-        rdap = RdapClient(http, whois_query=self.whois_query)
+        """All checks for one domain. Any single failure degrades to 미확인.
 
+        등록 정보(주인이 있나)를 맨 먼저 본다 — 주인이 있으면 어차피 살 수 없어서,
+        웨이백·색인·AI 같은 나머지 분석은 아예 하지 않는다(시간·호출량 절약).
+        """
+        result = DomainResult(domain=domain)
+        rdap = RdapClient(http, whois_query=self.whois_query)
+        try:
+            result.registration = await rdap.fetch(domain)
+        except Exception as exc:  # noqa: BLE001 — 등록 조회가 터져도 나머지 검사는 계속한다
+            result.errors.append(f"registration: {type(exc).__name__}: {exc}")
+            result.registration.check = CheckState(
+                status=CheckStatus.UNCHECKED,
+                note=f"검사 중 오류가 났습니다({type(exc).__name__}).",
+            )
+        if scoring.availability_of(result.registration.acquisition) == "taken":
+            return self._finish_taken(result, authority)
+
+        wayback = WaybackClient(http, self.wayback_limiter, self.config.max_snapshots)
         collected = await asyncio.gather(
             wayback.collect(domain),
-            rdap.fetch(domain),
             spamhaus.check(domain, self.resolver),
             self._index_check(domain, http),
             safebrowsing.check(
@@ -282,7 +315,7 @@ class Pipeline:
             ),
             return_exceptions=True,
         )
-        names = ("wayback", "registration", "spamhaus", "index", "safebrowsing", "virustotal")
+        names = ("wayback", "spamhaus", "index", "safebrowsing", "virustotal")
         for name, value in zip(names, collected, strict=True):
             if isinstance(value, BaseException):
                 result.errors.append(f"{name}: {type(value).__name__}: {value}")

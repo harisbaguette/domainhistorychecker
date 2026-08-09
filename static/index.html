@@ -374,7 +374,7 @@
 
       <div class="dw-collapsible" id="detailMoreBox" data-open="false">
         <button type="button" class="dw-collapsible-trigger" aria-expanded="false" aria-controls="detailMore">
-          점수 내역 · 못 본 검사 보기
+          점수 내역 · 못 본 분석 보기
           <svg class="dw-collapsible-chevron" xmlns="http://www.w3.org/2000/svg" width="20" height="20"
                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
@@ -791,7 +791,7 @@ function scoreText(result) {
   if (!result.partial_score) return Math.round(result.score) + "점";
   const items = (result.scoring && result.scoring.items) || [];
   const seen = items.filter((i) => i.earned !== null && i.earned !== undefined).length;
-  const basis = items.length ? seen + "/" + items.length + " 검사" : "참고치";
+  const basis = items.length ? seen + "/" + items.length + " 분석" : "참고치";
   return Math.round(result.score) + "점(" + basis + ")";
 }
 
@@ -1286,7 +1286,7 @@ $("purgeOwner").onclick = () => purgeCategory("owner", "주인 있는 도메인"
 $("purgeSpam").onclick = () => purgeCategory("spam", "스팸으로 걸러진 도메인");
 $("clearPlanned").onclick = async () => {
   if (!planned.size) { $("cfgMsg").textContent = "매입 예정이 이미 비어 있습니다."; return; }
-  if (!confirm("매입 예정 표시 " + planned.size + "개를 모두 비울까요? (검사 결과는 남습니다)")) return;
+  if (!confirm("매입 예정 표시 " + planned.size + "개를 모두 비울까요? (분석 결과는 남습니다)")) return;
   const targets = [...planned];
   for (const domain of targets) await togglePlanned(domain, false);
   $("cfgMsg").textContent = "매입 예정 표시를 비웠습니다.";
