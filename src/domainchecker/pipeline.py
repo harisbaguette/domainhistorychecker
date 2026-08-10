@@ -35,7 +35,9 @@ RUN_STATE_NAME = "run_state.json"
 # 4: 주제 시기별 역사(topic_periods)와 시기별 캡쳐가 추가됨(2026-08-09)
 # 5: 유료 키 검사(Serper·권위 점수·바이러스토탈)를 없애고, 세이프 브라우징을
 #    키 없는 공개 조회로 바꿈(2026-08-09)
-ENGINE_VERSION = 5
+# 6: 세이프 브라우징 상태값 오독 수정 — 안전(4)·자료 없음(6)까지 위험으로 읽어
+#    모든 도메인이 탈락 판정을 받던 결과를 다시 검사하게 함(2026-08-10)
+ENGINE_VERSION = 6
 
 
 def run_state_path(base: Path | str) -> Path:

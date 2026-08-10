@@ -5,9 +5,13 @@
 키 없이 같은 등재 여부를 알 수 있다. 공식 문서가 없는 창구라 응답 모양이
 바뀔 수 있는데, 그때는 "미확인"으로 두고 나머지 검사는 그대로 간다.
 
-응답 실측(2026-08-09): 깨끗한 도메인은 상태값 1, 위험 도메인은 상태값 2~3에
-위협 종류 표지(참/거짓 다섯 칸)가 참으로 온다. 맨 앞의 ")]}'" 는 구글이
-스크립트 도용을 막으려고 일부러 붙여 두는 글자라 떼고 읽어야 한다.
+응답 실측(2026-08-10, 상태값별 실제 도메인으로 재확인):
+  1 = 검사했고 안전(example.com), 2~3 = 위험 등재(wicar·구글 시험용 사이트,
+  위협 종류 표지 참/거짓 다섯 칸이 함께 옴), 4 = 안전(google.com·naver.com
+  같은 유명 사이트), 6 = 검사 자료 없음(아무도 안 쓰는 도메인, 갱신 시각 0).
+그 밖의 상태값은 뜻을 모르니 "미확인"으로 두고 나머지 검사는 그대로 간다.
+맨 앞의 ")]}'" 는 구글이 스크립트 도용을 막으려고 일부러 붙여 두는
+글자라 떼고 읽어야 한다.
 """
 
 from __future__ import annotations
@@ -62,12 +66,21 @@ async def check(domain: str, http: httpx.AsyncClient) -> Reputation:
 
     status, flags = parsed
     codes = [label for label, hit in zip(_FLAG_LABELS, flags, strict=False) if hit]
-    if codes or status >= 2:
+    if codes or status in (2, 3):
         result.listed = True
         result.codes = codes or ["위험 등재"]
         result.check = CheckState(
             status=CheckStatus.OK, note="세이프 브라우징 등재: " + ", ".join(result.codes)
         )
-    else:
+    elif status in (1, 4):
         result.check = CheckState(status=CheckStatus.OK, note="세이프 브라우징 등재 없음.")
+    elif status == 6:
+        result.check = CheckState(
+            status=CheckStatus.OK, note="세이프 브라우징 등재 없음(검사 자료 없는 도메인)."
+        )
+    else:
+        # 모르는 상태값을 위험으로 단정하면 멀쩡한 도메인이 전부 탈락한다(2026-08-10 사고).
+        result.check = CheckState(
+            status=CheckStatus.UNCHECKED, note=f"세이프 브라우징 응답을 해석하지 못했습니다(상태값 {status})."
+        )
     return result

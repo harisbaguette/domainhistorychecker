@@ -56,6 +56,44 @@ async def test_a_dangerous_status_without_flags_still_counts_as_listed(http):
 
 
 @respx.mock
+async def test_a_famous_clean_site_status_4_is_not_listed(http):
+    """2026-08-10 실측: google.com·naver.com 이 상태값 4로 온다 — 위험이 아니다."""
+    respx.get(url__startswith=safebrowsing.URL).mock(
+        return_value=reply(")]}'\n\n[[\"sb.ssr\",4,false,false,false,false,false,1767633340523,\"google.com\"]]")
+    )
+    result = await safebrowsing.check("google.com", http)
+
+    assert result.check.status is CheckStatus.OK
+    assert result.listed is False
+    assert "등재 없음" in result.check.note
+
+
+@respx.mock
+async def test_a_never_seen_domain_status_6_is_not_listed(http):
+    """2026-08-10 실측: 아무도 안 쓰는 도메인은 상태값 6(자료 없음)으로 온다."""
+    respx.get(url__startswith=safebrowsing.URL).mock(
+        return_value=reply(")]}'\n\n[[\"sb.ssr\",6,false,false,false,false,false,0,\"fresh.test\"]]")
+    )
+    result = await safebrowsing.check("fresh.test", http)
+
+    assert result.check.status is CheckStatus.OK
+    assert result.listed is False
+    assert "자료 없는" in result.check.note
+
+
+@respx.mock
+async def test_an_unknown_status_value_degrades_to_unchecked(http):
+    """모르는 상태값을 위험으로 단정하면 멀쩡한 도메인이 전부 탈락한다."""
+    respx.get(url__startswith=safebrowsing.URL).mock(
+        return_value=reply(")]}'\n\n[[\"sb.ssr\",9,false,false,false,false,false,1,\"odd.test\"]]")
+    )
+    result = await safebrowsing.check("odd.test", http)
+
+    assert result.check.status is CheckStatus.UNCHECKED
+    assert result.listed is False
+
+
+@respx.mock
 async def test_an_unexpected_answer_degrades_to_unchecked_not_clean(http):
     """모양이 바뀐 응답을 '깨끗함'으로 읽으면 위험 도메인에 초록이 나간다."""
     respx.get(url__startswith=safebrowsing.URL).mock(return_value=reply("<html>점검 중</html>"))
