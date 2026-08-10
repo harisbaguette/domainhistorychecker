@@ -8,7 +8,7 @@ import httpx
 import pytest
 import respx
 
-from domainchecker.clients import freeindex
+from domainchecker.clients import freeindex, gabia
 from domainchecker.config import ApiKeys, Config
 from domainchecker.models import CheckStatus, Verdict
 from domainchecker.pipeline import Pipeline
@@ -43,13 +43,13 @@ CDX_ROWS = [["timestamp", "original", "statuscode", "mimetype", "digest"]] + [
     [f"{year}0601120000", f"http://{DOMAIN}/", "200", "text/html", f"D{year}"] for year in YEARS
 ]
 
-RDAP_JSON = {
-    "events": [
-        {"eventAction": "registration", "eventDate": "2014-05-01T00:00:00Z"},
-        {"eventAction": "expiration", "eventDate": "2026-05-01T00:00:00Z"},
-    ],
-    "status": ["pending delete"],
-    "entities": [],
+# 가비아 검색 답 — 삭제 예정(사전 예약 가능)이라 "곧 등록 가능"으로 읽혀야 하고,
+# 살 수 있는 도메인이므로 나머지 분석이 전부 돈다.
+GABIA_BACKORDER = {
+    "flag": "A",
+    "status": "BO",
+    "result": "이미 등록된 도메인",
+    "backorder_date": "2026-09-01",
 }
 
 # 커먼크롤에 남은 주소 24건 — 색인 수는 이 목록의 길이로 센다.
@@ -94,8 +94,8 @@ def mock_all() -> None:
     respx.get(url__regex=r"https://web\.archive\.org/web/\d+id_/.*").mock(
         side_effect=snapshot_response
     )
-    respx.get(f"https://rdap.org/domain/{DOMAIN}").mock(
-        return_value=httpx.Response(200, json=RDAP_JSON)
+    respx.post(gabia.CHECK_URL).mock(
+        return_value=httpx.Response(200, json=GABIA_BACKORDER)
     )
     # 색인 검사(키 없음): 커먼크롤 회차 목록 → 크롤 기록 → 현재 페이지
     respx.get(freeindex.COLLINFO_URL).mock(
@@ -138,14 +138,8 @@ def _fresh_collection():
     freeindex.reset_collection_cache()
 
 
-async def no_whois(domain, server):
-    raise OSError("테스트에서는 whois 소켓을 열지 않는다")
-
-
 def fast_pipeline(config, events) -> Pipeline:
-    pipeline = Pipeline(
-        config, on_event=events.append, resolver=FakeResolver(), whois_query=no_whois
-    )
+    pipeline = Pipeline(config, on_event=events.append, resolver=FakeResolver())
     # 테스트에서는 실제로 기다리지 않는다.
     pipeline.wayback_limiter = AdaptiveRateLimiter(rpm=6000)
     return pipeline
@@ -174,7 +168,7 @@ async def test_full_run_produces_a_buy_verdict(config, tmp_path):
     assert result.wayback.total_captures == len(YEARS)
     assert len(result.wayback.selected) == config.max_snapshots
     assert result.wayback.selected[-1].timestamp.startswith("2024")  # 말기 포함
-    assert result.registration.created == "2014-05-01"
+    assert result.registration.source == "gabia"
     assert result.registration.acquisition == "삭제 대기(곧 등록 가능)"
     assert result.index.indexed_count == 24
     assert result.ai.model == "deepseek/deepseek-v4-flash-0731"
@@ -302,18 +296,11 @@ async def test_run_state_survives_a_stop_and_is_cleared_on_success(config, tmp_p
 async def test_taken_domain_skips_the_rest_of_the_analysis(config):
     """주인이 있으면 웨이백·색인·AI 같은 나머지 분석을 아예 안 한다 — 살 수 없는 도메인이다."""
     mock_all()
-    # 같은 주소를 다시 걸면 나중 것이 이긴다 — 주인 있는 RDAP 응답으로 갈아 끼운다.
-    respx.get(f"https://rdap.org/domain/{DOMAIN}").mock(
+    # 같은 주소를 다시 걸면 나중 것이 이긴다 — 주인 있는 가비아 답으로 갈아 끼운다.
+    respx.post(gabia.CHECK_URL).mock(
         return_value=httpx.Response(
             200,
-            json={
-                "events": [
-                    {"eventAction": "registration", "eventDate": "2014-05-01T00:00:00Z"},
-                    {"eventAction": "expiration", "eventDate": "2027-05-01T00:00:00Z"},
-                ],
-                "status": ["active"],
-                "entities": [],
-            },
+            json={"flag": "A", "status": "10002", "result": "이미 등록된 도메인"},
         )
     )
 
@@ -336,7 +323,7 @@ async def test_failed_checks_degrade_to_unchecked_and_block_buy(config):
     respx.get(url__startswith="https://web.archive.org/cdx/search/cdx").mock(
         side_effect=httpx.ConnectError("boom")
     )
-    respx.get(f"https://rdap.org/domain/{DOMAIN}").mock(return_value=httpx.Response(500))
+    respx.post(gabia.CHECK_URL).mock(return_value=httpx.Response(500))
     respx.get(freeindex.COLLINFO_URL).mock(return_value=httpx.Response(500))
     respx.get(f"https://{DOMAIN}/").mock(side_effect=httpx.ConnectError("boom"))
     respx.get(f"http://{DOMAIN}/").mock(side_effect=httpx.ConnectError("boom"))

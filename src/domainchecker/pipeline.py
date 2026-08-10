@@ -17,9 +17,8 @@ from .analyze import ai as ai_analyze
 from .analyze import rules as rules_analyze
 from .analyze import scoring
 from .analyze.extract import snapshot_from_page
-from .clients import freeindex, safebrowsing, spamhaus
+from .clients import freeindex, gabia, safebrowsing, spamhaus
 from .clients.openrouter import OpenRouterClient
-from .clients.rdap import RdapClient
 from .clients.wayback import WaybackClient
 from .config import Config, data_dir
 from .models import CheckState, CheckStatus, DomainResult
@@ -37,7 +36,8 @@ RUN_STATE_NAME = "run_state.json"
 #    키 없는 공개 조회로 바꿈(2026-08-09)
 # 6: 세이프 브라우징 상태값 오독 수정 — 안전(4)·자료 없음(6)까지 위험으로 읽어
 #    모든 도메인이 탈락 판정을 받던 결과를 다시 검사하게 함(2026-08-10)
-ENGINE_VERSION = 6
+# 7: 구매 가능 판정을 RDAP·whois 해석에서 가비아 검색 확인으로 바꿈(2026-08-10)
+ENGINE_VERSION = 7
 
 
 def run_state_path(base: Path | str) -> Path:
@@ -110,13 +110,11 @@ class Pipeline:
         http: httpx.AsyncClient | None = None,
         resolver=None,
         base_dir: Path | str | None = None,
-        whois_query=None,
     ) -> None:
         self.config = config
         self.on_event = on_event
         self.http = http
         self.resolver = resolver
-        self.whois_query = whois_query
         self.base = Path(base_dir) if base_dir else data_dir(config)
         self.wayback_limiter = AdaptiveRateLimiter(rpm=config.start_rpm)
         self.cancel = asyncio.Event()
@@ -254,13 +252,13 @@ class Pipeline:
     async def check_domain(self, domain: str, http: httpx.AsyncClient) -> DomainResult:
         """All checks for one domain. Any single failure degrades to 미확인.
 
-        등록 정보(주인이 있나)를 맨 먼저 본다 — 주인이 있으면 어차피 살 수 없어서,
-        웨이백·색인·AI 같은 나머지 분석은 아예 하지 않는다(시간·호출량 절약).
+        구매 가능 여부를 맨 먼저 본다 — 판매처(가비아)에 검색창과 같은 요청을
+        보내 답을 받는다. 살 수 없는 도메인이면 웨이백·색인·AI 같은 나머지
+        분석은 아예 하지 않는다(시간·호출량 절약).
         """
         result = DomainResult(domain=domain)
-        rdap = RdapClient(http, whois_query=self.whois_query)
         try:
-            result.registration = await rdap.fetch(domain)
+            result.registration = await gabia.check(domain)
         except Exception as exc:  # noqa: BLE001 — 등록 조회가 터져도 나머지 검사는 계속한다
             result.errors.append(f"registration: {type(exc).__name__}: {exc}")
             result.registration.check = CheckState(

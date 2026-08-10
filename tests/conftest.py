@@ -37,9 +37,7 @@ def sample_result() -> DomainResult:
         ),
         registration=Registration(
             check=OK,
-            source="rdap",
-            created="2009-04-01",
-            expires="2026-04-01",
+            source="gabia",
             acquisition="삭제 대기(곧 등록 가능)",
         ),
         spamhaus=Reputation(check=CheckState(status=CheckStatus.OK, note="블랙리스트에 없습니다.")),

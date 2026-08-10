@@ -123,7 +123,7 @@ class WaybackHistory(BaseModel):
 
 class Registration(BaseModel):
     check: CheckState = CheckState()
-    source: str = ""  # "rdap" | "whois"
+    source: str = ""  # "gabia" (예전 저장분에는 "rdap" | "whois")
     created: str = ""
     expires: str = ""
     registrar: str = ""

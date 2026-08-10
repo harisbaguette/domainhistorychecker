@@ -19,7 +19,8 @@ def test_detail_fragment_holds_every_required_section(sample_result):
                     "과거에 무엇을 하던 도메인인가", "캡쳐",
                     "신호와 근거", "확인하지 못한 것", "이어가기 좋은 주제", "다시 확인할 곳"):
         assert heading in html
-    assert "2009-04-01" in html  # 등록일
+    # 가비아 확인은 날짜를 주지 않는다 — 등록일 칸은 "알 수 없음"으로 나온다.
+    assert "알 수 없음" in html  # 등록일
     assert "삭제 대기(곧 등록 가능)" in html  # 취득 상태
     assert "빵집 블로그로 시작해" in html  # 주제 역사(줄글)
     assert "홈베이킹" in html  # 추천 주제

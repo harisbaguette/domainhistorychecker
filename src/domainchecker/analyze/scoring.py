@@ -333,7 +333,8 @@ def availability_of(acquisition: str) -> str:
         return "soon"
     if "복원" in acquisition:
         return "auction"
-    if "등록 중" in acquisition or "자동 갱신" in acquisition:
+    # "등록 제한" = 예약어(기관 전용) — 주인은 없지만 일반인은 살 수 없다.
+    if "등록 중" in acquisition or "자동 갱신" in acquisition or "등록 제한" in acquisition:
         return "taken"
     return "unknown"
 
