@@ -39,11 +39,9 @@ RULES_TRANSITION_POINTS = 6
 _SPAM_UNCLEAR = 0.3
 _RULES_HIT = 12 / 45
 _RULES_HIT_CAP = 36 / 45
-_CONTAMINATION = 15 / 45
 _TRANSITION_RISK = 9 / 15
 _TRANSITION_MILD = 2 / 15
 _LANGUAGE_SHIFT = 6 / 15
-_SENSITIVE = 3 / 15
 
 
 def _check_of(result: DomainResult, name: str):
@@ -110,9 +108,6 @@ def _safety_item(result: DomainResult) -> ScoreItem:
         if hits:
             points -= min(full * _RULES_HIT_CAP, hits * full * _RULES_HIT)
             notes.append(f"운영방식 규칙 위반 {hits}종")
-    if result.index.check.ok and result.index.contaminated:
-        points -= full * _CONTAMINATION
-        notes.append("색인에 위험 문구 잔존")
 
     item.earned = max(0.0, min(full, points))
     if not notes:
@@ -191,13 +186,9 @@ def _transition_item(result: DomainResult) -> ScoreItem:
         elif any(word in result.ai.transition for word in ("전환", "변화", "바뀌")):
             points -= full * _TRANSITION_MILD
             notes.append("주제 전환 있음(정상 범위)")
-    if rules_ok:
-        if result.rules.language_shift:
-            points -= full * _LANGUAGE_SHIFT
-            notes.append("사용 언어가 도중에 바뀜")
-        if result.rules.sensitive_terms:
-            points -= full * _SENSITIVE
-            notes.append("민감 업종 낱말 등장(주의 표지)")
+    if rules_ok and result.rules.language_shift:
+        points -= full * _LANGUAGE_SHIFT
+        notes.append("사용 언어가 도중에 바뀜")
 
     item.earned = max(0.0, min(full, points))
     item.note = ", ".join(notes) or "주제 흐름이 일관됨"
@@ -315,9 +306,7 @@ def plain_one_liner(result: DomainResult) -> str:
             parts.append(f"과거 화면의 {int(result.rules.parking_ratio * 100)}%가 판매용 빈 화면이었음")
 
     if result.index.check.ok:
-        if result.index.contaminated:
-            parts.append("지금도 위험 업종 문구가 남아 있음")
-        elif result.index.current_parking:
+        if result.index.current_parking:
             parts.append("지금은 판매용 빈 화면임")
         else:
             parts.append(f"지금 웹에 남은 페이지 {result.index.indexed_count}건")
@@ -340,7 +329,7 @@ def availability_of(acquisition: str) -> str:
 
 
 def fatal_reasons(result: DomainResult) -> list[str]:
-    """Rule 1 — institutional listing, confirmed spam operation, index contamination."""
+    """Rule 1 — institutional listing, or confirmed spam operation."""
     reasons = []
     if result.spamhaus.check.ok and result.spamhaus.listed:
         reasons.append("스팸하우스 블랙리스트에 올라 있습니다: " + ", ".join(result.spamhaus.codes))
@@ -371,8 +360,6 @@ def fatal_reasons(result: DomainResult) -> list[str]:
             f"AI가 확신도 {spam.confidence:.2f}로 스팸 운영이라고 판정했습니다(근거 인용: "
             f"“{spam.quotes[0][:80]}”)."
         )
-    if result.index.check.ok and result.index.contaminated:
-        reasons.append("지금 웹에 남아 있는 페이지에 위험 업종 문구가 있습니다: " + ", ".join(result.index.contamination_terms[:5]))
     return reasons
 
 
@@ -422,15 +409,8 @@ def warn_reasons(result: DomainResult) -> list[str]:
     elif ai_says_spam and not rules_say_spam:
         reasons.append("신호 충돌 — AI는 스팸으로 봤지만 규칙 검사에서는 흔적을 찾지 못했습니다.")
 
-    if result.rules.brand_hits:
-        reasons.append("상표 충돌 의심 — 도메인 이름에 " + ", ".join(result.rules.brand_hits) + " 가 들어 있습니다.")
     if result.ai.check.ok and result.ai.trademark_risk:
         reasons.append("상표 충돌 의심 — AI 소견: " + (result.ai.trademark or "상표 문제 가능성 있음"))
-    if result.rules.sensitive_terms:
-        reasons.append(
-            "민감 업종 이력(합법일 수 있음, 사람이 확인 필요): "
-            + ", ".join(result.rules.sensitive_terms[:5])
-        )
     if result.wayback.excluded:
         reasons.append("웨이백 열람이 차단되어 과거를 볼 수 없습니다(이력 은폐 가능성).")
     if result.wayback.check.ok and not result.wayback.has_history:

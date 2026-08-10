@@ -217,14 +217,20 @@ def test_excluded_snapshot_is_warn():
     assert any("차단" in reason for reason in result.warn_reasons)
 
 
-def test_trademark_and_sensitive_industry_force_warn():
-    result = judge(healthy(rules=RuleFindings(check=OK, brand_hits=["nike"])))
+def test_ai_trademark_risk_forces_warn():
+    """상표 판단은 이제 AI 소견 하나로 본다(낱말 목록 검사 제거)."""
+    result = judge(
+        healthy(
+            ai=AIAnalysis(
+                check=OK,
+                spam=SpamJudgement(verdict="clean", confidence=0.9),
+                trademark="나이키 상표와 충돌 소지",
+                trademark_risk=True,
+            )
+        )
+    )
     assert result.verdict is Verdict.REVIEW
     assert any("상표 충돌" in reason for reason in result.warn_reasons)
-
-    result2 = judge(healthy(rules=RuleFindings(check=OK, sensitive_terms=["도박:카지노"])))
-    assert result2.verdict is Verdict.REVIEW
-    assert any("민감 업종" in reason for reason in result2.warn_reasons)
 
 
 def test_low_score_rejects_only_when_everything_was_checked():
@@ -260,7 +266,6 @@ def test_low_partial_score_is_not_rejected_when_evidence_is_missing():
         # "증거가 비어 점수가 낮은 경우"이지 "규칙이 스팸을 확정한 경우"가 아니다.
         rules=RuleFindings(
             check=OK, doorway=True, hidden_text=True, language_shift=True,
-            sensitive_terms=["도박:카지노"],
         ),
         index=IndexInfo(check=OK, indexed_count=0),
     )

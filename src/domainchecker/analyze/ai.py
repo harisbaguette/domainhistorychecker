@@ -105,10 +105,10 @@ def build_prompt(
     if context.get("rule_hints"):
         hints = "\n".join(f"- {h}" for h in context["rule_hints"][:10])
         header.append(f"# 규칙 검사가 잡은 흔적(참고)\n{hints}")
-    if context.get("sensitive_terms"):
-        terms = ", ".join(context["sensitive_terms"][:20])
+    if context.get("index_paths"):
+        paths = "\n".join(f"- {p}" for p in context["index_paths"][:15])
         header.append(
-            "# 주의 표지(업종 낱말 — 그 자체로는 스팸 근거가 아님)\n" + terms
+            "# 웹 색인에 남아 있는 주소 흔적(경로만 — 위험 업종·상표 판단에 참고)\n" + paths
         )
     header.append(
         "# 지시\n아래 과거 페이지 본문을 읽고 스키마대로 한국어 JSON을 채워라. "

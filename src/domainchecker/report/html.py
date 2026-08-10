@@ -482,8 +482,6 @@ def detail_fragment(result: DomainResult, capture_base: str = "../captures") -> 
 <h3>AI 스팸성 판정</h3>
 <p>{_t(spam_verdict)} · 확신도 {result.ai.spam.confidence:.2f}</p>
 {quotes or '<p class="muted">인용된 근거 없음</p>'}
-<h3>주의 표지(업종 낱말 — 그 자체로 스팸이라는 뜻은 아님)</h3>
-{_list(result.rules.sensitive_terms, "없음")}
 <h3>{INDEX_LABEL}</h3>
 <p>{index_line}</p>
 {_list(result.index.titles[:10], "색인된 제목 없음")}

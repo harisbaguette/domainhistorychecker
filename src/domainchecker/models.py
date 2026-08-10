@@ -143,8 +143,7 @@ class IndexInfo(BaseModel):
     indexed_count: int = 0
     titles: list[str] = Field(default_factory=list)
     current_parking: bool = False  # today's parking page, not a past-history signal
-    contaminated: bool = False
-    contamination_terms: list[str] = Field(default_factory=list)
+    sample_paths: list[str] = Field(default_factory=list)  # 색인에 남은 주소 흔적(AI 입력용)
 
 
 class SpamJudgement(BaseModel):
@@ -193,8 +192,6 @@ class RuleFindings(BaseModel):
     parking_ratio: float = 0.0
     languages: list[str] = Field(default_factory=list)
     language_shift: bool = False
-    sensitive_terms: list[str] = Field(default_factory=list)
-    brand_hits: list[str] = Field(default_factory=list)
     evidence: list[str] = Field(default_factory=list)
     risk_timestamps: list[str] = Field(default_factory=list)  # 캡쳐할 위험 신호 시기
 

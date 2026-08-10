@@ -57,7 +57,6 @@ async def test_healthy_domain_counts_crawled_pages_and_reads_the_live_page(http)
     assert result.indexed_count == 2
     assert result.titles == ["보통 회사"]
     assert result.current_parking is False
-    assert result.contaminated is False
     assert "무료 공개 자료" in result.check.note
 
 
@@ -96,23 +95,8 @@ async def test_a_seller_page_that_blocks_us_is_still_read_as_parking(http):
 
 
 @respx.mock
-async def test_risk_words_in_the_live_page_mark_the_domain_contaminated(http):
-    mock_collinfo()
-    respx.get(url__startswith=CDX).mock(return_value=httpx.Response(200, text=crawl_lines("https://example.com/")))
-    respx.get("https://example.com/").mock(
-        return_value=page("<html><head><title>온라인 카지노</title></head><body>바카라 안내</body></html>")
-    )
-
-    result = await freeindex.check("example.com", http)
-
-    assert result.contaminated is True
-    assert "카지노" in result.contamination_terms
-    assert "바카라" in result.contamination_terms
-
-
-@respx.mock
-async def test_risk_words_in_crawled_paths_are_counted_but_the_domain_name_is_not(http):
-    """이름이 casino-shop.com 이라고 오염으로 몰면 멀쩡한 도메인이 제외된다."""
+async def test_crawled_paths_are_sampled_for_the_ai_without_the_domain_name(http):
+    """색인에 남은 주소 흔적은 AI가 읽을 표본으로 담는다 — 도메인 이름은 넣지 않는다."""
     mock_collinfo()
     respx.get(url__startswith=CDX).mock(
         return_value=httpx.Response(200, text=crawl_lines("https://casino-shop.com/products/mug"))
@@ -120,37 +104,10 @@ async def test_risk_words_in_crawled_paths_are_counted_but_the_domain_name_is_no
     respx.get("https://casino-shop.com/").mock(return_value=httpx.Response(500))
     respx.get("http://casino-shop.com/").mock(return_value=httpx.Response(500))
 
-    clean = await freeindex.check("casino-shop.com", http)
-    assert clean.contaminated is False
+    result = await freeindex.check("casino-shop.com", http)
 
-    respx.get(url__startswith=CDX).mock(
-        return_value=httpx.Response(200, text=crawl_lines("https://shop.com/baccarat/join"))
-    )
-    respx.get("https://shop.com/").mock(return_value=httpx.Response(500))
-    respx.get("http://shop.com/").mock(return_value=httpx.Response(500))
-
-    dirty = await freeindex.check("shop.com", http)
-    assert dirty.contaminated is True
-    assert "baccarat" in dirty.contamination_terms
-
-
-@respx.mock
-async def test_a_for_sale_line_does_not_erase_the_risk_words_below_it(http):
-    """제 도메인 페이지에 '판매 중' 한 줄이 있다고 오염 검사를 통째로 끄면 안 된다."""
-    mock_collinfo()
-    respx.get(url__startswith=CDX).mock(return_value=httpx.Response(200, text=crawl_lines("https://example.com/")))
-    respx.get("https://example.com/").mock(
-        return_value=page(
-            "<html><head><title>바카라 사이트 안내</title></head>"
-            "<body>카지노 먹튀 없는 곳 모음. This domain is for sale.</body></html>"
-        )
-    )
-
-    result = await freeindex.check("example.com", http)
-
-    assert result.current_parking is True
-    assert result.contaminated is True
-    assert "카지노" in result.contamination_terms
+    assert result.sample_paths == ["/products/mug"]
+    assert all("casino-shop.com" not in path for path in result.sample_paths)
 
 
 @respx.mock
@@ -168,8 +125,8 @@ async def test_an_everyday_sentence_about_parking_a_car_is_not_a_parking_page(ht
 
 
 @respx.mock
-async def test_korean_risk_words_hidden_in_an_encoded_url_are_found(http):
-    """주소에 감싸인 한글(%EC…)을 안 풀면 한국어 오염어가 전부 안 걸린다."""
+async def test_korean_paths_hidden_in_an_encoded_url_are_decoded(http):
+    """주소에 감싸인 한글(%EC…)을 안 풀면 AI도 사람도 흔적을 못 읽는다."""
     mock_collinfo()
     respx.get(url__startswith=CDX).mock(
         return_value=httpx.Response(
@@ -181,8 +138,7 @@ async def test_korean_risk_words_hidden_in_an_encoded_url_are_found(http):
 
     result = await freeindex.check("shop.com", http)
 
-    assert result.contaminated is True
-    assert "카지노" in result.contamination_terms
+    assert result.sample_paths == ["/카지노/join"]
 
 
 @respx.mock
@@ -195,7 +151,6 @@ async def test_knowing_nothing_is_not_reported_as_a_clean_check(http):
     result = await freeindex.check("example.com", http)
 
     assert result.check.status is CheckStatus.UNCHECKED
-    assert result.contaminated is False
 
 
 def test_addresses_pointing_at_my_own_computer_are_refused():

@@ -3,8 +3,9 @@
 공개 자료 두 가지를 합친다.
   1) 커먼크롤 색인 — 누구나 키 없이 조회할 수 있는 세계 크롤 기록. 이 도메인 밑에
      어떤 주소가 남아 있었는지 알려 준다(제목·요약은 없다).
-  2) 도메인 현재 페이지 — 지금 실제로 열어 본다. 파킹(판매용 빈 페이지)인지,
-     위험 업종 문구가 남아 있는지는 이쪽이 가장 정확하다.
+  2) 도메인 현재 페이지 — 지금 실제로 열어 본다. 파킹(판매용 빈 페이지)인지는
+     이쪽이 가장 정확하다. 남은 문구가 위험한지 같은 '뜻 읽기'는 여기서 하지
+     않는다 — 주소 흔적과 제목을 AI에게 넘겨 AI가 판단한다.
 
 둘 다 아무것도 못 건지면 "확인"이라고 말하지 않는다 — 못 본 것을 깨끗한 것으로
 읽히게 두면, 이 검사를 통과했다는 이유로 초록 도장이 나가 버린다.
@@ -23,45 +24,6 @@ import httpx
 
 from ..analyze.extract import extract_text
 from ..models import CheckState, CheckStatus, IndexInfo
-
-# 색인 오염 판단용 최소 표지. 현재 파킹 문구와는 구분해서 쓴다.
-# 오염어 하나가 곧바로 "제외(빨강)" 치명 사유가 되므로, 홀로 쓰이면 뜻이 넓은 낱말은
-# 넣지 않는다 — "성인"은 성인교육·성인병·성인식을, "슬롯"은 광고 슬롯을,
-# "xxx"는 XXXL 을 잡아 멀쩡한 도메인을 제외시킨다(합법 업종 오폭 방지).
-CONTAMINATION_TERMS = (
-    "카지노",
-    "바카라",
-    "토토사이트",
-    "먹튀",
-    "슬롯머신",
-    "성인용품",
-    "성인화상",
-    "야동",
-    "비아그라",
-    "casino",
-    "baccarat",
-    "poker",
-    "viagra",
-    "cialis",
-    "porn",
-    "escort",
-    "replica watch",
-    "オンラインカジノ",
-    "エロ動画",
-    "赌场",
-    "博彩",
-    "色情",
-)
-
-# 영문 오염어는 단어 경계로만 맞춘다("Escorted tour"·"XXXL"이 걸리지 않게).
-# 한국어·일본어·중국어는 낱말 경계가 통하지 않아 구 전체 포함으로 본다.
-_CONTAMINATION_RE = re.compile(
-    "|".join(
-        rf"\b{re.escape(term)}\b" for term in CONTAMINATION_TERMS if term.isascii()
-    ),
-    re.IGNORECASE,
-)
-_CONTAMINATION_CJK = tuple(term for term in CONTAMINATION_TERMS if not term.isascii())
 
 # 파킹 표지 — 영문은 단어 경계로만 맞춘다.
 # 부분 문자열로 세면 "Sedona"가 sedo로, "parking lot"이 parking으로 잘못 잡힌다.
@@ -85,13 +47,6 @@ PARKING_PHRASES_KO = (
     "도메인 팝니다",
 )
 
-
-def contamination_hits(text: str) -> list[str]:
-    """Risk-industry wording still sitting in the live index/page."""
-    lowered = text.lower()
-    hits = {m.group(0).lower() for m in _CONTAMINATION_RE.finditer(lowered)}
-    hits |= {term for term in _CONTAMINATION_CJK if term in text}
-    return sorted(hits)
 
 COLLINFO_URL = "https://index.commoncrawl.org/collinfo.json"
 COLLINFO_TTL = 24 * 3600  # 크롤 회차는 하루에 한 번만 다시 확인한다
@@ -309,15 +264,15 @@ def is_parking_page(text: str) -> bool:
     return any(phrase in text for phrase in PARKING_PHRASES_KO)
 
 
-def _path_text(urls: list[str]) -> str:
-    """주소에서 도메인 이름을 뺀 경로 부분만. 도메인 이름 자체로 오폭하지 않게."""
-    parts = []
-    for url in urls:
-        split = urlsplit(url)
-        # %EC%B9%B4… 처럼 감싸인 한글은 풀어야 위험 업종 낱말이 보인다.
-        raw = unquote(f"{split.path} {split.query}", errors="replace")
-        parts.append(raw.replace("/", " ").replace("-", " ").replace("_", " "))
-    return " ".join(parts)
+def _short_path(url: str) -> str:
+    """주소에서 도메인 이름을 뺀 경로 부분만 — AI가 읽을 흔적 표본.
+
+    도메인 이름 자체는 넣지 않는다(이름으로 오폭하지 않게).
+    %EC%B9%B4… 처럼 감싸인 한글은 풀어야 사람과 AI가 읽을 수 있다.
+    """
+    split = urlsplit(url)
+    raw = unquote(split.path + (f"?{split.query}" if split.query else ""), errors="replace")
+    return raw[:120]
 
 
 async def check(domain: str, http: httpx.AsyncClient) -> IndexInfo:
@@ -343,13 +298,8 @@ async def check(domain: str, http: httpx.AsyncClient) -> IndexInfo:
             result.titles = [page["title"]]
         live_text = f"{page['title']} {page['text']}"
     result.current_parking = bool(seller) or is_parking_page(live_text)
-
-    # 본문을 오염 검사에서 빼는 것은 정말 판매 업체 사이트에 도착했을 때뿐이다.
-    # "판매 중" 문구 한 줄로 본문 전체를 버리면, 그 아래 남은 위험 업종 문구를
-    # 통째로 놓친다(Serper 쪽에서 이미 겪고 고친 구멍이다).
-    haystack = "" if seller else live_text
-    result.contamination_terms = contamination_hits(f"{haystack} {_path_text(urls)}")
-    result.contaminated = bool(result.contamination_terms)
+    # 남은 주소 흔적 표본 — 위험한지의 '뜻 읽기'는 AI 몫이다.
+    result.sample_paths = [p for p in (_short_path(u) for u in urls) if p.strip("/ ")][:15]
 
     notes = []
     if crawl_ok:
@@ -365,8 +315,6 @@ async def check(domain: str, http: httpx.AsyncClient) -> IndexInfo:
         notes.append(f"현재 페이지가 오류({page['status']})로 응답")
     else:
         notes.append("현재 페이지는 열리지 않음")
-    if result.contaminated:
-        notes.append("위험 업종 문구 남아 있음")
     result.check = CheckState(
         status=CheckStatus.OK,
         note="구글 색인 대신 무료 공개 자료로 확인했습니다 — " + ", ".join(notes) + ".",

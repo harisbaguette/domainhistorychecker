@@ -6,38 +6,13 @@
 
 from datetime import UTC, datetime, timedelta
 
-import pytest
-
 from domainchecker.analyze.scoring import judge
-from domainchecker.clients import freeindex, http_reason
+from domainchecker.clients import http_reason
 from domainchecker.models import CheckState, CheckStatus, DomainResult
 from domainchecker.pipeline import ENGINE_VERSION, is_stale
 from domainchecker.report import html as report_html
 
 OK = CheckState(status=CheckStatus.OK)
-
-
-# ── 색인 오염 오탐 ────────────────────────────────────────────────────
-@pytest.mark.parametrize(
-    "title",
-    [
-        "성인 자격증 교육원 · 평생교육",
-        "성인병 예방 건강검진센터",
-        "XXXL 사이즈 등산복 전문",
-        "Escorted tours of Ireland",
-    ],
-)
-def test_legal_wording_is_not_treated_as_contamination(title):
-    """오염어 하나가 곧바로 '제외' 치명 사유라, 오탐은 멀쩡한 도메인을 죽인다."""
-    assert freeindex.contamination_hits(title) == []
-
-
-@pytest.mark.parametrize(
-    "title",
-    ["온라인 카지노 먹튀 검증", "Buy viagra online no prescription", "성인용품 쇼핑몰"],
-)
-def test_real_contamination_is_still_caught(title):
-    assert freeindex.contamination_hits(title)
 
 
 # ── 오류 번호를 사람 말로 ──────────────────────────────────────────────

@@ -37,7 +37,9 @@ RUN_STATE_NAME = "run_state.json"
 # 6: 세이프 브라우징 상태값 오독 수정 — 안전(4)·자료 없음(6)까지 위험으로 읽어
 #    모든 도메인이 탈락 판정을 받던 결과를 다시 검사하게 함(2026-08-10)
 # 7: 구매 가능 판정을 RDAP·whois 해석에서 가비아 검색 확인으로 바꿈(2026-08-10)
-ENGINE_VERSION = 7
+# 8: 낱말 목록으로 뜻을 넘겨짚던 검사(민감 업종·상표·색인 오염어)를 걷어내고
+#    그 판단을 AI에게 몰아줌 — 색인 주소 흔적을 AI 입력에 추가(2026-08-10)
+ENGINE_VERSION = 8
 
 
 def run_state_path(base: Path | str) -> Path:
@@ -290,7 +292,7 @@ class Pipeline:
             snapshot_from_page(page, domain, self.config.snapshot_text_limit)
             for page in result.wayback.pages
         ]
-        result.rules = rules_analyze.analyze(snapshots, domain, result.index.titles)
+        result.rules = rules_analyze.analyze(snapshots)
         # 원본 HTML은 저장하지 않는다(캐시·결과 파일이 수십 MB로 불어남).
         result.wayback.pages = [
             {
@@ -360,8 +362,8 @@ class Pipeline:
             "timeline": timeline,
             "registration": registration,
             "index_titles": result.index.titles,
+            "index_paths": result.index.sample_paths,
             "rule_hints": result.rules.evidence,
-            "sensitive_terms": result.rules.sensitive_terms,
         }
 
     def write_results(self, results: list[DomainResult]) -> Path:

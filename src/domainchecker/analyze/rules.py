@@ -1,9 +1,9 @@
 """Operation-style rules (운영방식 축) over archived snapshots.
 
-The rules judge *how a site was operated*, never *what industry it was in*.
-Industry keywords (도박·성인·약품) are collected only as 주의 표지 — they are
-passed to the AI as a hint and shown in the report, and never by themselves
-produce a spam verdict (합법 업종 오폭 방지).
+The rules judge *how a site was operated*, never *what industry it was in* or
+*what the words mean* — meaning judgments (업종·상표·오염) belong to the AI
+reading. Everything here is structural counting: hidden markup, link volume,
+word-frequency stuffing, near-identical bodies, language charset flow.
 """
 
 from __future__ import annotations
@@ -12,23 +12,6 @@ import re
 
 from ..models import CheckState, CheckStatus, RuleFindings
 from .extract import SnapshotContent
-
-# 주의 표지 — 판정 축이 아니라 표시용 (한·영·일·중 최소셋).
-SENSITIVE_TERMS = {
-    "도박": ("카지노", "바카라", "슬롯머신", "토토", "먹튀", "배팅", "casino", "baccarat",
-             "sportsbook", "online poker", "オンラインカジノ", "パチンコ", "赌场", "博彩"),
-    "성인": ("성인용품", "야동", "출장마사지", "porn", "xxx", "escort", "adult video",
-             "アダルト", "エロ動画", "成人视频", "色情"),
-    "약품": ("비아그라", "시알리스", "다이어트약", "viagra", "cialis", "tramadol",
-             "pharmacy online", "no prescription", "バイアグラ", "壮阳药", "伟哥"),
-}
-
-# 상표 충돌 검사용 최소 브랜드셋 (도메인 문자열 대상).
-BRAND_TERMS = (
-    "google", "youtube", "facebook", "instagram", "apple", "iphone", "microsoft",
-    "windows", "amazon", "netflix", "nike", "adidas", "gucci", "chanel", "rolex",
-    "louisvuitton", "samsung", "kakao", "naver", "coupang", "disney", "tiktok",
-)
 
 # 짧은 항목을 쉼표·막대기호로 8번 넘게 이어 붙인 구간 = 키워드 나열.
 _KEYWORD_LIST = re.compile(r"(?:[^,|·\n]{1,20}[,|·]\s*){8,}")
@@ -39,17 +22,9 @@ LINK_FARM_HOSTS = 20
 DUPLICATE_SIMILARITY = 0.9
 
 
-def analyze(
-    snapshots: list[SnapshotContent],
-    domain: str = "",
-    index_titles: list[str] | None = None,
-) -> RuleFindings:
+def analyze(snapshots: list[SnapshotContent]) -> RuleFindings:
     """Run every operation-style rule over the collected snapshots."""
     findings = RuleFindings()
-    findings.brand_hits = brand_hits(domain)
-    if findings.brand_hits:
-        findings.evidence.append("도메인 이름에 상표로 보이는 문자열이 있습니다: " + ", ".join(findings.brand_hits))
-
     usable = [s for s in snapshots if s.fetched and (s.text or s.link_texts)]
     if not usable:
         findings.check = CheckState(
@@ -104,20 +79,8 @@ def analyze(
     findings.languages = sorted(set(langs))
     findings.language_shift = len(set(langs)) > 1 and bool(langs) and langs[0] != langs[-1]
 
-    # 주의 표지 (표시 전용)
-    haystack = " ".join([s.text for s in usable] + (index_titles or [])).lower()
-    findings.sensitive_terms = sorted(
-        {f"{group}:{term}" for group, terms in SENSITIVE_TERMS.items() for term in terms if term.lower() in haystack}
-    )
-
     findings.check = CheckState(status=CheckStatus.OK)
     return findings
-
-
-def brand_hits(domain: str) -> list[str]:
-    """Well-known brand strings inside the domain name (상표 충돌 의심)."""
-    name = (domain or "").lower().split(".")[0]
-    return [brand for brand in BRAND_TERMS if brand in name and brand != name]
 
 
 def doorway_reason(snap: SnapshotContent) -> str:
