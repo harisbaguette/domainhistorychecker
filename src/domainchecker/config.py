@@ -43,7 +43,7 @@ class Config(BaseModel):
     speed_mode: str = "adaptive"  # "adaptive" (30/min 시작) | "safe" (12/min 고정)
     enable_capture: bool = True  # 화면 캡쳐(전 검사 완료 후 후행 실행)
     max_domains: int = 1000
-    max_snapshots: int = 6
+    max_snapshots: int = 8  # 말기 2 + 공백 직후 해 + 고른 표본 — 재현율 보강(2026-08-10)
     ai_input_limit: int = 40_000  # 도메인당 AI 입력 상한(문자)
     snapshot_text_limit: int = 6_000
     concurrency: int = 4

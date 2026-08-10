@@ -2,14 +2,14 @@ import httpx
 import pytest
 import respx
 
-from domainchecker.clients.wayback import WaybackClient, select_snapshots
+from domainchecker.clients.wayback import WaybackClient, path_samples, select_snapshots
 from domainchecker.models import CheckStatus, Snapshot
 from domainchecker.ratelimit import AdaptiveRateLimiter
 
 
-def snapshots_for(years):
+def snapshots_for(years, url="http://x.com/"):
     return [
-        Snapshot(timestamp=f"{y}0601120000", original="http://x.com/", status_code="200")
+        Snapshot(timestamp=f"{y}0601120000", original=url, status_code="200")
         for y in years
     ]
 
@@ -27,6 +27,37 @@ def test_selection_handles_short_history():
     assert len(select_snapshots(snapshots_for([2019]), 6)) == 1
     assert len(select_snapshots(snapshots_for([2018, 2019]), 6)) == 2
     assert select_snapshots([], 6) == []
+
+
+def test_selection_prioritises_the_year_right_after_a_gap():
+    """죽었다 되살아난 해는 스팸 업자가 주워 쓰기 시작한 해일 가능성이 가장 높다."""
+    # 2005~2010 운영 → 2011~2014 공백 → 2015 부활 → … → 2020 말기
+    picked = select_snapshots(snapshots_for([2005, 2006, 2007, 2008, 2009, 2010, 2015, 2019, 2020]), 4)
+    years = [s.year for s in picked]
+
+    assert 2015 in years  # 공백 직후 해가 반드시 들어간다
+    assert 2019 in years and 2020 in years
+
+
+def test_path_samples_keep_year_and_decoded_path_without_the_domain_name():
+    captures = (
+        snapshots_for([2012], url="http://x.com/blog/hello")
+        + snapshots_for([2016], url="http://x.com/%EC%B9%B4%EC%A7%80%EB%85%B8/join")
+        + snapshots_for([2016], url="http://x.com/")  # 뿌리 주소는 흔적이 아니다
+    )
+    samples = path_samples(captures)
+
+    assert samples == ["2012 /blog/hello", "2016 /카지노/join"]
+    assert all("x.com" not in s for s in samples)
+
+
+def test_path_samples_cap_per_year():
+    captures = [
+        Snapshot(timestamp=f"2016{m:02d}01000000", original=f"http://x.com/page-{m}", status_code="200")
+        for m in range(1, 13)
+    ]
+    samples = path_samples(captures, per_year=5)
+    assert len(samples) == 5  # 한 해 표본은 5개까지만
 
 
 @pytest.fixture

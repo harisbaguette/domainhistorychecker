@@ -109,6 +109,7 @@ class WaybackHistory(BaseModel):
     redirect_ratio: float = 0.0
     selected: list[Snapshot] = Field(default_factory=list)
     pages: list[dict] = Field(default_factory=list)  # extracted snapshot contents
+    path_samples: list[str] = Field(default_factory=list)  # "YYYY /경로" — AI 입력용 흔적
 
     @property
     def has_history(self) -> bool:

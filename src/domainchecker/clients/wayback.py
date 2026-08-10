@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+from urllib.parse import unquote, urlsplit
+
 import httpx
 
 from ..models import CheckState, CheckStatus, Snapshot, WaybackHistory
 from ..ratelimit import AdaptiveRateLimiter
 
 CDX_URL = "https://web.archive.org/cdx/search/cdx"
-MAX_SNAPSHOTS = 6
+MAX_SNAPSHOTS = 8
+PATHS_PER_YEAR = 5  # AI에게 줄 연도별 주소 흔적 표본 수
+PATH_SAMPLE_LIMIT = 60
 # CDX column names -> model field names.
 _FIELD_ALIASES = {"statuscode": "status_code"}
 # Text seen on archive.org when a site is excluded from playback.
@@ -115,6 +119,7 @@ class WaybackClient:
         redirects = sum(1 for c in captures if c.status_code.startswith("3"))
         history.redirect_ratio = round(redirects / len(captures), 3)
         history.selected = select_snapshots(captures, self.max_snapshots)
+        history.path_samples = path_samples(captures)
         history.check = CheckState(status=CheckStatus.OK)
         return history
 
@@ -149,9 +154,13 @@ def _is_excluded(text: str) -> bool:
 
 
 def select_snapshots(captures: list[Snapshot], limit: int = MAX_SNAPSHOTS) -> list[Snapshot]:
-    """Pick <=limit representative captures; the last two active years are mandatory.
+    """Pick <=limit representative captures.
 
-    말기(마지막 활동 2년)는 폐쇄 직전 상태라 가장 중요한 증거이므로 항상 포함한다.
+    우선순위 — 스팸 이력을 놓치지 않는 순서다:
+      1. 말기(마지막 활동 2년) — 폐쇄 직전 상태는 가장 중요한 증거.
+      2. 기록 공백 바로 다음 해 — 도메인이 죽었다 되살아난 해는 스팸 업자가
+         주워서 쓰기 시작한 해일 가능성이 가장 높다.
+      3. 나머지 활동 연도에서 고르게.
     """
     if not captures or limit <= 0:
         return []
@@ -167,6 +176,13 @@ def select_snapshots(captures: list[Snapshot], limit: int = MAX_SNAPSHOTS) -> li
         chosen[pick.timestamp] = pick
 
     remaining = [y for y in years if y not in terminal]
+    # 공백 다음 해 — 그 전 해가 비어 있는(기록이 끊겼던) 해를 먼저 채운다.
+    revived = [y for y in remaining if (y - 1) not in by_year and y != years[0]]
+    for year in revived[: max(0, limit - len(chosen))]:
+        pick = by_year[year][0]
+        chosen[pick.timestamp] = pick
+
+    remaining = [y for y in remaining if y not in revived]
     slots = limit - len(chosen)
     if slots > 0 and remaining:
         if len(remaining) <= slots:
@@ -178,3 +194,27 @@ def select_snapshots(captures: list[Snapshot], limit: int = MAX_SNAPSHOTS) -> li
             pick = by_year[year][0]
             chosen[pick.timestamp] = pick
     return sorted(chosen.values(), key=lambda c: c.timestamp)[:limit]
+
+
+def path_samples(captures: list[Snapshot], per_year: int = PATHS_PER_YEAR) -> list[str]:
+    """연도별 주소 흔적 표본 — "YYYY /경로" 목록.
+
+    본문을 안 읽은 해도 주소 조각(/카지노/가입 같은)은 남는다. 표본을 AI에게
+    넘겨 모든 활동 연도를 훑게 한다 — 추가 네트워크 호출 없이 재현율을 올린다.
+    """
+    seen_per_year: dict[int, list[str]] = {}
+    samples: list[str] = []
+    for capture in captures:
+        split = urlsplit(capture.original)
+        path = unquote(split.path + (f"?{split.query}" if split.query else ""), errors="replace")
+        path = path.strip()[:120]
+        if not path.strip("/ "):
+            continue
+        bucket = seen_per_year.setdefault(capture.year, [])
+        if path in bucket or len(bucket) >= per_year:
+            continue
+        bucket.append(path)
+        samples.append(f"{capture.year} {path}")
+        if len(samples) >= PATH_SAMPLE_LIMIT:
+            break
+    return samples

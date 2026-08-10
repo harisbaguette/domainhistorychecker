@@ -39,7 +39,9 @@ RUN_STATE_NAME = "run_state.json"
 # 7: 구매 가능 판정을 RDAP·whois 해석에서 가비아 검색 확인으로 바꿈(2026-08-10)
 # 8: 낱말 목록으로 뜻을 넘겨짚던 검사(민감 업종·상표·색인 오염어)를 걷어내고
 #    그 판단을 AI에게 몰아줌 — 색인 주소 흔적을 AI 입력에 추가(2026-08-10)
-ENGINE_VERSION = 8
+# 9: 재현율 보강 — 공백 직후 해 우선 캡쳐(8장으로 확대) + 웨이백의 연도별 주소
+#    흔적 표본을 AI 입력에 추가(본문 안 읽은 해도 훑게 함)(2026-08-10)
+ENGINE_VERSION = 9
 
 
 def run_state_path(base: Path | str) -> Path:
@@ -363,6 +365,7 @@ class Pipeline:
             "registration": registration,
             "index_titles": result.index.titles,
             "index_paths": result.index.sample_paths,
+            "history_paths": result.wayback.path_samples,
             "rule_hints": result.rules.evidence,
         }
 
