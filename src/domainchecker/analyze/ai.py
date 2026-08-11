@@ -1,12 +1,20 @@
-"""AI reading of the archived history — one call per domain, JSON schema forced."""
+"""AI reading of the archived history — 전수 읽기.
+
+변경본이 한 번에 못 읽을 만큼 많으면 시간 순서대로 여러 묶음으로 나눠 전부
+읽힌 뒤(묶음마다 한 번), 묶음별 결과를 합쳐 최종 판정을 한 번 더 받는다.
+어느 묶음 하나라도 실패하면 "전수 확인 실패"로 정직하게 미확인 처리한다.
+"""
 
 from __future__ import annotations
+
+import json
 
 from ..clients.openrouter import OpenRouterClient, OpenRouterError
 from ..models import AIAnalysis, CheckState, CheckStatus, SpamJudgement
 from .extract import LANG_LABEL, SnapshotContent
 
-INPUT_LIMIT = 40_000  # 도메인당 입력 문자 상한 (≈1.5만 토큰)
+INPUT_LIMIT = 40_000  # AI 호출 한 번의 입력 문자 상한 (≈1.5만 토큰)
+_HEADER_ALLOWANCE = 6_000  # 프롬프트 머리(등록 정보·주소 목록 등)에 남겨 두는 몫
 
 SYSTEM_PROMPT = (
     "당신은 만료 도메인을 매입 전에 검수하는 SEO 리스크 심사관이다. "
@@ -114,9 +122,31 @@ def build_prompt(
             "# 웹 색인에 남아 있는 주소 흔적(경로만 — 위험 업종·상표 판단에 참고)\n" + paths
         )
     if context.get("history_paths"):
-        paths = "\n".join(f"- {p}" for p in context["history_paths"][:60])
+        # 이 묶음이 다루는 연도의 주소 흔적 — 머리 몫 예산 안에서 담고,
+        # 못 담은 수는 있는 그대로 적는다(거짓 안내 금지).
+        listed: list[str] = []
+        used_chars = 0
+        for p in context["history_paths"]:
+            line = f"- {p}"
+            if used_chars + len(line) > _HEADER_ALLOWANCE // 2:
+                break
+            listed.append(line)
+            used_chars += len(line) + 1
+        skipped = len(context["history_paths"]) - len(listed)
+        note = (
+            f"\n(전체 {len(context['history_paths'])}개 중 {len(listed)}개만 여기 담음 — "
+            "나머지 주소의 본문은 본문 묶음에서 따로 읽는다)"
+            if skipped > 0
+            else ""
+        )
         header.append(
-            "# 과거 저장 기록의 주소 흔적(연도 + 경로 — 본문이 없는 해의 보조 증거)\n" + paths
+            "# 과거 저장 기록의 주소 흔적(연도 + 경로 — 본문이 없는 해의 보조 증거)\n"
+            + "\n".join(listed) + note
+        )
+    if context.get("segment"):
+        header.append(
+            f"# 구간\n이 메시지에는 전체 역사 중 {context['segment']} 부분의 본문만 담겨 있다. "
+            "이 구간에서 보이는 것만 근거로 판정하라."
         )
     header.append(
         "# 지시\n아래 과거 페이지 본문을 읽고 스키마대로 한국어 JSON을 채워라. "
@@ -155,6 +185,82 @@ def build_prompt(
     return prefix + body
 
 
+def dedupe_texts(snapshots: list[SnapshotContent]) -> list[SnapshotContent]:
+    """본문이 완전히 같은 저장분은 한 번만 읽는다 — 같은 글을 두 번 읽는 건 낭비다."""
+    seen: set[str] = set()
+    out = []
+    for snap in snapshots:
+        key = snap.text.strip()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append(snap)
+    return out
+
+
+def pack_chunks(
+    snapshots: list[SnapshotContent], input_limit: int = INPUT_LIMIT
+) -> list[list[SnapshotContent]]:
+    """시간 순서를 지키며, 한 호출 예산에 들어가는 만큼씩 묶는다. 버리는 장은 없다."""
+    budget = max(2_000, input_limit - _HEADER_ALLOWANCE)
+    chunks: list[list[SnapshotContent]] = []
+    current: list[SnapshotContent] = []
+    size = 0
+    for snap in snapshots:
+        cost = len(snap.text) + 120
+        if current and size + cost > budget:
+            chunks.append(current)
+            current, size = [], 0
+        current.append(snap)
+        size += cost
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def _chunk_context(context: dict, chunk: list[SnapshotContent], i: int, total: int) -> dict:
+    """묶음 하나에 붙일 문맥 — 주소 흔적은 그 묶음이 다루는 연도 것만."""
+    years = {s.timestamp[:4] for s in chunk}
+    scoped = dict(context)
+    scoped["history_paths"] = [
+        p for p in (context.get("history_paths") or []) if p[:4] in years
+    ]
+    scoped["segment"] = f"{i + 1}/{total} ({min(years)}~{max(years)}년)"
+    scoped.pop("index_paths", None)  # 현재 색인은 통합 판정에서만 본다
+    return scoped
+
+
+_PARTIAL_KEYS = (
+    "topic_history", "topic_periods", "spam", "transition", "transition_risk",
+    "content_quality", "trademark", "trademark_risk", "one_liner",
+)
+
+
+def build_merge_prompt(domain: str, partials: list[dict], context: dict | None = None) -> str:
+    """묶음별 결과(JSON)를 합쳐 최종 판정을 받는 프롬프트."""
+    context = context or {}
+    header = [f"# 검사 대상 도메인\n{domain}", ""]
+    if context.get("registration"):
+        header.append(f"# 등록 정보\n{context['registration']}")
+    if context.get("timeline"):
+        header.append(f"# 저장 이력 요약\n{context['timeline']}")
+    if context.get("index_titles"):
+        titles = "\n".join(f"- {t}" for t in context["index_titles"][:10])
+        header.append(f"# 현재 구글 색인 제목\n{titles}")
+    if context.get("index_paths"):
+        paths = "\n".join(f"- {p}" for p in context["index_paths"][:15])
+        header.append("# 웹 색인에 남아 있는 주소 흔적\n" + paths)
+    header.append(
+        "# 지시\n아래는 이 도메인의 전체 역사를 시간 순서 구간으로 나눠 각각 분석한 "
+        "결과(JSON 목록)다. 전부 합쳐 전체 역사에 대한 최종 판정을 같은 스키마로 내려라. "
+        "spam은 가장 심한 구간의 판정을 따르고 quotes에는 그 구간의 인용을 그대로 옮겨라. "
+        "topic_periods는 구간들을 이어 붙여 정리하라. 어느 한 구간에라도 위험 운영 증거가 "
+        "있으면 전체 판정에 반드시 반영하라(좋은 시기가 나쁜 시기를 덮지 못한다)."
+    )
+    body = json.dumps(partials, ensure_ascii=False)
+    return "\n\n".join(header) + "\n\n# 구간별 분석 결과\n" + body
+
+
 async def analyze(
     domain: str,
     snapshots: list[SnapshotContent],
@@ -162,7 +268,7 @@ async def analyze(
     context: dict | None = None,
     input_limit: int = INPUT_LIMIT,
 ) -> AIAnalysis:
-    """One AI call; any failure becomes UNCHECKED so the pipeline keeps going."""
+    """전수 읽기 — 묶음별 분석 + 통합 판정. 실패는 전부 UNCHECKED로 정직하게 남긴다."""
     result = AIAnalysis()
     if client is None or not client.api_key:
         result.check = CheckState(
@@ -170,18 +276,63 @@ async def analyze(
             note="OpenRouter 키가 없어 AI 분석은 건너뛰었습니다(규칙 검사만으로 판정합니다).",
         )
         return result
-    readable = [s for s in snapshots if s.text]
+    readable = dedupe_texts([s for s in snapshots if s.text])
     if not readable:
         result.check = CheckState(
             status=CheckStatus.UNCHECKED, note="읽을 수 있는 과거 본문이 없어 AI 분석을 못 했습니다."
         )
         return result
 
-    prompt = build_prompt(domain, readable, context, input_limit)
+    chunks = pack_chunks(readable, input_limit)
+    context = context or {}
+    fallback = False
+    merged_note = ""
     try:
-        data, model, fallback = await client.complete_json(
-            SYSTEM_PROMPT, prompt, RESPONSE_SCHEMA, schema_name="domain_history"
-        )
+        if len(chunks) == 1:
+            prompt = build_prompt(domain, readable, context, input_limit)
+            data, model, fallback = await client.complete_json(
+                SYSTEM_PROMPT, prompt, RESPONSE_SCHEMA, schema_name="domain_history"
+            )
+        else:
+            # 본문을 한 장도 못 읽은 해의 주소 흔적은 어느 본문 묶음에도 못 실린다 —
+            # 그 해들만 모아 "주소 전용 묶음"을 하나 더 돌린다(증거 증발 방지).
+            prompts = [
+                build_prompt(domain, chunk, _chunk_context(context, chunk, i, len(chunks)), input_limit)
+                for i, chunk in enumerate(chunks)
+            ]
+            covered_years = {s.timestamp[:4] for chunk in chunks for s in chunk}
+            orphan_paths = [
+                p for p in (context.get("history_paths") or []) if p[:4] not in covered_years
+            ]
+            if orphan_paths:
+                orphan_context = dict(context)
+                orphan_context["history_paths"] = orphan_paths
+                orphan_context["segment"] = "본문이 남지 않은 해(주소 흔적만 있음)"
+                orphan_context.pop("index_paths", None)
+                prompts.append(build_prompt(domain, [], orphan_context, input_limit))
+
+            partials = []
+            for i, prompt in enumerate(prompts):
+                try:
+                    part, _, fb = await client.complete_json(
+                        SYSTEM_PROMPT, prompt, RESPONSE_SCHEMA, schema_name="domain_history"
+                    )
+                except OpenRouterError as exc:
+                    result.check = CheckState(
+                        status=CheckStatus.UNCHECKED,
+                        note=f"{len(prompts)}묶음 중 {i + 1}번째 분석이 실패해 전수 확인을 못 했습니다: {exc}",
+                    )
+                    return result
+                fallback = fallback or fb
+                partials.append({k: part.get(k) for k in _PARTIAL_KEYS})
+            data, model, fb = await client.complete_json(
+                SYSTEM_PROMPT,
+                build_merge_prompt(domain, partials, context),
+                RESPONSE_SCHEMA,
+                schema_name="domain_history",
+            )
+            fallback = fallback or fb
+            merged_note = f"본문이 많아 {len(chunks)}묶음으로 나눠 전부 읽고 합쳤습니다."
     except OpenRouterError as exc:
         result.check = CheckState(status=CheckStatus.UNCHECKED, note=str(exc))
         return result
@@ -210,8 +361,10 @@ async def analyze(
         if isinstance(item, dict) and item.get("topic")
     ]
     result.spam = _parse_spam(data.get("spam"))
-    note = "" if fallback is False else f"기본 모델이 실패해 대체 모델({model})로 분석했습니다."
-    result.check = CheckState(status=CheckStatus.OK, note=note)
+    notes = [merged_note] if merged_note else []
+    if fallback:
+        notes.append(f"기본 모델이 실패해 대체 모델({model})로 분석했습니다.")
+    result.check = CheckState(status=CheckStatus.OK, note=" ".join(notes))
     return result
 
 

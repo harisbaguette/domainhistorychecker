@@ -91,7 +91,8 @@ def test_ai_spam_below_threshold_is_conflict_not_fatal():
     result = judge(
         healthy(
             ai=AIAnalysis(
-                check=OK, spam=SpamJudgement(verdict="spam", confidence=0.7, quotes=["인용"])
+                # 문턱(0.7) 밑의 확신 — 단독 치명이 아니라 신호 충돌 경고로 남는다.
+                check=OK, spam=SpamJudgement(verdict="spam", confidence=0.5, quotes=["인용"])
             )
         )
     )

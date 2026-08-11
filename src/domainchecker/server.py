@@ -225,10 +225,15 @@ class RunManager:
         }
 
 
+# 전수 확인은 도메인마다 읽을 양이 달라 미리 알 수 없다 — 평균 가정치로 안내한다.
+# (앞페이지 변경본 + 하위 페이지 합쳐 평균 100장 가정 + 목록 조회 3번.)
+AVG_PAGES_ASSUMED = 100
+
+
 def estimate(config: Config, count: int) -> dict:
-    """예상 소요 시간과 무료 쿼터 소진량."""
-    per_domain = 1 + config.max_snapshots + (2 if config.enable_capture else 0)
-    table_per_domain = 1 + config.max_snapshots
+    """예상 소요 시간과 무료 쿼터 소진량 — 전수 확인이라 평균 가정치 기준."""
+    per_domain = 3 + AVG_PAGES_ASSUMED + (2 if config.enable_capture else 0)
+    table_per_domain = 3 + AVG_PAGES_ASSUMED
     rpm = config.start_rpm
     minutes = count * per_domain / rpm
     table_minutes = count * table_per_domain / rpm

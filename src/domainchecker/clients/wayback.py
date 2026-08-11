@@ -1,4 +1,16 @@
-"""Wayback Machine: one CDX timeline call, then a few representative snapshots."""
+"""Wayback Machine — 전수 확인.
+
+표본을 몇 장 뽑아 읽는 방식은 버렸다. 세 가지를 전부 가져온다:
+  1) 활동 통계 — 월별로 접은 저장 목록(연도 분포·공백·리다이렉트 비율).
+  2) 앞페이지 변경본 전부 — 내용이 바뀐 시점마다 저장된 서로 다른 판(digest
+     기준)을 모두 받아, 그 본문을 전부 읽는다. 내용이 같은 저장분을 또 읽는
+     것은 낭비일 뿐이므로 "서로 다른 판 전부"가 곧 전수다.
+  3) 전체 주소 목록 — 이 도메인 밑에 저장된 서로 다른 주소 전부. 본문이 없는
+     페이지도 주소 조각(/카지노/가입 같은)은 남으므로 AI가 전 기간을 훑는다.
+
+몇 장을 읽었고 몇 장을 못 읽었는지는 coverage(확인 범위)로 숫자 그대로
+보고한다 — "전부 봤다"는 말은 숫자로 증명될 때만 한다.
+"""
 
 from __future__ import annotations
 
@@ -10,9 +22,9 @@ from ..models import CheckState, CheckStatus, Snapshot, WaybackHistory
 from ..ratelimit import AdaptiveRateLimiter
 
 CDX_URL = "https://web.archive.org/cdx/search/cdx"
-MAX_SNAPSHOTS = 8
-PATHS_PER_YEAR = 5  # AI에게 줄 연도별 주소 흔적 표본 수
-PATH_SAMPLE_LIMIT = 60
+CDX_LIMIT = 5000  # 조회 한 번이 받을 최대 행 — 여기 걸리면 "이상"이라고 보고한다
+PAGE_BYTES_LIMIT = 1_000_000  # 저장분 하나에서 받아 둘 최대 글자(폭탄 응답 방어)
+
 # CDX column names -> model field names.
 _FIELD_ALIASES = {"statuscode": "status_code"}
 # Text seen on archive.org when a site is excluded from playback.
@@ -28,11 +40,9 @@ class WaybackClient:
         self,
         http: httpx.AsyncClient,
         limiter: AdaptiveRateLimiter | None = None,
-        max_snapshots: int = MAX_SNAPSHOTS,
     ) -> None:
         self.http = http
         self.limiter = limiter or AdaptiveRateLimiter()
-        self.max_snapshots = max_snapshots
 
     async def _get(self, url: str, params: dict | None = None) -> httpx.Response | None:
         """One rate-limited GET with a single retry after a 429."""
@@ -50,6 +60,32 @@ class WaybackClient:
             self.limiter.note_success()
             return response
         return None
+
+    async def _cdx_rows(self, params: dict) -> list[Snapshot] | None:
+        """One CDX query parsed into snapshots; None = 조회 실패(모른다)."""
+        response = await self._get(CDX_URL, params)
+        if response is None or response.status_code != 200:
+            return None
+        try:
+            rows = response.json()
+        except ValueError:
+            return None
+        if not isinstance(rows, list):
+            return None
+        if len(rows) < 2:
+            return []
+        header, *body = rows
+        fields = [_FIELD_ALIASES.get(str(name), str(name)) for name in header]
+        allowed = set(Snapshot.model_fields)
+        captures = [
+            Snapshot(
+                **{k: v for k, v in zip(fields, row, strict=False) if k in allowed and v is not None}
+            )
+            for row in body
+        ]
+        captures = [c for c in captures if len(c.timestamp) >= 8 and c.timestamp[:4].isdigit()]
+        captures.sort(key=lambda c: c.timestamp)
+        return captures
 
     async def timeline(self, domain: str) -> WaybackHistory:
         """Single CDX query giving the year distribution, gaps and status codes."""
@@ -93,7 +129,6 @@ class WaybackClient:
             return history
 
         header, *body = rows
-        # CDX calls the column "statuscode"; the model field is status_code.
         fields = [_FIELD_ALIASES.get(str(name), str(name)) for name in header]
         allowed = set(Snapshot.model_fields)
         captures = [
@@ -118,10 +153,42 @@ class WaybackClient:
         history.gap_years = [y for y in range(years[0], years[-1] + 1) if str(y) not in history.year_counts]
         redirects = sum(1 for c in captures if c.status_code.startswith("3"))
         history.redirect_ratio = round(redirects / len(captures), 3)
-        history.selected = select_snapshots(captures, self.max_snapshots)
-        history.path_samples = path_samples(captures)
         history.check = CheckState(status=CheckStatus.OK)
         return history
+
+    async def versions(self, domain: str) -> list[Snapshot] | None:
+        """앞페이지의 서로 다른 변경본 전부. None = 조회 실패.
+
+        mimetype 거름망을 두지 않는다 — 카지노로 넘겨보내기만 하던 시기의
+        저장분은 html이 아닌 형식으로 남는 일이 많아, 거르면 그 시대가 통째로
+        이력에서 사라진다(진상 검증 지적 5).
+        """
+        return await self._cdx_rows(
+            {
+                "url": domain,
+                "output": "json",
+                "fl": "timestamp,original,statuscode,mimetype,digest",
+                "collapse": "digest",  # 내용이 같은 연속 저장분은 한 판으로
+                "limit": str(CDX_LIMIT),
+            }
+        )
+
+    async def site_pages(self, domain: str) -> list[Snapshot] | None:
+        """도메인 밑에 저장된 서로 다른 주소 전부(주소마다 저장분 하나). None = 조회 실패."""
+        rows = await self._cdx_rows(
+            {
+                "url": f"{domain}/*",
+                "output": "json",
+                "fl": "timestamp,original,statuscode,mimetype,digest",
+                "filter": "mimetype:text/html",
+                "collapse": "urlkey",  # 같은 주소는 한 번만
+                "limit": str(CDX_LIMIT),
+            }
+        )
+        if rows is None:
+            return None
+        # 뿌리 주소는 변경본 전수 읽기가 따로 다루므로 하위 주소만 남긴다.
+        return [c for c in rows if _short_path(c.original)]
 
     async def fetch_snapshot(self, snapshot: Snapshot) -> str | None:
         """Fetch the stored bytes of one capture (`id_` = no archive rewriting)."""
@@ -133,88 +200,80 @@ class WaybackClient:
         return response.text
 
     async def collect(self, domain: str) -> WaybackHistory:
-        """Timeline plus the raw HTML of every selected snapshot."""
+        """통계 + 앞페이지 변경본 전부 + 하위 페이지 전부의 본문.
+
+        표본도, 몇 장 제한도 없다. 앞페이지의 서로 다른 판 전부와, 도메인 밑에
+        저장된 서로 다른 주소 전부의 본문을 읽는다(진상 검증 지적 1 반영).
+        몇 장을 읽었는지는 coverage_note에 숫자로 남는다.
+        """
         history = await self.timeline(domain)
-        for snapshot in history.selected:
+        if not history.check.ok or not history.has_history:
+            return history
+
+        versions = await self.versions(domain)
+        if versions is None:
+            history.check = CheckState(
+                status=CheckStatus.UNCHECKED,
+                note="변경본 목록 조회에 실패해 전수 확인을 하지 못했습니다.",
+            )
+            return history
+        subpages = await self.site_pages(domain)
+        if subpages is None:
+            history.check = CheckState(
+                status=CheckStatus.UNCHECKED,
+                note="하위 주소 목록 조회에 실패해 전수 확인을 하지 못했습니다.",
+            )
+            return history
+
+        targets = versions + subpages
+        history.versions_total = len(targets)
+        history.selected = targets
+        history.path_samples = _year_paths(subpages)
+
+        for snapshot in targets:
             html = await self.fetch_snapshot(snapshot)
             history.pages.append(
                 {
                     "timestamp": snapshot.timestamp,
                     "url": snapshot.raw_url,
-                    "html": html or "",
+                    "html": (html or "")[:PAGE_BYTES_LIMIT],
                     "fetched": html is not None,
                 }
             )
+        history.versions_read = sum(1 for p in history.pages if p["fetched"])
+
+        failed = history.versions_total - history.versions_read
+        over_v = " 이상(조회 한도)" if len(versions) >= CDX_LIMIT else ""
+        over_s = " 이상(조회 한도)" if len(subpages) >= CDX_LIMIT - 1 else ""
+        history.coverage_note = (
+            f"앞페이지 변경본 {len(versions)}장{over_v}과 하위 페이지 {len(subpages)}개{over_s}의 "
+            f"본문을 전부 읽음 — {history.versions_total}장 중 {history.versions_read}장 성공"
+            + (f"({failed}장은 열리지 않음)." if failed else ".")
+        )
         return history
+
+
+def _short_path(url: str) -> str:
+    """주소에서 도메인 이름을 뺀 경로 부분 — 뿌리(/)면 빈 문자열."""
+    split = urlsplit(url)
+    path = unquote(split.path + (f"?{split.query}" if split.query else ""), errors="replace")
+    path = path.strip()[:120]
+    return path if path.strip("/ ") else ""
+
+
+def _year_paths(subpages: list[Snapshot]) -> list[str]:
+    """"YYYY /경로" 목록 — 본문과 별개로 AI가 연도별 주소 흔적을 훑는 데 쓴다."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for capture in subpages:
+        path = _short_path(capture.original)
+        if not path or path in seen:
+            continue
+        seen.add(path)
+        out.append(f"{capture.year} {path}")
+    return out
 
 
 def _is_excluded(text: str) -> bool:
     lowered = (text or "")[:4000].lower()
     return any(mark in lowered for mark in _EXCLUSION_MARKS)
-
-
-def select_snapshots(captures: list[Snapshot], limit: int = MAX_SNAPSHOTS) -> list[Snapshot]:
-    """Pick <=limit representative captures.
-
-    우선순위 — 스팸 이력을 놓치지 않는 순서다:
-      1. 말기(마지막 활동 2년) — 폐쇄 직전 상태는 가장 중요한 증거.
-      2. 기록 공백 바로 다음 해 — 도메인이 죽었다 되살아난 해는 스팸 업자가
-         주워서 쓰기 시작한 해일 가능성이 가장 높다.
-      3. 나머지 활동 연도에서 고르게.
-    """
-    if not captures or limit <= 0:
-        return []
-    by_year: dict[int, list[Snapshot]] = {}
-    for capture in captures:
-        by_year.setdefault(capture.year, []).append(capture)
-    years = sorted(by_year)
-
-    terminal = years[-2:]  # 말기
-    chosen: dict[str, Snapshot] = {}
-    for year in terminal:
-        pick = by_year[year][-1]
-        chosen[pick.timestamp] = pick
-
-    remaining = [y for y in years if y not in terminal]
-    # 공백 다음 해 — 그 전 해가 비어 있는(기록이 끊겼던) 해를 먼저 채운다.
-    revived = [y for y in remaining if (y - 1) not in by_year and y != years[0]]
-    for year in revived[: max(0, limit - len(chosen))]:
-        pick = by_year[year][0]
-        chosen[pick.timestamp] = pick
-
-    remaining = [y for y in remaining if y not in revived]
-    slots = limit - len(chosen)
-    if slots > 0 and remaining:
-        if len(remaining) <= slots:
-            picks = remaining
-        else:
-            step = (len(remaining) - 1) / (slots - 1) if slots > 1 else 0
-            picks = sorted({remaining[round(i * step)] for i in range(slots)})
-        for year in picks:
-            pick = by_year[year][0]
-            chosen[pick.timestamp] = pick
-    return sorted(chosen.values(), key=lambda c: c.timestamp)[:limit]
-
-
-def path_samples(captures: list[Snapshot], per_year: int = PATHS_PER_YEAR) -> list[str]:
-    """연도별 주소 흔적 표본 — "YYYY /경로" 목록.
-
-    본문을 안 읽은 해도 주소 조각(/카지노/가입 같은)은 남는다. 표본을 AI에게
-    넘겨 모든 활동 연도를 훑게 한다 — 추가 네트워크 호출 없이 재현율을 올린다.
-    """
-    seen_per_year: dict[int, list[str]] = {}
-    samples: list[str] = []
-    for capture in captures:
-        split = urlsplit(capture.original)
-        path = unquote(split.path + (f"?{split.query}" if split.query else ""), errors="replace")
-        path = path.strip()[:120]
-        if not path.strip("/ "):
-            continue
-        bucket = seen_per_year.setdefault(capture.year, [])
-        if path in bucket or len(bucket) >= per_year:
-            continue
-        bucket.append(path)
-        samples.append(f"{capture.year} {path}")
-        if len(samples) >= PATH_SAMPLE_LIMIT:
-            break
-    return samples

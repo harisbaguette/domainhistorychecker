@@ -41,7 +41,10 @@ RUN_STATE_NAME = "run_state.json"
 #    그 판단을 AI에게 몰아줌 — 색인 주소 흔적을 AI 입력에 추가(2026-08-10)
 # 9: 재현율 보강 — 공백 직후 해 우선 캡쳐(8장으로 확대) + 웨이백의 연도별 주소
 #    흔적 표본을 AI 입력에 추가(본문 안 읽은 해도 훑게 함)(2026-08-10)
-ENGINE_VERSION = 9
+# 10: 표본 폐기 → 전수 확인 — 앞페이지 변경본 전부 + 하위 페이지 전부의 본문
+#     읽기, AI 묶음 분할 전수 읽기, 확인 범위 숫자 보고. 진상 검증 지적 반영:
+#     주소 전용 묶음, AI 단독 치명 문턱 0.7, 리다이렉트 시대 포함(2026-08-11)
+ENGINE_VERSION = 10
 
 
 def run_state_path(base: Path | str) -> Path:
@@ -272,7 +275,7 @@ class Pipeline:
         if scoring.availability_of(result.registration.acquisition) == "taken":
             return self._finish_taken(result)
 
-        wayback = WaybackClient(http, self.wayback_limiter, self.config.max_snapshots)
+        wayback = WaybackClient(http, self.wayback_limiter)
         collected = await asyncio.gather(
             wayback.collect(domain),
             spamhaus.check(domain, self.resolver),

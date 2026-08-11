@@ -43,9 +43,9 @@ class Config(BaseModel):
     speed_mode: str = "adaptive"  # "adaptive" (30/min 시작) | "safe" (12/min 고정)
     enable_capture: bool = True  # 화면 캡쳐(전 검사 완료 후 후행 실행)
     max_domains: int = 1000
-    max_snapshots: int = 8  # 말기 2 + 공백 직후 해 + 고른 표본 — 재현율 보강(2026-08-10)
+# 표본 수 설정(max_snapshots)은 없앴다 — 앞페이지의 서로 다른 변경본을 전부 읽는다(2026-08-10).
     ai_input_limit: int = 40_000  # 도메인당 AI 입력 상한(문자)
-    snapshot_text_limit: int = 6_000
+    snapshot_text_limit: int = 12_000  # 긴 글 꼬리에 붙는 스팸 문단까지 읽도록 6천→1.2만(2026-08-11)
     concurrency: int = 4
     cache_days: int = 7  # 저장분을 며칠까지 믿을지(0이면 무기한). 지나면 자동으로 다시 검사
     data_dir: str = ""  # 비우면 프로젝트 ./data

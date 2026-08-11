@@ -109,7 +109,10 @@ class WaybackHistory(BaseModel):
     redirect_ratio: float = 0.0
     selected: list[Snapshot] = Field(default_factory=list)
     pages: list[dict] = Field(default_factory=list)  # extracted snapshot contents
-    path_samples: list[str] = Field(default_factory=list)  # "YYYY /경로" — AI 입력용 흔적
+    path_samples: list[str] = Field(default_factory=list)  # "YYYY /경로" — 전체 주소 목록
+    versions_total: int = 0  # 앞페이지의 서로 다른 변경본 수
+    versions_read: int = 0  # 그중 본문을 실제로 읽은 수
+    coverage_note: str = ""  # 확인 범위를 숫자로 적은 한 줄
 
     @property
     def has_history(self) -> bool:

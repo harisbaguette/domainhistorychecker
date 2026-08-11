@@ -463,6 +463,7 @@ def detail_fragment(result: DomainResult, capture_base: str = "../captures") -> 
 {_timeline(result)}
 <p class="muted">총 {result.wayback.total_captures}건 · {REDIRECT_LABEL} {result.wayback.redirect_ratio:.0%} ·
 {PARKING_LABEL} {result.rules.parking_ratio:.0%}</p>
+{f'<p class="muted">확인 범위: {_t(result.wayback.coverage_note)}</p>' if result.wayback.coverage_note else ""}
 
 <h2>4. 과거에 무엇을 하던 도메인인가</h2>
 {story}

@@ -39,8 +39,15 @@ def page_html(year: int) -> str:
     return f"<html><head><title>{year}년 기록</title></head><body>{body}</body></html>"
 
 
-CDX_ROWS = [["timestamp", "original", "statuscode", "mimetype", "digest"]] + [
+CDX_HEADER = ["timestamp", "original", "statuscode", "mimetype", "digest"]
+# 통계·변경본 조회 공용 — 연도마다 내용이 다른(digest가 다른) 앞페이지 1판씩.
+CDX_ROWS = [CDX_HEADER] + [
     [f"{year}0601120000", f"http://{DOMAIN}/", "200", "text/html", f"D{year}"] for year in YEARS
+]
+# 주소 전수 조회 — 연도마다 서로 다른 주소 하나씩 남아 있다.
+CDX_PATH_ROWS = [CDX_HEADER] + [
+    [f"{year}0601120000", f"http://{DOMAIN}/post/{year}", "200", "text/html", f"P{year}"]
+    for year in YEARS
 ]
 
 # 가비아 검색 답 — 삭제 예정(사전 예약 가능)이라 "곧 등록 가능"으로 읽혀야 하고,
@@ -83,8 +90,14 @@ class FakeResolver:
 
 
 def mock_all() -> None:
+    def cdx_response(request):
+        # 주소 전수 조회만 경로 목록으로 답하고, 통계·변경본 조회는 같은 판 목록을 쓴다.
+        if request.url.params.get("collapse", "") == "urlkey":
+            return httpx.Response(200, json=CDX_PATH_ROWS)
+        return httpx.Response(200, json=CDX_ROWS)
+
     respx.get(url__startswith="https://web.archive.org/cdx/search/cdx").mock(
-        return_value=httpx.Response(200, json=CDX_ROWS)
+        side_effect=cdx_response
     )
 
     def snapshot_response(request):
@@ -166,7 +179,13 @@ async def test_full_run_produces_a_buy_verdict(config, tmp_path):
 
     # 수집 내용
     assert result.wayback.total_captures == len(YEARS)
-    assert len(result.wayback.selected) == config.max_snapshots
+    # 전수 확인 — 앞페이지 변경본 전부 + 하위 페이지 전부를 읽고 숫자로 남긴다.
+    total = len(YEARS) * 2  # 변경본 10장 + 하위 페이지 10개
+    assert result.wayback.versions_total == total
+    assert result.wayback.versions_read == total
+    assert len(result.wayback.pages) == total
+    assert f"{total}장 중 {total}장 성공" in result.wayback.coverage_note
+    assert result.wayback.path_samples == [f"{y} /post/{y}" for y in YEARS]
     assert result.wayback.selected[-1].timestamp.startswith("2024")  # 말기 포함
     assert result.registration.source == "gabia"
     assert result.registration.acquisition == "삭제 대기(곧 등록 가능)"

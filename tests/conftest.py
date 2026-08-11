@@ -1,3 +1,5 @@
+from datetime import UTC, datetime, timedelta
+
 import pytest
 
 from domainchecker.models import (
@@ -54,5 +56,7 @@ def sample_result() -> DomainResult:
             one_liner="꾸준히 운영된 생활 블로그",
         ),
         rules=RuleFindings(check=OK, languages=["ko"], evidence=[]),
-        finished_at="2026-08-04T00:00:00+00:00",
+        # 달력 날짜를 박아 두면 며칠 지나 "묵은 저장분" 기준(7일)에 걸려 시험이
+        # 저절로 깨진다 — 언제 돌려도 어제 검사한 것으로 만든다.
+        finished_at=(datetime.now(UTC) - timedelta(days=1)).isoformat(timespec="seconds"),
     )

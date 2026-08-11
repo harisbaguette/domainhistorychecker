@@ -24,7 +24,10 @@ from ..models import (
 
 BUY_CUT = 75.0
 REJECT_CUT = 50.0
-AI_FATAL_CONFIDENCE = 0.85  # AI 단독 치명 판정에 필요한 확신도
+# AI 단독 치명 판정에 필요한 확신도. 0.85에서 내림 — 돈이 걸린 매입 판단에서는
+# "스팸 같은데 확신이 조금 모자라 통과"가 "멀쩡한데 잘못 막음"보다 훨씬 비싸다
+# (진상 검증 지적 7, 2026-08-11). 인용(quotes) 필수는 그대로 둔다.
+AI_FATAL_CONFIDENCE = 0.7
 RULES_FATAL_HITS = 3  # AI 없이 규칙만으로 치명(❌)을 낼 최소 흔적 수
 
 # 안전성·전환 항목은 AI 몫과 규칙 몫으로 나뉜다. 한쪽이 안 돌면 그만큼 만점(분모)이
@@ -413,6 +416,13 @@ def warn_reasons(result: DomainResult) -> list[str]:
         reasons.append("상표 충돌 의심 — AI 소견: " + (result.ai.trademark or "상표 문제 가능성 있음"))
     if result.wayback.excluded:
         reasons.append("웨이백 열람이 차단되어 과거를 볼 수 없습니다(이력 은폐 가능성).")
+    # 기록 공백이 길면 그 기간은 아무도 못 본 것이다 — 전수 확인을 해도
+    # 보관소에 없는 세월은 못 본다는 사실을 노랑으로 정직하게 남긴다(진상 지적 9).
+    if result.wayback.check.ok and len(result.wayback.gap_years) >= 2:
+        reasons.append(
+            f"저장 기록이 없는 해가 {len(result.wayback.gap_years)}년 있습니다 — "
+            "그 기간의 운영 내용은 아무 자료로도 확인할 수 없습니다."
+        )
     if result.wayback.check.ok and not result.wayback.has_history:
         reasons.append("저장된 과거 이력이 아예 없습니다 — 좋은 것도 나쁜 것도 아니므로 신중히 판단하세요.")
     return reasons
