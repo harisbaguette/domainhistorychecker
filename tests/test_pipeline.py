@@ -179,12 +179,15 @@ async def test_full_run_produces_a_buy_verdict(config, tmp_path):
 
     # 수집 내용
     assert result.wayback.total_captures == len(YEARS)
-    # 앞페이지 변경본은 전부 읽고, 하위 주소는 목록으로 전부 훑는다.
+    # 앞페이지 변경본은 전부 읽고, 하위 주소는 유형으로 묶어 대표를 정독한다.
     assert result.wayback.versions_total == len(YEARS)
     assert result.wayback.versions_read == len(YEARS)
-    assert len(result.wayback.pages) == len(YEARS)
+    # /post/2015 … /post/2024 는 전부 한 유형(/post/N) — 대표는 처음·마지막 해 2장.
+    assert len(result.wayback.pages) == len(YEARS) + 2
     assert f"변경본 {len(YEARS)}장 전부 읽음" in result.wayback.coverage_note
     assert f"하위 주소 {len(YEARS)}개" in result.wayback.coverage_note
+    assert "유형 1가지" in result.wayback.coverage_note
+    assert "2곳 중 2곳 본문 정독" in result.wayback.coverage_note
     assert result.wayback.path_samples == [f"{y} /post/{y}" for y in YEARS]
     assert result.wayback.subpages == []  # 선별용 목록은 결과에 남기지 않는다
     assert result.wayback.selected[-1].timestamp.startswith("2024")  # 말기 포함

@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import re
 from urllib.parse import unquote, urlsplit
 
 import httpx
@@ -275,6 +276,43 @@ def short_path(url: str) -> str:
     path = unquote(split.path + (f"?{split.query}" if split.query else ""), errors="replace")
     path = path.strip()[:120]
     return path if path.strip("/ ") else ""
+
+
+_DIGITS = re.compile(r"\d+")
+
+
+def cluster_key(path: str) -> str:
+    """주소의 '모양'만 남긴 열쇠 — 뜻 판단이 아니라 구조 묶기다.
+
+    /post/1042 와 /post/93 은 같은 틀에서 찍은 페이지라 한 유형이다.
+    숫자를 N으로 접으면 같은 틀의 주소가 같은 열쇠로 모인다.
+    """
+    base = path.split("?")[0]
+    segments = [_DIGITS.sub("N", s) for s in base.split("/") if s]
+    return "/" + "/".join(segments) if segments else "/"
+
+
+def cluster_representatives(
+    subpages: list[Snapshot], gap_years: list[int] | None = None
+) -> tuple[list[Snapshot], int]:
+    """페이지 유형마다 반드시 읽을 대표 저장분 — (대표 목록, 유형 수).
+
+    표본이 아니라 종류 단위의 전수다: 존재하는 모든 주소 유형이 빠짐없이
+    한 번 이상 읽힌다. 유형마다 처음 해·마지막 해, 그리고 기록 공백 바로
+    다음 해(주인이 바뀌었을 가능성이 큰 해)의 저장분을 고른다.
+    """
+    groups: dict[str, list[Snapshot]] = {}
+    for snap in subpages:
+        groups.setdefault(cluster_key(short_path(snap.original)), []).append(snap)
+    gap_next = {y + 1 for y in (gap_years or [])}
+    reps: dict[str, Snapshot] = {}
+    for members in groups.values():
+        members.sort(key=lambda s: s.timestamp)
+        chosen = [members[0], members[-1]] + [m for m in members if m.year in gap_next]
+        for snap in chosen:
+            reps[snap.timestamp + snap.original] = snap
+    ordered = sorted(reps.values(), key=lambda s: s.timestamp)
+    return ordered, len(groups)
 
 
 def _year_paths(subpages: list[Snapshot]) -> list[str]:

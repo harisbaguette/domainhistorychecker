@@ -2,8 +2,12 @@ import httpx
 import pytest
 import respx
 
-from domainchecker.clients.wayback import WaybackClient
-from domainchecker.models import CheckStatus
+from domainchecker.clients.wayback import (
+    WaybackClient,
+    cluster_key,
+    cluster_representatives,
+)
+from domainchecker.models import CheckStatus, Snapshot
 from domainchecker.ratelimit import AdaptiveRateLimiter
 
 HEADER = ["timestamp", "original", "statuscode", "mimetype", "digest"]
@@ -11,6 +15,32 @@ HEADER = ["timestamp", "original", "statuscode", "mimetype", "digest"]
 
 def rows(entries):
     return [HEADER, *entries]
+
+
+def test_cluster_key_folds_numbered_pages_into_one_kind():
+    """같은 틀로 찍은 /post/1042 와 /post/93 은 한 유형으로 묶인다 — 숫자만 다른 주소."""
+    assert cluster_key("/post/1042") == cluster_key("/post/93")
+    assert cluster_key("/post/1042") != cluster_key("/casino/join")
+    assert cluster_key("/view?id=93") == cluster_key("/view?id=12")  # 물음표 뒤는 모양에서 뺀다
+
+
+def test_cluster_representatives_cover_every_kind_and_the_revival_year():
+    """유형마다 처음·마지막 해 + 공백 직후 해 대표가 반드시 뽑힌다 — 종류 단위 전수."""
+    def snap(year, path):
+        return Snapshot(timestamp=f"{year}0601000000", original=f"http://x.com{path}", status_code="200")
+
+    subpages = [
+        snap(2010, "/blog/1"), snap(2015, "/blog/2"), snap(2020, "/blog/3"),
+        snap(2015, "/casino/join"),
+    ]
+    reps, kinds = cluster_representatives(subpages, gap_years=[2014])  # 2015 = 부활 해
+
+    assert kinds == 2  # /blog/N 과 /casino/join
+    picked = {(s.year, s.original.replace("http://x.com", "")) for s in reps}
+    assert (2010, "/blog/1") in picked  # blog 유형 처음
+    assert (2020, "/blog/3") in picked  # blog 유형 마지막
+    assert (2015, "/blog/2") in picked  # 공백 직후 해
+    assert (2015, "/casino/join") in picked  # casino 유형은 하나뿐이라 그 자체가 대표
 
 
 @pytest.fixture

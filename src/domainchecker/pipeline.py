@@ -19,7 +19,7 @@ from .analyze import scoring
 from .analyze.extract import snapshot_from_page
 from .clients import freeindex, gabia, safebrowsing, spamhaus
 from .clients.openrouter import OpenRouterClient
-from .clients.wayback import WaybackClient
+from .clients.wayback import WaybackClient, cluster_representatives
 from .clients.wayback import short_path as wayback_short_path
 from .config import Config, data_dir
 from .models import CheckState, CheckStatus, DomainResult
@@ -47,7 +47,10 @@ RUN_STATE_NAME = "run_state.json"
 #     주소 전용 묶음, AI 단독 치명 문턱 0.7, 리다이렉트 시대 포함(2026-08-11)
 # 11: 하위 페이지 "전부 정독"을 사람 방식으로 교체 — 주소 목록은 전부 훑되,
 #     본문 정독은 AI가 수상하다고 고른 곳만(검사 시간 몇 분 수준으로 복귀)(2026-08-12)
-ENGINE_VERSION = 11
+# 12: 내용 단위 전수로 재설계 — 주소를 유형으로 묶어 모든 유형×시대 대표를 반드시
+#     읽고(종류 단위 전수), 같은 내용(digest)은 두 번 안 읽음. AI 선별은 그 위에
+#     얹는 보강으로 유지(2026-08-12)
+ENGINE_VERSION = 12
 
 
 def run_state_path(base: Path | str) -> Path:
@@ -302,24 +305,47 @@ class Pipeline:
             else None
         )
 
-        # 하위 페이지 정독 — 사람이 주소 목록을 훑다 수상한 것만 클릭해 보듯,
-        # AI가 전체 주소 목록에서 고른 곳만 본문을 읽는다(주소 판단은 뜻 읽기라 AI 몫).
-        if client and result.wayback.subpages and result.wayback.path_samples:
-            chosen = await ai_analyze.pick_paths(domain, result.wayback.path_samples, client)
+        # 하위 페이지 정독 — 내용 단위의 전수. 페이지 수천 장을 통째로 받는 대신,
+        # ① 주소를 모양(유형)으로 묶어 존재하는 모든 유형의 대표를 반드시 읽고
+        #    (같은 틀로 찍은 페이지 1,000장은 같은 내용이므로 대표가 곧 전수다)
+        # ② 그 위에 AI가 전체 주소 목록을 훑어 수상한 주소를 더 고르고
+        # ③ 이미 읽은 것과 내용이 같은(digest 동일) 저장분은 두 번 읽지 않는다.
+        if result.wayback.subpages:
+            reps, kinds = cluster_representatives(
+                result.wayback.subpages, result.wayback.gap_years
+            )
+            triage_fail = ""
+            chosen = await ai_analyze.pick_paths(
+                domain, result.wayback.path_samples, client
+            ) if client else []
             if chosen is None:
-                result.wayback.coverage_note += " 수상 주소 선별이 실패해 하위 본문 정독은 못 했습니다."
-            elif chosen:
-                by_entry = {
-                    f"{snap.year} {wayback_short_path(snap.original)}": snap
-                    for snap in result.wayback.subpages
-                }
-                picked = [by_entry[entry] for entry in chosen if entry in by_entry]
-                sub_pages = await wayback.read_subpages(picked)
-                result.wayback.pages.extend(sub_pages)
-                read = sum(1 for p in sub_pages if p["fetched"])
-                result.wayback.coverage_note += (
-                    f" AI가 수상하다고 고른 하위 페이지 {len(picked)}곳 중 {read}곳 본문 정독."
-                )
+                triage_fail = " AI의 수상 주소 선별은 실패해 유형 대표만 정독했습니다."
+                chosen = []
+            by_entry = {
+                f"{snap.year} {wayback_short_path(snap.original)}": snap
+                for snap in result.wayback.subpages
+            }
+            picked = reps + [by_entry[entry] for entry in chosen if entry in by_entry]
+
+            seen_digests = {s.digest for s in result.wayback.selected if s.digest}
+            seen_keys: set[str] = set()
+            targets = []
+            for snap in picked:
+                key = snap.timestamp + snap.original
+                if key in seen_keys or (snap.digest and snap.digest in seen_digests):
+                    continue
+                seen_keys.add(key)
+                if snap.digest:
+                    seen_digests.add(snap.digest)
+                targets.append(snap)
+
+            sub_pages = await wayback.read_subpages(targets)
+            result.wayback.pages.extend(sub_pages)
+            read = sum(1 for p in sub_pages if p["fetched"])
+            result.wayback.coverage_note += (
+                f" 하위 주소는 유형 {kinds}가지로 묶어 유형·시대 대표와 AI 선별을 합쳐 "
+                f"{len(targets)}곳 중 {read}곳 본문 정독.{triage_fail}"
+            )
         result.wayback.subpages = []  # 선별용 목록은 여기서 소진 — 결과에 안 싣는다
 
         snapshots = [
