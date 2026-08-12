@@ -17,6 +17,19 @@ def rows(entries):
     return [HEADER, *entries]
 
 
+def test_era_representatives_keep_first_middle_last_of_each_year():
+    """한 해에 판이 많아도 처음·중간·끝 세 장이면 그 해의 정체 변화가 보인다."""
+    from domainchecker.clients.wayback import era_representatives
+
+    stamps = [f"2016{m:02d}01000000" for m in range(1, 13)] + ["20170301000000"]
+    versions = [
+        Snapshot(timestamp=s, original="http://x.com/", status_code="200") for s in stamps
+    ]
+    reps = era_representatives(versions)
+
+    assert [s.timestamp[:8] for s in reps] == ["20160101", "20160701", "20161201", "20170301"]
+
+
 def test_cluster_key_folds_numbered_pages_into_one_kind():
     """같은 틀로 찍은 /post/1042 와 /post/93 은 한 유형으로 묶인다 — 숫자만 다른 주소."""
     assert cluster_key("/post/1042") == cluster_key("/post/93")

@@ -228,11 +228,14 @@ class WaybackClient:
             return history
 
         history.versions_total = len(versions)
-        history.selected = versions
+        # 변경이 잦은 해도 해마다 처음·중간·끝 판이면 그 해의 모습 변화가 다 보인다.
+        # 판 수가 적으면 대표가 곧 전부다 — 몇 장 상한이 아니라 시대 단위 접기.
+        reps = era_representatives(versions)
+        history.selected = reps
         history.subpages = subpages
         history.path_samples = _year_paths(subpages)
 
-        for snapshot in versions:
+        for snapshot in reps:
             html = await self.fetch_snapshot(snapshot)
             history.pages.append(
                 {
@@ -244,11 +247,18 @@ class WaybackClient:
             )
         history.versions_read = sum(1 for p in history.pages if p["fetched"])
 
-        failed = history.versions_total - history.versions_read
+        failed = len(reps) - history.versions_read
         over_v = " 이상(조회 한도)" if len(versions) >= CDX_LIMIT else ""
         over_s = " 이상(조회 한도)" if len(subpages) >= CDX_LIMIT - 1 else ""
+        if len(reps) == len(versions):
+            read_part = f"앞페이지 변경본 {len(versions)}장{over_v} 전부 읽음"
+        else:
+            read_part = (
+                f"앞페이지 변경본 {len(versions)}장{over_v}을 연도별 처음·중간·끝 "
+                f"대표 {len(reps)}장으로 접어 읽음"
+            )
         history.coverage_note = (
-            f"앞페이지 변경본 {len(versions)}장{over_v} 전부 읽음"
+            read_part
             + (f"({failed}장은 열리지 않음)" if failed else "")
             + f", 하위 주소 {len(subpages)}개{over_s} 전부 훑음."
         )
@@ -276,6 +286,24 @@ def short_path(url: str) -> str:
     path = unquote(split.path + (f"?{split.query}" if split.query else ""), errors="replace")
     path = path.strip()[:120]
     return path if path.strip("/ ") else ""
+
+
+def era_representatives(versions: list[Snapshot]) -> list[Snapshot]:
+    """앞페이지 변경본의 시대 대표 — 해마다 처음·중간·끝 판.
+
+    글이 자주 바뀌는 살아 있는 사이트는 변경본이 수백 장이지만, 그 해의 정체가
+    바뀌었는지는 해의 시작·중간·끝 세 장이면 드러난다. 판이 셋 이하인 해는
+    그대로 전부다 — 임의 상한이 아니라 시대(연도) 단위의 접기다.
+    """
+    by_year: dict[int, list[Snapshot]] = {}
+    for snapshot in versions:
+        by_year.setdefault(snapshot.year, []).append(snapshot)
+    reps: dict[str, Snapshot] = {}
+    for members in by_year.values():
+        members.sort(key=lambda s: s.timestamp)
+        for snap in (members[0], members[len(members) // 2], members[-1]):
+            reps[snap.timestamp + snap.original] = snap
+    return sorted(reps.values(), key=lambda s: s.timestamp)
 
 
 _DIGITS = re.compile(r"\d+")

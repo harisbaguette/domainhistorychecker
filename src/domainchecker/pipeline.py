@@ -50,7 +50,9 @@ RUN_STATE_NAME = "run_state.json"
 # 12: 내용 단위 전수로 재설계 — 주소를 유형으로 묶어 모든 유형×시대 대표를 반드시
 #     읽고(종류 단위 전수), 같은 내용(digest)은 두 번 안 읽음. AI 선별은 그 위에
 #     얹는 보강으로 유지(2026-08-12)
-ENGINE_VERSION = 12
+# 13: 앞페이지 변경본에도 시대 접기 적용 — 해마다 처음·중간·끝 대표(실측: 이력 많은
+#     도메인이 9분 초과 → 이 접기로 수 분 이내)(2026-08-12)
+ENGINE_VERSION = 13
 
 
 def run_state_path(base: Path | str) -> Path:
