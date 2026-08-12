@@ -52,7 +52,9 @@ RUN_STATE_NAME = "run_state.json"
 #     얹는 보강으로 유지(2026-08-12)
 # 13: 앞페이지 변경본에도 시대 접기 적용 — 해마다 처음·중간·끝 대표(실측: 이력 많은
 #     도메인이 9분 초과 → 이 접기로 수 분 이내)(2026-08-12)
-ENGINE_VERSION = 13
+# 14: 판정 개편 — 수제 감점표 폐지, AI 종합 판정(buy/review/reject + 매입 매력도)
+#     + 기계 거부권. 예전 점수로 찍힌 결과는 다시 검사해야 한다(2026-08-12)
+ENGINE_VERSION = 14
 
 
 def run_state_path(base: Path | str) -> Path:
