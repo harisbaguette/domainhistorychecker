@@ -225,9 +225,9 @@ class RunManager:
         }
 
 
-# 전수 확인은 도메인마다 읽을 양이 달라 미리 알 수 없다 — 평균 가정치로 안내한다.
-# (앞페이지 변경본 + 하위 페이지 합쳐 평균 100장 가정 + 목록 조회 3번.)
-AVG_PAGES_ASSUMED = 100
+# 도메인마다 읽을 양이 달라 미리 알 수 없다 — 평균 가정치로 안내한다.
+# (앞페이지 변경본 평균 25장 + AI가 고른 하위 페이지 최대 20장 ≈ 40, 목록 조회 3번.)
+AVG_PAGES_ASSUMED = 40
 
 
 def estimate(config: Config, count: int) -> dict:

@@ -67,14 +67,15 @@ async def test_collect_reads_every_distinct_front_page_version(http):
     history = await WaybackClient(http, fast_limiter()).collect("x.com")
 
     assert history.check.status is CheckStatus.OK
-    # 앞페이지 변경본 3장 + 하위 페이지 2개 = 5장 전부 본문을 읽는다.
-    assert history.versions_total == 5
-    assert history.versions_read == 5
-    assert len(history.pages) == 5
+    # 앞페이지 변경본 3장은 전부 본문을 읽고, 하위 주소 2개는 목록으로 전부 훑는다.
+    assert history.versions_total == 3
+    assert history.versions_read == 3
+    assert len(history.pages) == 3
+    assert len(history.subpages) == 2  # 정독 후보 — 본문은 AI가 고른 뒤에 읽는다
     assert history.path_samples == ["2018 /blog/hello", "2019 /카지노/join"]  # 한글 풀림
     assert "변경본 3장" in history.coverage_note
-    assert "하위 페이지 2개" in history.coverage_note
-    assert "5장 중 5장 성공" in history.coverage_note
+    assert "전부 읽음" in history.coverage_note
+    assert "하위 주소 2개" in history.coverage_note
 
 
 @respx.mock
@@ -118,7 +119,6 @@ async def test_unreadable_versions_are_counted_in_coverage(http):
 
     assert history.versions_total == 2
     assert history.versions_read == 1
-    assert "2장 중 1장 성공" in history.coverage_note
     assert "1장은 열리지 않음" in history.coverage_note
 
 

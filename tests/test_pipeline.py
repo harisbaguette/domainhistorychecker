@@ -179,13 +179,14 @@ async def test_full_run_produces_a_buy_verdict(config, tmp_path):
 
     # 수집 내용
     assert result.wayback.total_captures == len(YEARS)
-    # 전수 확인 — 앞페이지 변경본 전부 + 하위 페이지 전부를 읽고 숫자로 남긴다.
-    total = len(YEARS) * 2  # 변경본 10장 + 하위 페이지 10개
-    assert result.wayback.versions_total == total
-    assert result.wayback.versions_read == total
-    assert len(result.wayback.pages) == total
-    assert f"{total}장 중 {total}장 성공" in result.wayback.coverage_note
+    # 앞페이지 변경본은 전부 읽고, 하위 주소는 목록으로 전부 훑는다.
+    assert result.wayback.versions_total == len(YEARS)
+    assert result.wayback.versions_read == len(YEARS)
+    assert len(result.wayback.pages) == len(YEARS)
+    assert f"변경본 {len(YEARS)}장 전부 읽음" in result.wayback.coverage_note
+    assert f"하위 주소 {len(YEARS)}개" in result.wayback.coverage_note
     assert result.wayback.path_samples == [f"{y} /post/{y}" for y in YEARS]
+    assert result.wayback.subpages == []  # 선별용 목록은 결과에 남기지 않는다
     assert result.wayback.selected[-1].timestamp.startswith("2024")  # 말기 포함
     assert result.registration.source == "gabia"
     assert result.registration.acquisition == "삭제 대기(곧 등록 가능)"

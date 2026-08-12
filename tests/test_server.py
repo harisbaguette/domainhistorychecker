@@ -71,13 +71,13 @@ def test_preview_explains_the_1000_limit(client):
 
 
 def test_estimate_matches_the_plan_budget():
-    config = Config()  # 분당 30건, 전수 확인(평균 100장 가정), 캡쳐 켬
+    config = Config()  # 분당 30건, 변경본 전부 + AI 선별 정독(평균 40장 가정), 캡쳐 켬
     numbers = estimate(config, 100)
 
-    assert numbers["wayback_requests"] == 10500  # 목록 3 + 본문 평균 100 + 캡쳐 2
-    assert numbers["minutes"] == pytest.approx(350.0)
-    assert numbers["table_minutes"] == pytest.approx(343.3, abs=0.1)
-    assert numbers["slow_minutes"] == pytest.approx(875.0)
+    assert numbers["wayback_requests"] == 4500  # 목록 3 + 본문 평균 40 + 캡쳐 2
+    assert numbers["minutes"] == pytest.approx(150.0)
+    assert numbers["table_minutes"] == pytest.approx(143.3, abs=0.1)
+    assert numbers["slow_minutes"] == pytest.approx(375.0)
 
 
 def test_config_saves_keys_and_keeps_them_when_left_blank(client, config_path, monkeypatch):

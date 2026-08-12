@@ -20,6 +20,7 @@ from .analyze.extract import snapshot_from_page
 from .clients import freeindex, gabia, safebrowsing, spamhaus
 from .clients.openrouter import OpenRouterClient
 from .clients.wayback import WaybackClient
+from .clients.wayback import short_path as wayback_short_path
 from .config import Config, data_dir
 from .models import CheckState, CheckStatus, DomainResult
 from .ratelimit import AdaptiveRateLimiter
@@ -44,7 +45,9 @@ RUN_STATE_NAME = "run_state.json"
 # 10: 표본 폐기 → 전수 확인 — 앞페이지 변경본 전부 + 하위 페이지 전부의 본문
 #     읽기, AI 묶음 분할 전수 읽기, 확인 범위 숫자 보고. 진상 검증 지적 반영:
 #     주소 전용 묶음, AI 단독 치명 문턱 0.7, 리다이렉트 시대 포함(2026-08-11)
-ENGINE_VERSION = 10
+# 11: 하위 페이지 "전부 정독"을 사람 방식으로 교체 — 주소 목록은 전부 훑되,
+#     본문 정독은 AI가 수상하다고 고른 곳만(검사 시간 몇 분 수준으로 복귀)(2026-08-12)
+ENGINE_VERSION = 11
 
 
 def run_state_path(base: Path | str) -> Path:
@@ -293,6 +296,32 @@ class Pipeline:
             else:
                 setattr(result, name, value)
 
+        client = (
+            OpenRouterClient(http, self.config.keys.openrouter, self.config.model_chain())
+            if self.config.keys.openrouter
+            else None
+        )
+
+        # 하위 페이지 정독 — 사람이 주소 목록을 훑다 수상한 것만 클릭해 보듯,
+        # AI가 전체 주소 목록에서 고른 곳만 본문을 읽는다(주소 판단은 뜻 읽기라 AI 몫).
+        if client and result.wayback.subpages and result.wayback.path_samples:
+            chosen = await ai_analyze.pick_paths(domain, result.wayback.path_samples, client)
+            if chosen is None:
+                result.wayback.coverage_note += " 수상 주소 선별이 실패해 하위 본문 정독은 못 했습니다."
+            elif chosen:
+                by_entry = {
+                    f"{snap.year} {wayback_short_path(snap.original)}": snap
+                    for snap in result.wayback.subpages
+                }
+                picked = [by_entry[entry] for entry in chosen if entry in by_entry]
+                sub_pages = await wayback.read_subpages(picked)
+                result.wayback.pages.extend(sub_pages)
+                read = sum(1 for p in sub_pages if p["fetched"])
+                result.wayback.coverage_note += (
+                    f" AI가 수상하다고 고른 하위 페이지 {len(picked)}곳 중 {read}곳 본문 정독."
+                )
+        result.wayback.subpages = []  # 선별용 목록은 여기서 소진 — 결과에 안 싣는다
+
         snapshots = [
             snapshot_from_page(page, domain, self.config.snapshot_text_limit)
             for page in result.wayback.pages
@@ -312,11 +341,6 @@ class Pipeline:
             for s in snapshots
         ]
 
-        client = (
-            OpenRouterClient(http, self.config.keys.openrouter, self.config.model_chain())
-            if self.config.keys.openrouter
-            else None
-        )
         result.ai = await ai_analyze.analyze(
             domain,
             snapshots,

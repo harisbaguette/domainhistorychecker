@@ -4,7 +4,13 @@ import httpx
 import pytest
 import respx
 
-from domainchecker.analyze.ai import analyze, build_prompt, dedupe_texts, pack_chunks
+from domainchecker.analyze.ai import (
+    analyze,
+    build_prompt,
+    dedupe_texts,
+    pack_chunks,
+    pick_paths,
+)
 from domainchecker.analyze.extract import SnapshotContent
 from domainchecker.clients.openrouter import OpenRouterClient
 from domainchecker.config import MODEL_CHAIN
@@ -115,6 +121,50 @@ async def test_no_readable_text_is_unchecked(http):
 
     assert result.check.status is CheckStatus.UNCHECKED
     assert "과거 본문이 없어" in result.check.note
+
+
+def triage_response(entries):
+    return httpx.Response(
+        200,
+        json={
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {"suspicious": [{"entry": e, "reason": "의심"} for e in entries]},
+                            ensure_ascii=False,
+                        )
+                    }
+                }
+            ],
+            "model": "deepseek/deepseek-v4-flash-0731",
+        },
+    )
+
+
+@respx.mock
+async def test_pick_paths_returns_only_entries_from_the_list(http):
+    """AI가 지어낸 주소는 버리고, 목록에 실제로 있는 항목만 정독 후보가 된다."""
+    respx.post("https://openrouter.ai/api/v1/chat/completions").mock(
+        return_value=triage_response(["2016 /카지노/join", "2020 /없는주소"])
+    )
+    client = OpenRouterClient(http, "key", list(MODEL_CHAIN))
+    picked = await pick_paths("x.com", ["2016 /카지노/join", "2016 /blog/hello"], client)
+
+    assert picked == ["2016 /카지노/join"]
+
+
+@respx.mock
+async def test_pick_paths_failure_returns_none(http):
+    respx.post("https://openrouter.ai/api/v1/chat/completions").mock(
+        return_value=httpx.Response(500)
+    )
+    client = OpenRouterClient(http, "key", list(MODEL_CHAIN))
+    assert await pick_paths("x.com", ["2016 /a"], client) is None
+
+
+async def test_pick_paths_without_a_key_picks_nothing(http):
+    assert await pick_paths("x.com", ["2016 /a"], None) == []
 
 
 def test_pack_chunks_keep_every_page_in_time_order():

@@ -185,6 +185,77 @@ def build_prompt(
     return prefix + body
 
 
+# ── 수상 주소 선별 — 사람이 주소 목록을 훑다가 이상한 것만 클릭해 보는 단계 ──
+TRIAGE_SYSTEM_PROMPT = (
+    "당신은 만료 도메인의 과거 주소 목록을 훑는 SEO 리스크 심사관이다. "
+    "주소(경로)만 보고, 스팸 운영의 흔적일 가능성이 있어 본문을 직접 읽어 봐야 할 "
+    "주소를 고른다. 도박·성인·약품·복제품 판매 냄새가 나는 경로, 해킹으로 심긴 듯 "
+    "사이트 주제와 동떨어진 경로, 뜻 없는 문자열로 대량 생성된 패턴, 언어가 갑자기 "
+    "바뀐 경로를 우선하라. 평범한 글·회사 페이지 경로는 고르지 마라. "
+    "확실하지 않아도 의심스러우면 고른다 — 놓치는 쪽이 훨씬 비싸다."
+)
+
+TRIAGE_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "suspicious": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "entry": {"type": "string", "description": "목록의 항목을 그대로"},
+                    "reason": {"type": "string", "description": "의심 이유 한 줄"},
+                },
+                "required": ["entry", "reason"],
+            },
+        }
+    },
+    "required": ["suspicious"],
+}
+
+MAX_SUSPICIOUS = 20  # 정독할 하위 페이지 상한(선별 후)
+_TRIAGE_BATCH_LINES = 1200  # 주소 목록이 아주 길면 이만큼씩 나눠 전부 훑는다
+
+
+async def pick_paths(
+    domain: str,
+    path_samples: list[str],
+    client: OpenRouterClient | None,
+    limit: int = MAX_SUSPICIOUS,
+) -> list[str] | None:
+    """주소 목록 전체를 AI가 훑어 본문을 정독할 후보를 고른다. None = 선별 실패."""
+    if client is None or not client.api_key or not path_samples:
+        return []
+    chosen: list[str] = []
+    for start in range(0, len(path_samples), _TRIAGE_BATCH_LINES):
+        batch = path_samples[start : start + _TRIAGE_BATCH_LINES]
+        prompt = (
+            f"# 검사 대상 도메인\n{domain}\n\n"
+            "# 과거 저장 기록의 주소 목록(연도 + 경로)\n"
+            + "\n".join(f"- {p}" for p in batch)
+            + f"\n\n# 지시\n본문을 직접 읽어 봐야 할 수상한 주소를 최대 {limit}개 골라라. "
+            "entry에는 목록의 항목 문자열을 연도까지 그대로 옮겨 적어라. 없으면 빈 목록으로 답하라."
+        )
+        try:
+            data, _, _ = await client.complete_json(
+                TRIAGE_SYSTEM_PROMPT, prompt, TRIAGE_SCHEMA, schema_name="suspicious_paths"
+            )
+        except OpenRouterError:
+            return None
+        for item in data.get("suspicious") or []:
+            if isinstance(item, dict) and str(item.get("entry", "")).strip():
+                chosen.append(str(item["entry"]).strip())
+    # 목록에 실제로 있는 항목만 남긴다(순서 유지·중복 제거·상한).
+    valid = set(path_samples)
+    picked: list[str] = []
+    for entry in chosen:
+        if entry in valid and entry not in picked:
+            picked.append(entry)
+    return picked[:limit]
+
+
 def dedupe_texts(snapshots: list[SnapshotContent]) -> list[SnapshotContent]:
     """본문이 완전히 같은 저장분은 한 번만 읽는다 — 같은 글을 두 번 읽는 건 낭비다."""
     seen: set[str] = set()

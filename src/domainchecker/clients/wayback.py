@@ -188,7 +188,7 @@ class WaybackClient:
         if rows is None:
             return None
         # 뿌리 주소는 변경본 전수 읽기가 따로 다루므로 하위 주소만 남긴다.
-        return [c for c in rows if _short_path(c.original)]
+        return [c for c in rows if short_path(c.original)]
 
     async def fetch_snapshot(self, snapshot: Snapshot) -> str | None:
         """Fetch the stored bytes of one capture (`id_` = no archive rewriting)."""
@@ -200,10 +200,11 @@ class WaybackClient:
         return response.text
 
     async def collect(self, domain: str) -> WaybackHistory:
-        """통계 + 앞페이지 변경본 전부 + 하위 페이지 전부의 본문.
+        """사람이 보는 방식 그대로 — 목록은 전부 훑고, 읽을 곳은 골라 정독한다.
 
-        표본도, 몇 장 제한도 없다. 앞페이지의 서로 다른 판 전부와, 도메인 밑에
-        저장된 서로 다른 주소 전부의 본문을 읽는다(진상 검증 지적 1 반영).
+        ① 앞페이지가 내용이 바뀐 시점의 판은 전부 본문을 읽는다(달력에서 바뀐
+           지점을 찍어 보는 것과 같음). ② 하위 주소는 목록을 전부 받아 두되,
+           본문 정독은 AI가 수상하다고 고른 곳만 한다(선별·정독은 파이프라인).
         몇 장을 읽었는지는 coverage_note에 숫자로 남는다.
         """
         history = await self.timeline(domain)
@@ -225,12 +226,12 @@ class WaybackClient:
             )
             return history
 
-        targets = versions + subpages
-        history.versions_total = len(targets)
-        history.selected = targets
+        history.versions_total = len(versions)
+        history.selected = versions
+        history.subpages = subpages
         history.path_samples = _year_paths(subpages)
 
-        for snapshot in targets:
+        for snapshot in versions:
             html = await self.fetch_snapshot(snapshot)
             history.pages.append(
                 {
@@ -246,14 +247,29 @@ class WaybackClient:
         over_v = " 이상(조회 한도)" if len(versions) >= CDX_LIMIT else ""
         over_s = " 이상(조회 한도)" if len(subpages) >= CDX_LIMIT - 1 else ""
         history.coverage_note = (
-            f"앞페이지 변경본 {len(versions)}장{over_v}과 하위 페이지 {len(subpages)}개{over_s}의 "
-            f"본문을 전부 읽음 — {history.versions_total}장 중 {history.versions_read}장 성공"
-            + (f"({failed}장은 열리지 않음)." if failed else ".")
+            f"앞페이지 변경본 {len(versions)}장{over_v} 전부 읽음"
+            + (f"({failed}장은 열리지 않음)" if failed else "")
+            + f", 하위 주소 {len(subpages)}개{over_s} 전부 훑음."
         )
         return history
 
+    async def read_subpages(self, snapshots: list[Snapshot]) -> list[dict]:
+        """골라낸 하위 페이지들의 본문을 읽어 pages 형식으로 돌려준다."""
+        pages = []
+        for snapshot in snapshots:
+            html = await self.fetch_snapshot(snapshot)
+            pages.append(
+                {
+                    "timestamp": snapshot.timestamp,
+                    "url": snapshot.raw_url,
+                    "html": (html or "")[:PAGE_BYTES_LIMIT],
+                    "fetched": html is not None,
+                }
+            )
+        return pages
 
-def _short_path(url: str) -> str:
+
+def short_path(url: str) -> str:
     """주소에서 도메인 이름을 뺀 경로 부분 — 뿌리(/)면 빈 문자열."""
     split = urlsplit(url)
     path = unquote(split.path + (f"?{split.query}" if split.query else ""), errors="replace")
@@ -266,7 +282,7 @@ def _year_paths(subpages: list[Snapshot]) -> list[str]:
     out: list[str] = []
     seen: set[str] = set()
     for capture in subpages:
-        path = _short_path(capture.original)
+        path = short_path(capture.original)
         if not path or path in seen:
             continue
         seen.add(path)

@@ -113,6 +113,8 @@ class WaybackHistory(BaseModel):
     versions_total: int = 0  # 앞페이지의 서로 다른 변경본 수
     versions_read: int = 0  # 그중 본문을 실제로 읽은 수
     coverage_note: str = ""  # 확인 범위를 숫자로 적은 한 줄
+    # 하위 주소별 저장분(정독 후보 선별용) — 결과 파일에는 싣지 않는다.
+    subpages: list[Snapshot] = Field(default_factory=list, exclude=True)
 
     @property
     def has_history(self) -> bool:
