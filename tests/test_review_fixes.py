@@ -23,9 +23,13 @@ def test_http_errors_are_explained_in_plain_korean():
     assert "429" in http_reason(429)  # 번호는 문의용으로 남긴다
 
 
-# ── 점수 미달인데 노랑으로 나가던 문제 ──────────────────────────────────
-def test_score_below_cut_says_so_even_when_a_required_check_is_missing():
-    """16점짜리가 '사면 안 되는 이유: 없음'인 노란 도장으로 나가면 사용자가 돈을 잃는다."""
+# ── 쓰레기 도메인이 노랑으로 나가던 문제 ────────────────────────────────
+def test_junk_domain_is_rejected_even_when_a_required_check_is_missing():
+    """스팸 흔적 4종짜리가 '사면 안 되는 이유: 없음'인 노랑으로 나가면 돈을 잃는다.
+
+    지금은 기계 거부권(흔적 3종 이상 = 확정 제외)이 필수 검사 하나가 비어도 그대로
+    작동한다 — 예전 '점수 미달' 경고 문구보다 강한 빨간 도장이다.
+    """
     result = DomainResult(domain="junk.com")
     result.wayback.check = OK
     result.wayback.total_captures = 20
@@ -41,8 +45,8 @@ def test_score_below_cut_says_so_even_when_a_required_check_is_missing():
     result.spamhaus.check = CheckState(status=CheckStatus.UNCHECKED, note="조회 차단")
 
     judge(result)
-    assert result.score < 50
-    assert any("사실상 제외 대상" in reason for reason in result.warn_reasons)
+    assert result.verdict.value == "REJECT"
+    assert any("기계적 검사만으로도 확정" in reason for reason in result.fatal_reasons)
 
 
 # ── 못 한 검사가 "깨끗함"으로 읽히던 문제 ───────────────────────────────

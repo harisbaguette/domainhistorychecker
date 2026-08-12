@@ -75,12 +75,22 @@ RESPONSE_SCHEMA = {
                 "additionalProperties": False,
                 "properties": {
                     "topic": {"type": "string"},
-                    "reason": {"type": "string"},
+                    "reason": {"type": "string", "description": "과거의 어떤 시기·주제를 이어받아 상위노출에 유리한지"},
                 },
                 "required": ["topic", "reason"],
             },
         },
         "one_liner": {"type": "string", "description": "한 줄 평가"},
+        "verdict": {
+            "type": "string",
+            "enum": ["buy", "review", "reject"],
+            "description": "최종 매입 권고 — buy(사도 됨)/review(사람 검토 필요)/reject(사면 안 됨)",
+        },
+        "buy_score": {
+            "type": "number",
+            "description": "매입 매력도 0~100 — 여러 도메인을 줄 세우는 비교용. 과거 이력의 깨끗함과 이어받을 연속성 가치(주제 일관성·운영 기간·검색에 남은 자산)를 종합",
+        },
+        "verdict_reason": {"type": "string", "description": "판정 이유 한 줄(본문·주소에서 본 증거 기반)"},
     },
     "required": [
         "topic_history",
@@ -93,6 +103,9 @@ RESPONSE_SCHEMA = {
         "trademark_risk",
         "recommended_topics",
         "one_liner",
+        "verdict",
+        "buy_score",
+        "verdict_reason",
     ],
 }
 
@@ -152,7 +165,11 @@ def build_prompt(
         "# 지시\n아래 과거 페이지 본문을 읽고 스키마대로 한국어 JSON을 채워라. "
         "topic_periods 에는 주제가 바뀐 시기를 오래된 것부터 연도 구간으로 나눠 적어라"
         "(주제가 하나로 이어졌으면 한 칸만). "
-        "추천 주제는 과거 주제와 인접하면서 사람에게 도움이 되는 것으로 3개 이상 제시하고 사유를 붙여라."
+        "추천 주제(recommended_topics)는 이 도메인을 산 사람이 검색 상위노출을 노리고 "
+        "운영할 주제다 — 과거 주제·언어의 연속성을 이어받는 것 3개 이상, 이유에는 "
+        "과거의 어떤 시기·주제를 잇는지 적어라. "
+        "verdict 는 최종 매입 권고(buy/review/reject), buy_score 는 여러 도메인을 "
+        "줄 세우는 매입 매력도(0~100)다 — 깨끗함과 연속성 가치를 종합해 매겨라."
     )
 
     prefix = "\n\n".join(header) + "\n\n# 과거 페이지 본문\n"
@@ -304,6 +321,7 @@ def _chunk_context(context: dict, chunk: list[SnapshotContent], i: int, total: i
 _PARTIAL_KEYS = (
     "topic_history", "topic_periods", "spam", "transition", "transition_risk",
     "content_quality", "trademark", "trademark_risk", "one_liner",
+    "verdict", "buy_score", "verdict_reason",
 )
 
 
@@ -432,6 +450,14 @@ async def analyze(
         if isinstance(item, dict) and item.get("topic")
     ]
     result.spam = _parse_spam(data.get("spam"))
+    verdict = str(data.get("verdict", "")).lower()
+    result.verdict = verdict if verdict in ("buy", "review", "reject") else ""
+    try:
+        raw_score = data.get("buy_score")
+        result.buy_score = min(100.0, max(0.0, float(raw_score))) if raw_score is not None else None
+    except (TypeError, ValueError):
+        result.buy_score = None
+    result.verdict_reason = str(data.get("verdict_reason", ""))
     notes = [merged_note] if merged_note else []
     if fallback:
         notes.append(f"기본 모델이 실패해 대체 모델({model})로 분석했습니다.")

@@ -173,6 +173,9 @@ class AIAnalysis(BaseModel):
     # 주제가 바뀐 시기별 역사 — {start, end, topic}. 시기마다 캡쳐 한 장을 찍는다.
     topic_periods: list[dict] = Field(default_factory=list)
     one_liner: str = ""
+    verdict: str = ""  # "buy" | "review" | "reject" — AI의 최종 매입 권고
+    buy_score: float | None = None  # 매입 매력도 0~100(여러 도메인 비교용)
+    verdict_reason: str = ""  # 판정 이유 한 줄(증거 기반)
 
 
 class Capture(BaseModel):

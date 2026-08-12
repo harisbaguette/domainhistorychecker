@@ -79,6 +79,9 @@ AI_JSON = {
     "trademark_risk": False,
     "recommended_topics": [{"topic": "홈베이킹 기록", "reason": "과거 주제와 인접"}],
     "one_liner": "꾸준히 운영된 생활 기록 사이트",
+    "verdict": "buy",
+    "buy_score": 88,
+    "verdict_reason": "10년간 주제가 한결같고 스팸 흔적이 없음",
 }
 
 
@@ -204,7 +207,8 @@ async def test_full_run_produces_a_buy_verdict(config, tmp_path):
     assert result.fatal_reasons == []
     assert result.warn_reasons == []
     assert result.verdict is Verdict.BUY
-    assert result.score >= 75
+    assert result.score == 88  # AI가 매긴 매입 매력도가 곧 점수
+    assert result.ai.verdict == "buy"
     assert result.one_liner == AI_JSON["one_liner"]
 
     # 원본 HTML은 저장하지 않는다

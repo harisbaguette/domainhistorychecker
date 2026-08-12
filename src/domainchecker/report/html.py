@@ -240,6 +240,7 @@ def _when(stamp: str) -> str:
 
 
 def _score_text(result: DomainResult) -> str:
+    """점수 = AI가 매긴 매입 매력도(여러 도메인 비교용)."""
     if result.score is None:
         return "점수 없음"
     return f"{result.score:.0f}점" + ("(부분 점수·참고치)" if result.partial_score else "")
@@ -377,22 +378,17 @@ def detail_fragment(result: DomainResult, capture_base: str = "../captures") -> 
     """The full evidence view for one domain (no <html> wrapper)."""
     registration = result.registration
     age = result.wayback.age_years
-    scoring_rows = _item_group(
-        [
-            _item(
-                _t(item.label),
-                [_t(item.note)],
-                variant="outline",
-                footer='<span class="muted">점수</span><span class="app-score">'
-                + (
-                    f"{item.earned:.1f} / {item.max_points}"
-                    if item.earned is not None
-                    else "미확인(분모 제외)"
-                )
-                + "</span>",
-            )
-            for item in result.scoring.items
-        ]
+    # 수제 감점표는 폐지 — 판정 근거는 AI 종합 소견 한 줄로 보여 준다.
+    ai_opinion = (
+        f"<p><b>AI 종합 소견:</b> {_t(result.ai.verdict_reason)}"
+        + (
+            f' <span class="muted">(매입 매력도 {result.ai.buy_score:.0f}점 — 여러 도메인 비교용)</span>'
+            if result.ai.buy_score is not None
+            else ""
+        )
+        + "</p>"
+        if result.ai.verdict_reason or result.ai.buy_score is not None
+        else '<p class="muted">AI 종합 소견 없음(AI 분석이 돌지 않음)</p>'
     )
     topics = "".join(
         f"<li><b>{_t(t.get('topic'))}</b> — {_t(t.get('reason'))}</li>"
@@ -450,11 +446,9 @@ def detail_fragment(result: DomainResult, capture_base: str = "../captures") -> 
 <p>{_t(result.one_liner or "한줄평 없음")}</p>
 
 <h2>1. 왜 이렇게 판정했나</h2>
+{ai_opinion}
 <h3>사면 안 되는 이유</h3>{_list(result.fatal_reasons, "없음")}
 <h3>조심할 이유</h3>{_list(result.warn_reasons, "없음")}
-<h3>점수 내역</h3>
-{scoring_rows}
-<p class="muted">미확인 항목은 0점도 만점도 아니라 분모에서 빼고 계산합니다(그래서 부분 점수는 참고치입니다).</p>
 
 <h2>2. 나이와 등록 정보</h2>
 <div class="app-grid">{fact_cards}</div>

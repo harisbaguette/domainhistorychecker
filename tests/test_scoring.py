@@ -1,8 +1,8 @@
-"""판정 우선순위 검증 — 치명 → 점수 미달 → 경고 → 구간 순서를 그대로 시험한다."""
+"""판정 우선순위 검증 — 기계 거부권 → AI 종합 판정 순서를 그대로 시험한다."""
 
 import pytest
 
-from domainchecker.analyze.scoring import availability_of, compute_score, judge
+from domainchecker.analyze.scoring import availability_of, judge
 from domainchecker.models import (
     AVAILABILITY_LABEL,
     AIAnalysis,
@@ -42,6 +42,9 @@ def healthy(**overrides) -> DomainResult:
             spam=SpamJudgement(verdict="clean", confidence=0.9),
             transition="빵집 블로그 주제를 계속 유지",
             one_liner="꾸준히 운영된 생활 블로그",
+            verdict="buy",
+            buy_score=90.0,
+            verdict_reason="17년간 주제가 한결같고 스팸 흔적이 없음",
         ),
         rules=RuleFindings(check=OK, languages=["ko"]),
     )
@@ -53,7 +56,7 @@ def healthy(**overrides) -> DomainResult:
 def test_healthy_domain_gets_buy():
     result = judge(healthy())
     assert result.verdict is Verdict.BUY
-    assert result.score >= 75
+    assert result.score == 90.0  # 점수 = AI가 매긴 매입 매력도
     assert result.partial_score is False
     assert result.fatal_reasons == [] and result.warn_reasons == []
 
@@ -132,36 +135,38 @@ def test_rules_spam_with_any_non_spam_ai_answer_is_conflict(verdict):
     assert result.verdict is not Verdict.BUY
 
 
-def test_transition_risk_flag_costs_points_but_prose_alone_does_not():
-    """'위험 전환은 없었습니다' 같은 문장이 감점되던 오탐(심사 B1)."""
-    safe = judge(
+def test_ai_reject_verdict_rejects_with_its_reason():
+    """AI가 '사면 안 됨'이라고 하면 그 이유가 빨간 도장의 사유로 올라온다."""
+    result = judge(
         healthy(
             ai=AIAnalysis(
                 check=OK,
-                spam=SpamJudgement(verdict="clean", confidence=0.9),
-                transition="도박·성인 같은 위험 업종으로의 전환은 없었습니다.",
-                transition_risk=False,
+                spam=SpamJudgement(verdict="unclear", confidence=0.5),
+                verdict="reject",
+                buy_score=15.0,
+                verdict_reason="2019년부터 도박 홍보로 운영된 흔적이 뚜렷함",
             )
         )
     )
-    risky = judge(
-        healthy(
-            ai=AIAnalysis(
-                check=OK,
-                spam=SpamJudgement(verdict="clean", confidence=0.9),
-                transition="생활 블로그에서 도박 홍보로 넘어감",
-                transition_risk=True,
-            )
-        )
-    )
-    safe_item = next(i for i in safe.scoring.items if i.name == "transition")
-    risky_item = next(i for i in risky.scoring.items if i.name == "transition")
+    assert result.verdict is Verdict.REJECT
+    assert result.fatal_reasons == ["2019년부터 도박 홍보로 운영된 흔적이 뚜렷함"]
+    assert result.score == 15.0
 
-    # 서술문에 "전환"이 들어간 것만으로는 소폭(-2)에 그치고, 위험 판정(-9)은 붙지 않는다.
-    assert safe_item.earned == pytest.approx(13.0)
-    assert "정상→위험" not in safe_item.note
-    assert risky_item.earned == pytest.approx(6.0)
-    assert "정상→위험" in risky_item.note
+
+def test_ai_review_verdict_keeps_it_for_a_human():
+    result = judge(
+        healthy(
+            ai=AIAnalysis(
+                check=OK,
+                spam=SpamJudgement(verdict="clean", confidence=0.8),
+                verdict="review",
+                buy_score=55.0,
+                verdict_reason="깨끗하지만 주제가 여러 번 바뀌어 연속성 가치가 낮음",
+            )
+        )
+    )
+    assert result.verdict is Verdict.REVIEW
+    assert result.score == 55.0
 
 
 def test_missing_required_check_forbids_buy():
@@ -200,8 +205,8 @@ def test_no_history_is_warn_not_reject():
         )
     )
     assert result.verdict is Verdict.NO_HISTORY
-    assert result.partial_score is True  # 수집된 항목만의 부분 점수
-    assert result.score is not None
+    assert result.partial_score is True  # AI 뜻 읽기 없이 나온 결과는 참고치
+    assert result.score is None  # 점수는 AI 매력도뿐 — AI가 없으면 없음
     assert any("이력이 아예 없" in reason for reason in result.warn_reasons)
 
 
@@ -234,37 +239,12 @@ def test_ai_trademark_risk_forces_warn():
     assert any("상표 충돌" in reason for reason in result.warn_reasons)
 
 
-def test_low_score_rejects_only_when_everything_was_checked():
-    weak = healthy(
-        wayback=WaybackHistory(
-            check=OK,
-            total_captures=10,
-            first_seen="20230101000000",
-            last_seen="20230601000000",
-            redirect_ratio=0.9,
-        ),
-        index=IndexInfo(check=OK, indexed_count=0),
-        ai=AIAnalysis(
-            check=OK,
-            spam=SpamJudgement(verdict="unclear", confidence=1.0),
-            transition="정상 주제에서 도박 관련으로 위험하게 바뀜",
-            transition_risk=True,  # 위험 전환은 이제 AI가 스키마 값으로 직접 답한다
-        ),
-        rules=RuleFindings(check=OK, parking_ratio=0.9, language_shift=True),
-    )
-    result = judge(weak)
-    assert result.score < 50
-    assert result.verdict is Verdict.REJECT
-    assert "기준(50점)" in result.fatal_reasons[0]
-
-
-def test_low_partial_score_is_not_rejected_when_evidence_is_missing():
-    """증거가 비어 점수가 낮은 도메인은 ❌가 아니라 ⚠️로 내려가야 한다."""
+def test_missing_evidence_lands_in_review_not_reject():
+    """증거가 비면 ❌가 아니라 ⚠️(검토)로 — 모르는 것을 나쁜 것으로 찍지 않는다."""
     thin = healthy(
         wayback=WaybackHistory(check=CheckState(status=CheckStatus.UNCHECKED, note="접속 실패")),
         ai=AIAnalysis(check=CheckState(status=CheckStatus.UNCHECKED, note="본문 없음")),
-        # 흔적 2종까지는 규칙 단독 치명(3종)에 못 미친다 — 여기서 보려는 것은
-        # "증거가 비어 점수가 낮은 경우"이지 "규칙이 스팸을 확정한 경우"가 아니다.
+        # 흔적 2종까지는 규칙 단독 치명(3종)에 못 미친다.
         rules=RuleFindings(
             check=OK, doorway=True, hidden_text=True, language_shift=True,
         ),
@@ -272,62 +252,23 @@ def test_low_partial_score_is_not_rejected_when_evidence_is_missing():
     )
     result = judge(thin)
     assert result.partial_score is True
-    assert result.score < 50  # 부분 점수는 낮지만
+    assert result.score is None
     assert result.verdict is Verdict.REVIEW  # 필수 검사가 비어 ❌로 내리지 않는다
     assert any("필수 검사 미확인" in reason for reason in result.warn_reasons)
 
 
-def test_partial_score_normalises_over_confirmed_items_only():
-    thin = healthy(
-        wayback=WaybackHistory(check=CheckState(status=CheckStatus.UNCHECKED)),
-        ai=AIAnalysis(check=CheckState(status=CheckStatus.UNCHECKED)),
-        rules=RuleFindings(check=CheckState(status=CheckStatus.UNCHECKED)),
-        index=IndexInfo(check=OK, indexed_count=50),
-    )
-    score = compute_score(thin)
-    counted = [i for i in score.items if i.earned is not None]
-
-    assert [i.name for i in counted] == ["inheritance"]  # 승계 자산만 확인됨
-    assert score.partial is True
-    # 10(중립) + 3(색인) = 13 / 20 → 65
-    assert score.total == pytest.approx(65.0)
-
-
-def test_a_domain_can_be_bought_with_no_api_keys_at_all():
-    """키가 하나도 없어도(=AI 없이) 초록 판정이 나와야 한다."""
+def test_no_ai_means_no_green_stamp():
+    """뜻 읽기(AI) 없이 ✅를 찍지 않는다 — 키 없이 돌리면 최고 판정은 '검토'다."""
     keyless = judge(
         healthy(
             ai=AIAnalysis(check=CheckState(status=CheckStatus.NOT_RUN, note="키 없음")),
         )
     )
 
-    assert keyless.verdict is Verdict.BUY
-    assert keyless.warn_reasons == []
+    assert keyless.verdict is Verdict.REVIEW
+    assert keyless.score is None
     assert "AI 분석" in keyless.not_run
     assert keyless.one_liner  # 기계적으로 만든 한 줄 평가가 대신 들어간다
-
-
-def test_turning_the_ai_on_never_costs_points_by_itself():
-    """AI를 켰다는 이유만으로 점수가 깎이면 'AI 안 쓰는 게 이득'이 된다."""
-    without = judge(healthy(ai=AIAnalysis(check=CheckState(status=CheckStatus.NOT_RUN))))
-    with_ai = judge(healthy())  # AI 가 clean 이라고 답한 경우
-
-    assert with_ai.score >= without.score
-    # 안 돈 AI 몫은 만점으로 채우는 게 아니라 분모에서 빠진다.
-    safety = next(i for i in without.scoring.items if i.name == "safety")
-    assert safety.max_points == 25
-    assert safety.earned == pytest.approx(25.0)
-
-
-def test_the_ai_penalty_keeps_its_weight_when_both_sources_ran():
-    """분모를 나눴다고 감점이 물러지면 안 된다 — 예전 비율 그대로여야 한다."""
-    unclear = judge(
-        healthy(ai=AIAnalysis(check=OK, spam=SpamJudgement(verdict="unclear", confidence=0.9)))
-    )
-    item = next(i for i in unclear.scoring.items if i.name == "safety")
-
-    assert item.max_points == 45
-    assert item.earned == pytest.approx(45 - 45 * 0.3 * 0.9)
 
 
 def test_three_mechanical_spam_marks_reject_the_domain_without_any_ai():
@@ -407,15 +348,6 @@ def test_the_plain_one_liner_only_states_what_was_actually_counted():
     assert "판매용 빈 화면" in result.one_liner
 
 
-def test_empty_index_is_neutral_not_a_zero_score():
-    """색인 0건은 만료 도메인의 기본값 — 감점이 아니라 중립(10점)이어야 한다."""
-    thin = healthy(index=IndexInfo(check=OK, indexed_count=0))
-    item = next(i for i in compute_score(thin).items if i.name == "inheritance")
-
-    assert "색인 없음(중립)" in item.note
-    assert item.earned == pytest.approx(10.0)  # 중립 그대로
-
-
 @pytest.mark.parametrize(
     ("acquisition", "expected"),
     [
@@ -445,9 +377,6 @@ def test_judge_fills_the_buy_now_column():
 
 
 def test_score_is_none_when_nothing_could_be_measured():
-    empty = DomainResult(domain="x.com")
-    score = compute_score(empty)
-    assert score.computable is False
-    assert score.total is None
-    result = judge(empty)
+    result = judge(DomainResult(domain="x.com"))
+    assert result.score is None
     assert result.verdict is Verdict.REVIEW

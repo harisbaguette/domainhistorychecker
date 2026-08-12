@@ -54,6 +54,9 @@ def sample_result() -> DomainResult:
             trademark="문제 없음",
             recommended_topics=[{"topic": "홈베이킹", "reason": "과거 주제와 인접"}],
             one_liner="꾸준히 운영된 생활 블로그",
+            verdict="buy",
+            buy_score=92.0,
+            verdict_reason="주제가 한결같고 위험 흔적이 없어 이어받을 가치가 높음",
         ),
         rules=RuleFindings(check=OK, languages=["ko"], evidence=[]),
         # 달력 날짜를 박아 두면 며칠 지나 "묵은 저장분" 기준(7일)에 걸려 시험이
