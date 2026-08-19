@@ -129,7 +129,7 @@ def test_password_gate_rejects_a_non_ascii_header_without_crashing(monkeypatch, 
     monkeypatch.chdir(tmp_path)
     client = TestClient(create_app())
 
-    assert client.get("/api/status", headers={"Authorization": "Basic zzzz"}).status_code == 401
+    assert client.get("/api/config", headers={"Authorization": "Basic zzzz"}).status_code == 401
     # 아스키가 아닌 바이트가 와도 500 이 아니라 401 로 막혀야 한다
-    bad = client.get("/api/status", headers={b"Authorization": b"Basic \xed\x95\x9c"})
+    bad = client.get("/api/config", headers={b"Authorization": b"Basic \xed\x95\x9c"})
     assert bad.status_code == 401

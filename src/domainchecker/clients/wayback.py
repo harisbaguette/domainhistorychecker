@@ -41,9 +41,12 @@ class WaybackClient:
         self,
         http: httpx.AsyncClient,
         limiter: AdaptiveRateLimiter | None = None,
+        on_wait=None,
     ) -> None:
         self.http = http
         self.limiter = limiter or AdaptiveRateLimiter()
+        # 웨이백이 429로 막아 쉬어 갈 때 화면에 알릴 통로(없으면 조용히 쉰다)
+        self.on_wait = on_wait
 
     async def _get(self, url: str, params: dict | None = None) -> httpx.Response | None:
         """One rate-limited GET with a single retry after a 429."""
@@ -56,6 +59,8 @@ class WaybackClient:
             if response.status_code == 429:
                 self.limiter.note_429()
                 if attempt == 0:
+                    if self.on_wait is not None:
+                        await self.on_wait()
                     continue
                 return response
             self.limiter.note_success()
@@ -200,8 +205,11 @@ class WaybackClient:
             return None
         return response.text
 
-    async def collect(self, domain: str) -> WaybackHistory:
+    async def collect(self, domain: str, on_progress=None) -> WaybackHistory:
         """사람이 보는 방식 그대로 — 목록은 전부 훑고, 읽을 곳은 골라 정독한다.
+
+        on_progress(i, n)를 주면 변경본 한 장을 받을 때마다 알려 준다 — 긴 구간이라
+        이게 없으면 진행 막대가 죽은 것처럼 보인다.
 
         ① 앞페이지가 내용이 바뀐 시점의 판은 전부 본문을 읽는다(달력에서 바뀐
            지점을 찍어 보는 것과 같음). ② 하위 주소는 목록을 전부 받아 두되,
@@ -235,7 +243,9 @@ class WaybackClient:
         history.subpages = subpages
         history.path_samples = _year_paths(subpages)
 
-        for snapshot in reps:
+        for i, snapshot in enumerate(reps, start=1):
+            if on_progress is not None:
+                await on_progress(i, len(reps))
             html = await self.fetch_snapshot(snapshot)
             history.pages.append(
                 {

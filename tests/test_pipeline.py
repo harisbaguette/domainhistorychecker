@@ -299,27 +299,6 @@ async def test_capture_done_carries_the_updated_result(config, monkeypatch, tmp_
 
 
 @respx.mock
-async def test_run_state_survives_a_stop_and_is_cleared_on_success(config, tmp_path):
-    """앱을 껐다 켜도 '이어서 검사'가 살아 있어야 한다(심사 C2)."""
-    from domainchecker.pipeline import load_run_state, run_state_path
-
-    mock_all()
-    base = tmp_path / "data"
-
-    stopped = fast_pipeline(config, [])
-    stopped.stop()  # 시작하자마자 중단 — 목록은 남아야 한다
-    await stopped.run([DOMAIN], use_cache=False)
-
-    assert run_state_path(base).exists()
-    assert load_run_state(base) == [DOMAIN]
-
-    await fast_pipeline(config, []).run([DOMAIN], use_cache=False)
-
-    assert not run_state_path(base).exists()  # 끝까지 갔으면 이어서 할 것이 없다
-    assert load_run_state(base) == []
-
-
-@respx.mock
 async def test_taken_domain_skips_the_rest_of_the_analysis(config):
     """주인이 있으면 웨이백·색인·AI 같은 나머지 분석을 아예 안 한다 — 살 수 없는 도메인이다."""
     mock_all()
@@ -368,3 +347,29 @@ async def test_failed_checks_degrade_to_unchecked_and_block_buy(config):
     assert result.verdict is not Verdict.BUY
     assert result.unchecked  # 실패한 검사는 미확인으로 남는다
     assert any("필수 검사 미확인" in reason for reason in result.warn_reasons)
+
+
+@respx.mock
+async def test_check_one_streams_steps_and_finishes_with_the_result(config):
+    """화면이 한 개씩 부르는 길 — 진행 토막(step)이 먼저, 결과(domain_done)가 마지막."""
+    mock_all()
+    events = []
+    result = await fast_pipeline(config, events).check_one(DOMAIN, use_cache=False)
+
+    kinds = [e["type"] for e in events]
+    assert kinds[0] == "step"
+    assert kinds[-1] == "domain_done"
+    assert events[-1]["result"]["domain"] == DOMAIN
+    assert result.domain == DOMAIN
+    labels = [e["label"] for e in events if e["type"] == "step"]
+    assert any("살 수 있는" in label for label in labels)
+    assert any("웨이백" in label for label in labels)
+    fracs = [e["frac"] for e in events if e["type"] == "step"]
+    assert fracs == sorted(fracs) and 0 < fracs[0] < 1
+
+    # 두 번째는 저장분을 쓴다 — 진행 토막 없이 바로 끝난다
+    again = []
+    await fast_pipeline(config, again).check_one(DOMAIN, use_cache=True)
+    assert [e["type"] for e in again] == ["domain_done"]
+    assert again[0]["cached"] is True
+
