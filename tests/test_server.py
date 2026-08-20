@@ -211,7 +211,8 @@ def test_detail_of_unknown_domain_is_404(client):
     assert client.get("/api/detail/never-checked.com").status_code == 404
 
 
-def test_stop_and_resume(client, fake_run):
+def test_stop_and_resume(client, fake_run, config_path):
+    """완주한 판은 이어서 할 것이 없고, 중단으로 남은 목록이 있어야 이어서가 산다."""
     client.post("/api/run", json={"raw": "example.com"})
     read_sse(client)
 
@@ -219,6 +220,12 @@ def test_stop_and_resume(client, fake_run):
     assert stopped.status_code == 200
     assert "이어서" in stopped.json()["note"]
 
+    # 끝까지 잘 끝난 판을 또 돌리게 하면 "중단된 분석" 거짓 알림이 영원히 남는다
+    assert client.post("/api/resume").status_code == 400
+
+    # 중단이 남긴 목록(run_state)이 있으면 그걸로 이어서 돈다
+    base = config_module.data_dir(config_module.load(config_path))
+    save_run_state(base, ["left.com"])
     resumed = client.post("/api/resume")
     assert resumed.status_code == 200
     assert resumed.json()["count"] == 1
@@ -548,4 +555,13 @@ def test_step_events_reach_watchers_but_not_the_history():
     manager.publish({"type": "step", "domain": "a.com", "label": "웨이백 읽는 중", "frac": 0.3})
     assert manager.history == []
     assert queue.get_nowait()["type"] == "step"
+
+
+def test_finished_run_is_not_resumable(client, fake_run):
+    """끝까지 잘 끝난 판이 '중단된 분석'으로 영원히 남으면 안 된다(진상 검증 지적)."""
+    client.post("/api/run", json={"raw": "example.com"})
+    read_sse(client)
+    status = client.get("/api/status").json()
+    assert status["finished"] is True
+    assert status["resumable"] is False
 

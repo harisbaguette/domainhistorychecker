@@ -422,12 +422,21 @@ class Pipeline:
 
     async def capture_phase(self, results: list[DomainResult]) -> None:
         """Screenshots for every finished domain, one after another (shared limiter)."""
-        if not results or not self.config.enable_capture:
+        # 중단된 판이면 사진 단계를 아예 열지 않는다 — "이제 사진을 찍습니다" 문구가
+        # 방금 누른 "중단했습니다"를 덮으면 화면이 거짓말이 된다(진상 검증 지적).
+        if not results or not self.config.enable_capture or self.cancel.is_set():
             return
         await self._emit("capture_start", count=len(results))
-        for result in results:
+        for i, result in enumerate(results, start=1):
             if self.cancel.is_set():
                 break
+            # 사진 한 판이 수십 초 걸린다 — 몇 번째인지와 초 시계가 붙게 step 으로 알린다
+            await self._emit(
+                "step",
+                domain=result.domain,
+                label=f"옛 화면 사진 찍는 중 ({i}/{len(results)}번째)",
+                frac=1.0,
+            )
             result.captures = await capture.capture_domain(
                 result, self.base, self.wayback_limiter, self.config.enable_capture
             )

@@ -406,3 +406,12 @@ async def test_stop_cancels_the_inflight_domain_quickly(config, monkeypatch):
     assert events[-1]["stopped"] is True
     assert "domain_failed" not in kinds  # 끊긴 것은 실패가 아니다
 
+
+async def test_capture_phase_stays_silent_after_a_stop(config, sample_result):
+    """중단한 판에서 "이제 사진을 찍습니다" 문구가 나오면 화면이 거짓말이 된다."""
+    events = []
+    pipeline = fast_pipeline(config, events)
+    pipeline.stop()
+    await pipeline.capture_phase([sample_result])
+    assert events == []
+

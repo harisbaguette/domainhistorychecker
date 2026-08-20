@@ -197,19 +197,34 @@ class RunManager:
                 if self.pending and not self.error and self.config_loader is not None:
                     next_domains = self.pending.pop(0)
                     # 참조를 self.task 에 쥔다 — 안 쥐면 GC 가 도는 중에 지울 수 있다
-                    self.task = asyncio.create_task(
-                        self.start(self.config_loader(), next_domains, use_cache=True)
-                    )
+                    self.task = asyncio.create_task(self._start_next(next_domains))
 
         self.task = asyncio.create_task(runner())
+
+    async def _start_next(self, domains: list[str]) -> None:
+        """대기줄 자동 시작 — 그 짧은 틈에 다른 시작이 끼어들면 묶음을 줄에 되돌린다."""
+        try:
+            await self.start(self.config_loader(), domains, use_cache=True)
+        except HTTPException:
+            self.pending.insert(0, domains)
 
     def stop(self) -> None:
         if self.pipeline is not None:
             self.pipeline.stop()
 
     def resume_domains(self) -> list[str]:
-        """이 실행의 목록, 없으면 앱을 껐다 켜기 전에 남겨 둔 목록."""
-        if self.domains:
+        """이 실행의 목록, 없으면 앱을 껐다 켜기 전에 남겨 둔 목록.
+
+        끝까지 잘 끝난 판의 목록은 이어서 할 거리가 아니다 — 그걸 세면 화면이
+        "중단된 분석이 남아 있습니다"를 영원히 띄운다(진상 검증 지적).
+        """
+        last = self.history[-1] if self.history else {}
+        ended_clean = (
+            last.get("type") == "finished"
+            and not last.get("stopped")
+            and not last.get("failed")
+        )
+        if self.domains and not ended_clean:
             return list(self.domains)
         return load_run_state(self.base) if self.base else []
 
@@ -259,7 +274,8 @@ def estimate(config: Config, count: int) -> dict:
             "분석할 도메인이 없습니다."
             if count == 0
             else (
-                f"도메인 {count}개 · 표 결과는 {_minutes(table_minutes)}, 사진까지 {_minutes(minutes)} 걸립니다. "
+                f"도메인 {count}개 · 오래 걸려도 표 결과는 {_minutes(table_minutes)}, 사진까지 {_minutes(minutes)} 안쪽입니다. "
+                f"주인 있는 도메인과 기록 없는 도메인은 몇 초 만에 끝나 실제로는 훨씬 짧아질 수 있고, "
                 f"옛날 화면 보관소(웨이백)가 잠깐 막으면 {_minutes(slow_minutes)}까지 늘어날 수 있습니다."
             )
         ),
