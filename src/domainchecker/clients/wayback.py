@@ -23,6 +23,9 @@ from ..models import CheckState, CheckStatus, Snapshot, WaybackHistory
 from ..ratelimit import AdaptiveRateLimiter
 
 CDX_URL = "https://web.archive.org/cdx/search/cdx"
+# 이력이 많은 도메인의 목록 조회는 웨이백 쪽에서 20초 넘게 걸리기도 한다(실측 22초).
+# 공용 클라이언트의 30초 제한을 그대로 쓰면 멀쩡한 조회가 시간 초과로 끊긴다.
+REQUEST_TIMEOUT = 90.0
 CDX_LIMIT = 5000  # 조회 한 번이 받을 최대 행 — 여기 걸리면 "이상"이라고 보고한다
 PAGE_BYTES_LIMIT = 1_000_000  # 저장분 하나에서 받아 둘 최대 글자(폭탄 응답 방어)
 
@@ -49,16 +52,29 @@ class WaybackClient:
         self.on_wait = on_wait
 
     async def _get(self, url: str, params: dict | None = None) -> httpx.Response | None:
-        """One rate-limited GET with a single retry after a 429."""
-        for attempt in range(2):
+        """One rate-limited GET; 429/5xx get a breather and up to two more tries.
+
+        웨이백은 바쁠 때 503(잠깐 자리 비움)을 자주 던진다 — 한 번 받았다고 바로
+        "조회 실패"로 접으면 멀쩡한 도메인이 통째로 미확인 판정을 받는다(실측 2026-08-20:
+        같은 주소가 몇 초 뒤 200으로 열림). 쉬었다가 다시 두드린다.
+        """
+        # 실측(2026-08-20): 웨이백이 바쁜 날은 503이 서너 번 연달아 온다(주소 목록
+        # 조회가 503×3 뒤 네 번째에 200으로 열림) — 그만큼 쉬었다 다시 두드린다.
+        for attempt in range(5):
             await self.limiter.acquire()
             try:
-                response = await self.http.get(url, params=params)
+                response = await self.http.get(url, params=params, timeout=REQUEST_TIMEOUT)
             except httpx.HTTPError:
-                return None
-            if response.status_code == 429:
+                # 시간 초과·연결 끊김도 "바쁘다"의 한 모습이다 — 같은 요령으로 쉬었다 다시
                 self.limiter.note_429()
-                if attempt == 0:
+                if attempt < 4:
+                    if self.on_wait is not None:
+                        await self.on_wait()
+                    continue
+                return None
+            if response.status_code == 429 or response.status_code >= 500:
+                self.limiter.note_429()
+                if attempt < 4:
                     if self.on_wait is not None:
                         await self.on_wait()
                     continue
@@ -107,7 +123,7 @@ class WaybackClient:
         response = await self._get(CDX_URL, params)
         if response is None:
             history.check = CheckState(
-                status=CheckStatus.UNCHECKED, note="웨이백 접속에 실패했습니다."
+                status=CheckStatus.UNCHECKED, note="웨이백 접속에 실패했습니다 — 다음 분석 때 자동으로 다시 검사합니다."
             )
             return history
         if response.status_code == 403 or _is_excluded(response.text):
@@ -224,14 +240,14 @@ class WaybackClient:
         if versions is None:
             history.check = CheckState(
                 status=CheckStatus.UNCHECKED,
-                note="변경본 목록 조회에 실패해 전수 확인을 하지 못했습니다.",
+                note="변경본 목록 조회에 실패해 전수 확인을 하지 못했습니다(웨이백 혼잡) — 다음 분석 때 자동으로 다시 검사합니다.",
             )
             return history
         subpages = await self.site_pages(domain)
         if subpages is None:
             history.check = CheckState(
                 status=CheckStatus.UNCHECKED,
-                note="하위 주소 목록 조회에 실패해 전수 확인을 하지 못했습니다.",
+                note="하위 주소 목록 조회에 실패해 전수 확인을 하지 못했습니다(웨이백 혼잡) — 다음 분석 때 자동으로 다시 검사합니다.",
             )
             return history
 

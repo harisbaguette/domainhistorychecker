@@ -133,3 +133,15 @@ def test_password_gate_rejects_a_non_ascii_header_without_crashing(monkeypatch, 
     # 아스키가 아닌 바이트가 와도 500 이 아니라 401 로 막혀야 한다
     bad = client.get("/api/status", headers={b"Authorization": b"Basic \xed\x95\x9c"})
     assert bad.status_code == 401
+
+
+def test_result_without_wayback_history_is_stale():
+    """웨이백을 못 읽은 반쪽 결과는 7일 믿지 않는다 — 다음 분석 때 다시 검사한다."""
+    now = datetime.now(UTC).isoformat(timespec="seconds")
+    broken = {"finished_at": now, "engine": ENGINE_VERSION,
+              "wayback": {"check": {"status": "UNCHECKED", "note": "웨이백 응답 오류(503)."}}}
+    fine = {"finished_at": now, "engine": ENGINE_VERSION,
+            "wayback": {"check": {"status": "OK", "note": ""}}}
+    assert is_stale(broken, 7) is True
+    assert is_stale(fine, 7) is False
+

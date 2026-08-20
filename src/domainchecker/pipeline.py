@@ -99,6 +99,11 @@ def is_stale(payload: dict, max_days: int, *, engine_counts: bool = True) -> boo
     # 정하는 쪽(server.stored_results)은 날짜만 본다 — 방식이 옛날 것이어도 결과를
     # 숨기면 사람이 이미 검사한 것을 잃어버린다.
     if engine_counts:
+        # 과거 이력(웨이백)을 아예 못 읽은 저장분은 잠깐의 접속 장애가 낳은 반쪽
+        # 결과다 — 7일 동안 믿고 보여 주면 안 되고, 다음 분석 때 다시 검사한다.
+        wayback_status = str(((payload.get("wayback") or {}).get("check") or {}).get("status") or "")
+        if wayback_status == "UNCHECKED":
+            return True
         try:
             engine = int(payload.get("engine") or 0)
         except (TypeError, ValueError):

@@ -3,6 +3,7 @@ import pytest
 import respx
 
 from domainchecker.clients.wayback import (
+    CDX_URL,
     WaybackClient,
     cluster_key,
     cluster_representatives,
@@ -214,3 +215,20 @@ async def test_429_triggers_rate_drop_and_retry(http):
     assert history.total_captures == 2
     assert history.gap_years == [2019]
     assert history.redirect_ratio == 0.5
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_503_gets_retried_before_giving_up():
+    """웨이백이 바쁠 때 던지는 503 한 방에 검사를 접으면 안 된다 — 쉬었다 다시 두드린다."""
+    route = respx.get(CDX_URL)
+    route.side_effect = [
+        httpx.Response(503),
+        httpx.Response(200, json=[["timestamp", "original", "statuscode", "mimetype", "digest"],
+                                  ["20200101000000", "http://x.com/", "200", "text/html", "AA"]]),
+    ]
+    async with httpx.AsyncClient() as http:
+        history = await WaybackClient(http, fast_limiter()).timeline("x.com")
+    assert history.check.ok
+    assert history.total_captures == 1
+
