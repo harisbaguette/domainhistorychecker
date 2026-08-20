@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import inspect
 import json
 from collections.abc import Callable
@@ -26,6 +27,8 @@ from .ratelimit import AdaptiveRateLimiter
 from .report import html as report_html
 
 EventCallback = Callable[[dict], None] | None
+
+RUN_STATE_NAME = "run_state.json"
 
 # 검사 방식이 바뀌면 올린다. 저장분에 찍힌 번호가 이보다 낮으면 다시 검사한다 —
 # 안 그러면 "키가 없어 못 했습니다"라고 적힌 예전 결과를 일주일 동안 계속 보여 준다.
@@ -52,6 +55,37 @@ EventCallback = Callable[[dict], None] | None
 # 14: 판정 개편 — 수제 감점표 폐지, AI 종합 판정(buy/review/reject + 매입 매력도)
 #     + 기계 거부권. 예전 점수로 찍힌 결과는 다시 검사해야 한다(2026-08-12)
 ENGINE_VERSION = 14
+
+
+def run_state_path(base: Path | str) -> Path:
+    return Path(base) / RUN_STATE_NAME
+
+
+def load_run_state(base: Path | str) -> list[str]:
+    """Domains of a run that never finished, so 이어서 검사 survives a restart."""
+    path = run_state_path(base)
+    if not path.exists():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    if not isinstance(data, dict):
+        return []
+    return [str(d) for d in (data.get("domains") or []) if str(d).strip()]
+
+
+def save_run_state(base: Path | str, domains: list[str]) -> None:
+    # 진행 기록을 못 남겨도 검사 자체는 계속한다.
+    with contextlib.suppress(OSError):
+        run_state_path(base).write_text(
+            json.dumps({"domains": domains}, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+
+
+def clear_run_state(base: Path | str) -> None:
+    with contextlib.suppress(OSError):
+        run_state_path(base).unlink(missing_ok=True)
 
 
 def is_stale(payload: dict, max_days: int, *, engine_counts: bool = True) -> bool:
@@ -123,58 +157,6 @@ class Pipeline:
         """Ask the run to stop; finished domains stay in the cache for resume."""
         self.cancel.set()
 
-    def _new_http(self) -> httpx.AsyncClient:
-        return httpx.AsyncClient(
-            timeout=httpx.Timeout(30.0, connect=10.0),
-            headers={"User-Agent": "domainchecker/0.1 (+local tool)"},
-            follow_redirects=True,
-        )
-
-    def _fresh_cached(self, domain: str, use_cache: bool) -> tuple[DomainResult | None, dict | None]:
-        """아직 믿을 만한 저장분이 있으면 (결과, 원본 dict) 을 돌려준다."""
-        cached = cache.load(domain, self.base) if use_cache else None
-        if not cached or is_stale(cached, self.config.cache_days):
-            return None, None
-        try:
-            return DomainResult.model_validate(cached), cached
-        except ValueError:
-            return None, None  # 캐시가 깨졌으면 그냥 다시 검사한다
-
-    async def check_one(self, domain: str, use_cache: bool = True) -> DomainResult:
-        """도메인 하나를 처음부터 끝까지(사진·저장까지) — 화면이 한 개씩 시켜서 부르는 자리.
-
-        서버가 오래 살아 있지 못하는 곳(서버리스)에서도 돌아야 해서, 긴 목록을
-        서버가 들고 도는 대신 요청 하나 = 도메인 하나로 자른다. 진행은 step 사건으로
-        잘게 알린다 — 한 도메인이 1분 넘게 걸리는데 그동안 막대가 멈춰 있으면
-        죽은 줄 안다.
-        """
-        self._total = 1
-        self._done = 0
-        found, raw = self._fresh_cached(domain, use_cache)
-        if found is not None:
-            self._done = 1
-            await self._emit("domain_done", domain=domain, cached=True, result=raw)
-            return found
-
-        own_http = self.http is None
-        http = self.http or self._new_http()
-        try:
-            result = await self.check_domain(domain, http)
-            self._cache(result)
-            if self.config.enable_capture and not self.cancel.is_set():
-                await self._emit("step", domain=domain, label="옛 화면 사진 찍는 중", frac=0.85)
-                result.captures = await capture.capture_domain(
-                    result, self.base, self.wayback_limiter, self.config.enable_capture
-                )
-                self._cache(result)
-        finally:
-            if own_http:
-                await http.aclose()
-        self.write_results([result])
-        self._done = 1
-        await self._emit("domain_done", domain=domain, cached=False, result=result.model_dump(mode="json"))
-        return result
-
     async def run(self, domains: list[str], use_cache: bool = True) -> list[DomainResult]:
         self._total = len(domains)
         self._done = 0
@@ -182,21 +164,33 @@ class Pipeline:
         if not domains:
             return results
 
+        # 중단되거나 앱이 꺼져도 "이어서 검사"가 살아 있도록 목록을 남긴다.
         self.base.mkdir(parents=True, exist_ok=True)
+        save_run_state(self.base, domains)
+
         own_http = self.http is None
-        http = self.http or self._new_http()
+        http = self.http or httpx.AsyncClient(
+            timeout=httpx.Timeout(30.0, connect=10.0),
+            headers={"User-Agent": "domainchecker/0.1 (+local tool)"},
+            follow_redirects=True,
+        )
         try:
             await self._emit("start", domains=domains)
             pending = []
             reused: list[DomainResult] = []
             for domain in domains:
-                found, raw = self._fresh_cached(domain, use_cache)
-                if found is not None:
-                    results.append(found)
-                    reused.append(found)
-                    self._done += 1
-                    await self._emit("domain_done", domain=domain, cached=True, result=raw)
-                    continue
+                cached = cache.load(domain, self.base) if use_cache else None
+                if cached and not is_stale(cached, self.config.cache_days):
+                    try:
+                        found = DomainResult.model_validate(cached)
+                    except ValueError:
+                        found = None  # 캐시가 깨졌으면 그냥 다시 검사한다
+                    if found is not None:
+                        results.append(found)
+                        reused.append(found)
+                        self._done += 1
+                        await self._emit("domain_done", domain=domain, cached=True, result=cached)
+                        continue
                 pending.append(domain)
 
             semaphore = asyncio.Semaphore(max(1, self.config.concurrency))
@@ -220,11 +214,25 @@ class Pipeline:
                     return result
 
             # 한 도메인이 터져도 나머지 결과와 보고서까지 잃지 않는다.
-            gathered = await asyncio.gather(
-                *(worker(d) for d in pending), return_exceptions=True
+            # 중단(cancel)이 오면 돌던 도메인도 그 자리에서 끊는다 — 안 끊으면 중단을
+            # 눌러도 몇 분씩 계속 도는 것처럼 보인다. 끊긴 도메인은 결과가 없으니
+            # run_state에 남아 '이어서 분석'이 다시 한다.
+            tasks = [asyncio.create_task(worker(d)) for d in pending]
+            gather_task = asyncio.gather(*tasks, return_exceptions=True)
+            cancel_watch = asyncio.create_task(self.cancel.wait())
+            await asyncio.wait(
+                {asyncio.ensure_future(gather_task), cancel_watch},
+                return_when=asyncio.FIRST_COMPLETED,
             )
+            if self.cancel.is_set():
+                for task in tasks:
+                    task.cancel()
+            cancel_watch.cancel()
+            gathered = await gather_task
             fresh: list[DomainResult] = []
             for domain, item in zip(pending, gathered, strict=True):
+                if isinstance(item, asyncio.CancelledError):
+                    continue  # 중단으로 끊김 — 실패가 아니라 '아직 안 한 것'
                 if isinstance(item, BaseException):
                     message = f"{domain}: {type(item).__name__}: {item}"
                     self._failed.append(message)
@@ -251,6 +259,8 @@ class Pipeline:
             except OSError as exc:
                 await self._emit("report_error", message=f"{type(exc).__name__}: {exc}")
         stopped = self.cancel.is_set()
+        if not stopped:
+            clear_run_state(self.base)  # 끝까지 갔으면 이어서 할 것이 없다
         await self._emit("finished", stopped=stopped, failed=list(self._failed))
         return results
 
@@ -280,6 +290,7 @@ class Pipeline:
         result = DomainResult(domain=domain)
 
         async def step(label: str, frac: float) -> None:
+            # 한 도메인 안에서 지금 무엇을 하는지 — 화면 막대가 이 토막만큼 움직인다
             await self._emit("step", domain=domain, label=label, frac=frac)
 
         await step("살 수 있는 도메인인지 확인 중", 0.05)

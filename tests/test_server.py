@@ -11,6 +11,7 @@ from domainchecker import cache, server
 from domainchecker import config as config_module
 from domainchecker.analyze.scoring import judge
 from domainchecker.config import Config
+from domainchecker.pipeline import load_run_state, save_run_state
 from domainchecker.server import create_app, estimate
 
 
@@ -111,37 +112,39 @@ def test_config_lists_what_runs_instead_when_the_ai_key_is_absent(client, monkey
     assert any("규칙 검사" in note for note in data["free_fallbacks"])
 
 
-def test_check_rejects_a_non_domain(client):
-    assert client.post("/api/check", json={"domain": "   "}).status_code == 400
-    assert client.post("/api/check", json={"domain": "not a domain!"}).status_code == 400
+def test_run_requires_domains(client):
+    assert client.post("/api/run", json={"raw": "   "}).status_code == 400
 
 
 class FakePipeline:
-    """진짜 파이프라인 대신 진행 토막과 결과만 흘려 주는 가짜.
-
-    진짜처럼 결과를 도메인별 캐시에 남긴다 — 목록(/api/results)은 거기서 읽는다.
-    """
+    """진짜 파이프라인 대신 진행 이벤트만 흘려 주는 가짜."""
 
     payload: ClassVar[dict] = {}
 
     def __init__(self, config, on_event=None, **kwargs):
         self.on_event = on_event
-        self.base = config_module.data_dir(config)
         self.stopped = False
 
     def stop(self):
         self.stopped = True
 
-    async def check_one(self, domain, use_cache=True):
-        self.on_event({"type": "step", "done": 0, "total": 1, "domain": domain,
-                       "label": "주인이 있는지 등록 정보 확인 중", "frac": 0.05})
-        await asyncio.sleep(0)
-        self.on_event({"type": "step", "done": 0, "total": 1, "domain": domain,
-                       "label": "옛 화면 1/2장 읽는 중", "frac": 0.4})
-        result = {**self.payload, "domain": domain}
-        cache.save(domain, result, self.base)
-        self.on_event({"type": "domain_done", "done": 1, "total": 1, "domain": domain,
-                       "cached": False, "result": result})
+    async def run(self, domains, use_cache=True):
+        total = len(domains)
+        self.on_event({"type": "start", "done": 0, "total": total, "domains": domains})
+        for index, domain in enumerate(domains):
+            await asyncio.sleep(0)
+            self.on_event(
+                {
+                    "type": "domain_done",
+                    "done": index,
+                    "total": total,
+                    "domain": domain,
+                    "cached": False,
+                    "result": {**self.payload, "domain": domain},
+                }
+            )
+        self.on_event({"type": "finished", "done": total, "total": total, "stopped": False})
+        return []
 
 
 @pytest.fixture
@@ -151,67 +154,40 @@ def fake_run(monkeypatch, sample_result):
     return FakePipeline
 
 
-def run_check(client, domain: str) -> list[dict]:
-    """도메인 하나를 /api/check 로 보내고 흘러오는 사건을 전부 모은다."""
+def read_sse(client) -> list[dict]:
     events = []
-    with client.stream("POST", "/api/check", json={"domain": domain}) as response:
+    with client.stream("GET", "/api/events") as response:
         assert response.status_code == 200
         assert response.headers["content-type"].startswith("text/event-stream")
         for line in response.iter_lines():
-            if line.startswith("data: "):
-                events.append(json.loads(line[6:]))
+            if not line.startswith("data: "):
+                continue
+            event = json.loads(line[6:])
+            events.append(event)
+            if event["type"] in ("finished", "error"):
+                break
     return events
 
 
-def test_check_streams_steps_then_the_result(client, fake_run):
-    events = run_check(client, "example.com")
+def test_run_streams_progress_over_sse(client, fake_run):
+    started = client.post("/api/run", json={"raw": "example.com\nfoo.net"})
+    assert started.status_code == 200
+    assert started.json()["count"] == 2
+
+    events = read_sse(client)
     kinds = [e["type"] for e in events]
 
-    assert kinds[0] == "step"
-    assert kinds[-1] == "domain_done"
-    assert events[-1]["domain"] == "example.com"
-    assert events[-1]["result"]["verdict"]
-    # 한 요청 = 한 도메인이라, 두 번째 도메인은 따로 보낸다
-    assert run_check(client, "foo.net")[-1]["domain"] == "foo.net"
-    assert {r["domain"] for r in client.get("/api/results").json()["results"]} == {"example.com", "foo.net"}
-
-
-def test_check_reports_a_crash_as_domain_failed(client, monkeypatch):
-    class Exploding(FakePipeline):
-        async def check_one(self, domain, use_cache=True):
-            raise RuntimeError("boom")
-
-    monkeypatch.setattr(server, "Pipeline", Exploding)
-    events = run_check(client, "example.com")
-    assert [e["type"] for e in events] == ["domain_failed"]
-    assert "RuntimeError" in events[0]["message"]
-
-
-def test_check_stream_stops_the_pipeline_when_the_reader_goes_away(monkeypatch):
-    """중단 단추 = 연결 끊기. 읽는 쪽이 사라지면 분석 일감도 같이 멈춰야 한다."""
-    monkeypatch.setattr(server, "KEEPALIVE_SECONDS", 0.01)
-
-    class Hanging(FakePipeline):
-        def __init__(self):
-            self.on_event = None
-            self.stopped = False
-
-        async def check_one(self, domain, use_cache=True):
-            await asyncio.sleep(3600)
-
-    async def scenario():
-        pipeline = Hanging()
-        stream = server.check_stream(pipeline, "example.com", True)
-        first = await stream.__anext__()
-        assert first.startswith(":")  # 알릴 게 없으니 빈 줄(keepalive)부터 온다
-        await stream.aclose()
-        assert pipeline.stopped is True
-
-    asyncio.run(scenario())
+    assert kinds[0] == "snapshot"
+    assert "domain_done" in kinds
+    assert kinds[-1] == "finished"
+    done = [e for e in events if e["type"] == "domain_done"]
+    assert {e["domain"] for e in done} == {"example.com", "foo.net"}
+    assert done[0]["result"]["verdict"]
 
 
 def test_results_detail_and_report_after_a_run(client, fake_run, tmp_path):
-    run_check(client, "example.com")
+    client.post("/api/run", json={"raw": "example.com"})
+    read_sse(client)
 
     listed = client.get("/api/results").json()["results"]
     assert [r["domain"] for r in listed] == ["example.com"]
@@ -235,21 +211,97 @@ def test_detail_of_unknown_domain_is_404(client):
     assert client.get("/api/detail/never-checked.com").status_code == 404
 
 
+def test_stop_and_resume(client, fake_run):
+    client.post("/api/run", json={"raw": "example.com"})
+    read_sse(client)
+
+    stopped = client.post("/api/stop")
+    assert stopped.status_code == 200
+    assert "이어서" in stopped.json()["note"]
+
+    resumed = client.post("/api/resume")
+    assert resumed.status_code == 200
+    assert resumed.json()["count"] == 1
+    read_sse(client)
+
+
+def test_resume_without_a_previous_list_is_rejected(client):
+    assert client.post("/api/resume").status_code == 400
+
+
+def test_capture_done_refreshes_the_stored_result(sample_result):
+    """캡쳐가 붙은 최신본으로 갈아 끼워야 상세 화면에 사진이 보인다(심사 C1)."""
+    manager = server.RunManager()
+    before = judge(sample_result).model_dump(mode="json")
+    manager.publish({"type": "domain_done", "domain": "example.com", "result": before})
+    assert manager.results["example.com"]["captures"]["items"] == []
+
+    after = {**before, "captures": {"check": {"status": "OK", "note": "1장 저장."}, "items": [
+        {
+            "label": "말기",
+            "timestamp": "20240601000000",
+            "url": "https://web.archive.org/web/20240601000000/http://example.com/",
+            "file": "captures/example.com_20240601000000.png",
+        }
+    ]}}
+    manager.publish({"type": "capture_done", "domain": "example.com", "shots": 1, "result": after})
+
+    assert manager.results["example.com"]["captures"]["items"][0]["label"] == "말기"
+
+
+def test_status_reports_resumable_from_the_saved_run_state(client, config_path):
+    """앱을 껐다 켜도 중단된 목록이 남아 있으면 '이어서 검사'가 살아 있어야 한다(심사 C2)."""
+    from domainchecker.pipeline import run_state_path
+
+    assert client.get("/api/status").json()["resumable"] is False
+
+    base = config_module.data_dir(config_module.load(config_path))
+    run_state_path(base).write_text(
+        json.dumps({"domains": ["example.com", "foo.net"]}, ensure_ascii=False), encoding="utf-8"
+    )
+
+    assert client.get("/api/status").json()["resumable"] is True
+
+
+def test_resume_reads_the_saved_run_state_after_a_restart(client, config_path, fake_run):
+    from domainchecker.pipeline import run_state_path
+
+    base = config_module.data_dir(config_module.load(config_path))
+    run_state_path(base).write_text(
+        json.dumps({"domains": ["example.com", "foo.net"]}, ensure_ascii=False), encoding="utf-8"
+    )
+
+    resumed = client.post("/api/resume")  # 이 서버는 아직 한 번도 검사한 적이 없다
+    assert resumed.status_code == 200
+    assert resumed.json()["count"] == 2
+    read_sse(client)
+
+
+def test_damaged_run_state_is_ignored(client, config_path):
+    from domainchecker.pipeline import run_state_path
+
+    base = config_module.data_dir(config_module.load(config_path))
+    run_state_path(base).write_text("{not json", encoding="utf-8")
+
+    assert client.get("/api/status").json()["resumable"] is False
+    assert client.post("/api/resume").status_code == 400
+
+
 def test_external_access_requires_a_login(config_path, monkeypatch):
     """비밀번호를 정했을 때만 밖에서 접속할 수 있게 잠근다(키 노출 방지)."""
     monkeypatch.setenv("DOMAINCHECKER_PASSWORD", "열쇠말")
     with TestClient(create_app(config_path)) as guarded:
-        blocked = guarded.get("/api/config")
+        blocked = guarded.get("/api/status")
         assert blocked.status_code == 401
         assert blocked.json()["login"] is True
         # 브라우저가 띄우는 회색 물음창이 다시 나오면 안 된다 — 그래서 이 머리글을 안 보낸다
         assert "WWW-Authenticate" not in blocked.headers
         wrong = guarded.post("/api/login", json={"user": "domainchecker", "password": "틀린값"})
         assert wrong.status_code == 401
-        assert guarded.get("/api/config").status_code == 401
+        assert guarded.get("/api/status").status_code == 401
         right = guarded.post("/api/login", json={"user": "domainchecker", "password": "열쇠말"})
         assert right.status_code == 200
-        assert guarded.get("/api/config").status_code == 200
+        assert guarded.get("/api/status").status_code == 200
 
 
 def test_home_screen_app_files_are_served(client):
@@ -282,7 +334,7 @@ def test_home_screen_app_files_stay_open_while_locked(config_path, monkeypatch):
     """잠가 둬도 표지(설명서·아이콘·심부름꾼)는 열려 있어야 설치 단추가 뜬다."""
     monkeypatch.setenv("DOMAINCHECKER_PASSWORD", "열쇠말")
     with TestClient(create_app(config_path)) as guarded:
-        assert guarded.get("/api/config").status_code == 401  # 알맹이는 여전히 잠겨 있다
+        assert guarded.get("/api/status").status_code == 401  # 알맹이는 여전히 잠겨 있다
         for path in ("/manifest.webmanifest", "/sw.js", "/favicon.ico"):
             assert guarded.get(path).status_code == 200, path
         for icon in guarded.get("/manifest.webmanifest").json()["icons"]:
@@ -317,10 +369,71 @@ def test_report_and_detail_work_from_the_cache_alone(client, config_path, sample
     assert (base / "report" / "example.com.html").exists()
 
 
+def test_run_queues_when_a_run_is_already_going(client, fake_run):
+    """검사 중에 들어온 다음 묶음은 거절하지 않고 대기줄에 세운다."""
+    manager = client.app.state.manager
+    manager.running = True
+    try:
+        res = client.post("/api/run", json={"raw": "queued.com"})
+        assert res.status_code == 200
+        assert res.json()["queued"] is True
+        assert manager.pending == [["queued.com"]]
+
+        # 중단은 대기줄까지 함께 비운다 — 멈추라는 말은 전부 멈추라는 뜻이다
+        client.post("/api/stop")
+        assert manager.pending == []
+    finally:
+        manager.running = False
+
+
+def test_queue_autostarts_the_next_batch(monkeypatch):
+    """지금 검사가 끝나면 대기줄의 다음 묶음이 저절로 시작된다."""
+    started: list[list[str]] = []
+
+    class QuickPipeline:
+        def __init__(self, config, on_event=None, **kwargs):
+            self.on_event = on_event
+
+        def stop(self):
+            pass
+
+        async def run(self, domains, use_cache=True):
+            started.append(list(domains))
+            self.on_event({"type": "finished", "done": len(domains), "total": len(domains), "stopped": False})
+            return []
+
+    monkeypatch.setattr(server, "Pipeline", QuickPipeline)
+
+    async def scenario():
+        manager = server.RunManager()
+        manager.config_loader = Config
+        await manager.start(Config(), ["a.com"], use_cache=True)
+        first = manager.task
+        manager.pending.append(["b.com"])
+        await first
+        # runner 의 뒷정리가 다음 묶음 task 를 만든다 — 그 task 가 잡힐 때까지 양보
+        for _ in range(20):
+            await asyncio.sleep(0)
+            if manager.task is not first:
+                break
+        assert manager.task is not first
+        await manager.task
+        assert started == [["a.com"], ["b.com"]]
+        assert manager.pending == []
+
+    asyncio.run(scenario())
+
+
 def test_clear_results_wipes_files_and_memory(client, fake_run, config_path):
-    """지우기 단추 — 저장 파일·캐시가 다 비어야 한다."""
-    run_check(client, "example.com")
+    """지우기 단추 — 저장 파일·캐시·메모리가 다 비어야 하고, 검사 중에는 못 지운다."""
+    client.post("/api/run", json={"raw": "example.com"})
+    read_sse(client)
     assert client.get("/api/results").json()["results"]
+
+    manager = client.app.state.manager
+    manager.running = True
+    assert client.delete("/api/results").status_code == 409
+    manager.running = False
 
     res = client.delete("/api/results")
     assert res.status_code == 200
@@ -329,12 +442,13 @@ def test_clear_results_wipes_files_and_memory(client, fake_run, config_path):
 
     base = config_module.data_dir(config_module.load(config_path))
     assert not (base / "results.json").exists()
+    assert not (base / "run_state.json").exists()
 
 
 def test_purge_results_removes_only_the_named_domains(client, fake_run, sample_result, config_path):
     """고른 것만 지우기 — 남긴 도메인은 그대로 있고, 지운 것은 다시 켜도 안 살아난다."""
-    run_check(client, "example.com")
-    run_check(client, "foo.net")
+    client.post("/api/run", json={"raw": "example.com\nfoo.net"})
+    read_sse(client)
     assert len(client.get("/api/results").json()["results"]) == 2
 
     # 검사가 끝나면 파이프라인이 남기는 두 자리(저장 파일·도메인별 캐시)를 그대로 깔아 둔다
@@ -348,6 +462,12 @@ def test_purge_results_removes_only_the_named_domains(client, fake_run, sample_r
         cache.save(one["domain"], one, base)
     (base / "captures").mkdir(parents=True, exist_ok=True)
     (base / "captures" / "foo.net_20200101.png").write_bytes(b"png")
+    save_run_state(base, ["example.com", "foo.net"])
+
+    manager = client.app.state.manager
+    manager.running = True
+    assert client.post("/api/results/purge", json={"domains": ["foo.net"]}).status_code == 409
+    manager.running = False
 
     assert client.post("/api/results/purge", json={"domains": []}).status_code == 400
 
@@ -365,6 +485,8 @@ def test_purge_results_removes_only_the_named_domains(client, fake_run, sample_r
     assert not (base / "cache" / "foo.net.json").exists()
     assert (base / "cache" / "example.com.json").exists()
     assert not (base / "captures" / "foo.net_20200101.png").exists()
+    # 이어서 검사 목록에도 남으면 안 된다 — 남으면 지운 줄이 다음 검사에 되살아난다
+    assert load_run_state(base) == ["example.com"]
 
 
 def test_clear_keys_removes_saved_keys(client, config_path, monkeypatch):
@@ -417,3 +539,13 @@ def test_results_list_unions_saved_file_and_cache(client, config_path, sample_re
 
     listed = client.get("/api/results").json()["results"]
     assert sorted(r["domain"] for r in listed) == ["cached-only.com", "saved-only.com"]
+
+
+def test_step_events_reach_watchers_but_not_the_history():
+    """step 토막은 지금 보는 사람에게만 — 기록에 쌓이면 다시 붙을 때 수백 개를 재생한다."""
+    manager = server.RunManager()
+    queue = manager.subscribe()
+    manager.publish({"type": "step", "domain": "a.com", "label": "웨이백 읽는 중", "frac": 0.3})
+    assert manager.history == []
+    assert queue.get_nowait()["type"] == "step"
+

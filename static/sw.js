@@ -95,7 +95,8 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  // 검사 결과·설정은 매번 달라지니 심부름꾼이 끼어들지 않는다(분석 요청은 POST 라 위에서 이미 빠졌다).
+  // 검사 진행 상황(/api/events)은 끊기지 않고 계속 흘러야 하는 통로다.
+  // 결과·설정도 매번 달라지니 심부름꾼이 끼어들지 않는다.
   if (url.pathname.startsWith("/api/")) return;
   // 화면 갈무리 그림과 저장된 보고서는 검사할 때마다 바뀌므로 그대로 둔다.
   if (url.pathname.startsWith("/captures/") || url.pathname.startsWith("/report/")) return;

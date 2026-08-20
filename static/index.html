@@ -425,10 +425,15 @@ window.fetch = async (input, init) => {
 const $ = (id) => document.getElementById(id);
 const rows = new Map();        // 도메인 → {el, pickEl, data, order}
 const planned = new Set();     // 매입 예정으로 체크한 도메인
+let source = null;
+let resumable = false;         // 중단된 목록이 남아 있나 (서버 run_state.json 기준)
 let running = false;
 let failed = [];               // 검사 도중 터져서 결과가 없는 도메인
-let startedAt = 0;             // 이번 검사를 시작한 시각 — 남은 시간 계산용
-let doneBase = 0;              // 그때 이미 끝나 있던 개수
+let startedAt = 0;             // 이번 검사를 지켜보기 시작한 시각 — 남은 시간 계산용
+let doneBase = 0;              // 그때 이미 끝나 있던 개수(중간에 다시 붙어도 시간이 안 틀리게)
+let stepNow = null;            // 지금 하는 단계 {domain,label,done,total,since} — 막대 위 글자
+let ticker = null;             // 1초마다 "몇 초째"를 다시 그리는 시계
+let pctHigh = 0;               // 막대가 뒤로 물러나지 않게 잡아 두는 최고치
 
 /* DW 부품이 아이콘 자리를 전제로 만들어졌는데 이 앱에는 번들러가 없다.
    lucide(ISC) 원본 path 를 그대로 인라인해 쓴다. */
@@ -679,203 +684,142 @@ async function preview() {
   $("preview").hidden = false;
 }
 
-/* ---------- 분석 실행 — 화면이 목록을 쥐고 한 개씩 서버에 보낸다 ----------
-   서버는 요청 하나 안에서 도메인 하나를 끝까지 하고, 그동안 "지금 무엇을 하는지"를
-   잘게 흘려보낸다. 서버가 긴 목록을 들고 뒤에서 돌지 않으니, 요청이 끝나면 잠드는
-   서버(인터넷에 올린 것)에서도 분석이 멈추지 않는다. 남은 목록은 이 기기에 적어 둔다
-   (localStorage) — 중단하거나 화면을 닫았다 열어도 "이어서 분석"이 산다. */
-const QUEUE_KEY = "dc.queue";
-let queue = [];                 // 아직 안 한 도메인(앞이 먼저)
-const inflight = new Map();     // 지금 도는 도메인 → {controller, frac, label, since, ok}
-let doneCount = 0;              // 이번 판에서 끝낸 개수(실패 포함)
-let total = 0;                  // 이번 판 전체 개수
-let stopping = false;
-let concurrency = 2;            // 한꺼번에 몇 개까지 — loadConfig 가 서버 값으로 맞춘다
-let ticker = null;              // 1초마다 "몇 초째"를 다시 그리는 시계
-
-function loadQueue() {
-  try { queue = JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]"); } catch (err) { queue = []; }
-  if (!Array.isArray(queue)) queue = [];
-  queue = queue.map(String).filter(Boolean);
-}
-/* 도는 중인 것도 함께 적는다 — 화면이 닫히면 그 도메인은 못 끝낸 것이라 다시 해야 한다 */
-function persistQueue() {
-  try { localStorage.setItem(QUEUE_KEY, JSON.stringify([...inflight.keys(), ...queue])); } catch (err) { /* 못 적어도 분석은 계속 */ }
-}
-function enqueue(domains) {
-  const fresh = domains.filter((d) => !queue.includes(d) && !inflight.has(d));
-  queue.push(...fresh);
-  persistQueue();
-  return fresh.length;
-}
-
+/* ---------- 검사 실행 ---------- */
 $("start").onclick = async () => {
   const raw = $("raw").value.trim();
   if (!raw) { $("raw").focus(); alert("분석할 도메인을 넣어 주세요."); return; }
-  // 서버가 도메인 모양을 골라 준다(붙여넣은 글에서 쓸 수 있는 줄만)
-  let data;
-  try {
-    const res = await fetch("/api/preview", {
-      method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({raw})
-    });
-    if (!res.ok) throw new Error("preview failed");
-    data = await res.json();
-  } catch (err) {
-    alert("서버에 닿지 못했습니다. 잠시 뒤 다시 눌러 주세요.");
-    return;
-  }
-  const added = enqueue(data.domains || []);
-  if (!added) { alert("분석할 도메인이 없습니다(이미 줄에 있거나 도메인 모양이 아닙니다)."); return; }
-  // 줄에 세운 뒤에 칸을 비운다 — 거절당했을 때 입력이 사라지면 안 된다.
+  const res = await fetch("/api/run", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({raw, use_cache: true})
+  });
+  // 시작이 확정된 뒤에 칸을 비운다 — 실수로 눌러 거절당했을 때 입력이 사라지면 안 된다.
+  if (!res.ok) { alert((await res.json()).detail || "시작하지 못했습니다."); return; }
+  const data = await res.json();
   $("raw").value = "";
   $("file").value = "";
   $("fileName").hidden = true;
   $("preview").hidden = true;
-  show("results");
-  if (running) {
-    // 도는 중이면 줄만 세운 것이다 — 차례가 오면 알아서 이어진다
-    total += added;
-    paintProgress();
+  // 검사가 도는 중이었으면 줄만 세운 것이다 — 지금 도는 검사는 그대로 계속된다.
+  if (data.queued) {
+    show("results");
+    $("progressText").textContent =
+      "대기줄에 " + data.count + "개를 세웠습니다 — 지금 분석이 끝나면 자동으로 이어서 돕니다.";
     return;
   }
-  startRun();
-};
-let abortedOrder = [];          // 중단할 때 돌던 순서 — 되돌릴 때 이 순서를 지킨다
-$("stop").onclick = () => {
-  stopping = true;
-  $("progressText").textContent = "중단하는 중…";
-  // 도는 요청을 끊으면 서버도 그 도메인을 멈춘다. 못 끝낸 것은 줄 앞으로 되돌아간다.
-  abortedOrder = [...inflight.keys()];
-  inflight.forEach((entry) => entry.controller.abort());
-};
-function doResume() {
-  if (!queue.length) { alert("이어서 분석할 목록이 없습니다."); return; }
+  // 결과는 분석 결과 화면에 쌓인다 — 시작하자마자 그리로 데려간다.
   show("results");
-  startRun();
+  countVisible();
+  resumable = true;
+  listen();
+};
+$("stop").onclick = async () => {
+  await fetch("/api/stop", {method: "POST"});
+  $("progressText").textContent = "중단했습니다.";
+};
+async function doResume() {
+  const res = await fetch("/api/resume", {method: "POST"});
+  if (!res.ok) { alert((await res.json()).detail || "이어서 분석할 수 없습니다."); return; }
+  listen();
 }
 
-function startRun() {
-  stopping = false;
+function listen() {
+  if (source) source.close();
+  startedAt = 0;
   failed = [];
-  doneCount = 0;
-  total = queue.length;
-  startedAt = Date.now();
-  doneBase = 0;
-  setRunning(true);
-  countVisible();
-  paintProgress();
-  clearInterval(ticker);
-  ticker = setInterval(paintProgress, 1000);
-  pump();
+  source = new EventSource("/api/events");
+  source.onmessage = (e) => handle(JSON.parse(e.data));
+  /* 서버가 스트림을 닫으면 브라우저가 알아서 다시 붙는다. 다만 로그인 쪽지가
+     기한이 다 돼서 끊긴 것이라면 브라우저는 조용히 포기해 버린다 — 진행 막대가
+     말없이 멈추지 않도록, 끊길 때마다 한 번 물어봐서 로그인 화면으로 보낸다. */
+  source.onerror = () => { fetch("/api/status").catch(() => {}); };
 }
-/* 빈 자리가 있는 만큼 줄에서 꺼내 보낸다 — 하나 끝날 때마다 다시 부른다 */
-function pump() {
-  while (!stopping && queue.length && inflight.size < concurrency) {
-    checkOne(queue.shift());
-  }
-  persistQueue();
-  if (!inflight.size && (!queue.length || stopping)) finishRun();
-}
-async function checkOne(domain) {
-  const controller = new AbortController();
-  const entry = {controller, frac: 0, label: "서버에 보내는 중", since: Date.now(), ok: false};
-  inflight.set(domain, entry);
-  paintProgress();
-  try {
-    const res = await fetch("/api/check", {
-      method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({domain, use_cache: true}), signal: controller.signal
-    });
-    if (!res.ok) throw new Error("check failed " + res.status);
-    await readEvents(res.body, (ev) => handle(domain, entry, ev));
-  } catch (err) {
-    // 중단으로 끊은 것은 실패가 아니다 — 아래에서 줄 앞으로 되돌린다
-  } finally {
-    inflight.delete(domain);
-    if (entry.ok) {
-      doneCount += 1;
-    } else if (stopping) {
-      queue.unshift(domain);
-    } else {
-      failed.push(domain);
-      doneCount += 1;
-    }
-    paintProgress();
-    pump();
-  }
-}
-/* 서버가 흘려보내는 줄(SSE)을 읽는다 — "data: {…}" 한 토막이 사건 하나 */
-async function readEvents(body, onEvent) {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  for (;;) {
-    const {value, done} = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, {stream: true});
-    let cut;
-    while ((cut = buffer.indexOf("\n\n")) >= 0) {
-      const chunk = buffer.slice(0, cut);
-      buffer = buffer.slice(cut + 2);
-      const data = chunk.split("\n").filter((l) => l.startsWith("data:"))
-        .map((l) => l.slice(5).trim()).join("\n");
-      if (!data) continue;  // ": keepalive" 같은 빈 줄
-      try { onEvent(JSON.parse(data)); } catch (err) { /* 깨진 한 줄은 건너뛴다 */ }
-    }
-  }
-}
-function handle(domain, entry, ev) {
+
+function handle(ev) {
+  if (ev.type === "snapshot") { markStart(ev.done); pctHigh = 0; setRunning(ev.running); progress(ev.done, ev.total); return; }
+  if (ev.type === "start") { markStart(0); pctHigh = 0; setRunning(true); progress(0, ev.total); return; }
+  if (ev.type === "domain_start") { $("progressText").textContent = ev.domain + " 분석 중… (" + Math.min(ev.done + 1, ev.total) + "/" + ev.total + ")"; return; }
+  // 한 도메인 안의 진행 토막 — 등록 확인 → 웨이백 몇 장째 → AI… 막대가 그만큼 움직이고,
+  // 글자에는 몇 초째인지 붙는다. 이게 없으면 도메인 하나가 1분 넘게 걸릴 때 죽은 것처럼 보인다.
   if (ev.type === "step") {
-    entry.frac = Math.max(entry.frac, Number(ev.frac) || 0);
-    entry.label = ev.label || "";
-    entry.since = Date.now();
-  } else if (ev.type === "domain_done") {
-    addRow(ev.result);
-    entry.frac = 1;
-    entry.ok = true;
-  } else if (ev.type === "domain_failed") {
-    entry.label = "실패: " + (ev.message || "");
+    stepNow = {domain: ev.domain, label: ev.label, done: ev.done, total: ev.total, since: Date.now()};
+    paintStep();
+    progress(ev.done, ev.total, ev.frac);
+    return;
   }
-  paintProgress();
-}
-function finishRun() {
-  clearInterval(ticker);
-  ticker = null;
-  // 끊긴 것들은 끝난 순서대로 줄 앞에 끼어든다 — 원래 돌던 순서로 되돌려 놓는다
-  if (abortedOrder.length) {
-    const head = abortedOrder.filter((d) => queue.includes(d));
-    queue = head.concat(queue.filter((d) => !head.includes(d)));
-    abortedOrder = [];
+  // 서버가 보내는 done 은 이 도메인까지 센 값이다 — 여기서 1을 더하면 100%를 넘는다.
+  if (ev.type === "domain_done") { stepNow = null; addRow(ev.result); progress(ev.done, ev.total); return; }
+  if (ev.type === "capture_start") { $("progressText").textContent = "결과는 다 나왔습니다. 이제 화면 사진 " + ev.count + "개를 찍습니다…"; return; }
+  if (ev.type === "capture_done") {
+    // 사진이 붙은 최신 결과가 함께 온다 — 목록을 갈아 끼워야 상세에서 캡쳐가 보인다.
+    if (ev.result) addRow(ev.result);
+    $("progressText").textContent = ev.domain + " 사진 " + ev.shots + "장 저장.";
+    return;
   }
-  // 못 끝낸 것은 줄에 남겨 "이어서 분석"으로 다시 할 수 있게 한다
-  enqueue(failed);
-  setRunning(false);
-  showResume(failed);
-  applyView();  // 다 나왔으니 좋은 것부터 줄을 세운다
-  $("progressText").textContent = stopping ? "중단했습니다." : "분석이 끝났습니다.";
+  // 한 도메인이 터져도 나머지는 계속 간다. 어느 것이 빠졌는지는 반드시 알려 준다.
+  if (ev.type === "domain_failed") { failed.push(ev.domain); progress(ev.done, ev.total); return; }
+  if (ev.type === "finished") {
+    stepNow = null;
+    resumable = Boolean(ev.stopped);  // 끝까지 갔으면 이어서 할 것이 없다
+    const missed = (ev.failed && ev.failed.length ? ev.failed : failed);
+    if (missed.length) resumable = true;
+    setRunning(false);
+    showResume(missed);
+    applyView();  // 다 나왔으니 좋은 것부터 줄을 세운다
+    if (source) source.close();
+    // 대기줄에 세워 둔 다음 묶음이 있으면 서버가 곧 이어서 시작한다 — 다시 붙는다
+    setTimeout(async () => {
+      try {
+        const s = await (await fetch("/api/status")).json();
+        if (s.running) { setRunning(true); listen(); }
+      } catch (err) { /* 서버가 잠깐 말이 없으면 다음 새로고침 때 붙는다 */ }
+    }, 800);
+    return;
+  }
+  if (ev.type === "error") {
+    setRunning(false);
+    alert("오류: " + ev.message);
+    if (source) source.close();
+  }
 }
 
 function setRunning(on) {
   running = on;
   $("runbar").hidden = !on;
+  // 도는 동안만 시계가 산다 — 같은 단계에 머무는 몇 초가 눈에 보이게
+  clearInterval(ticker);
+  ticker = on ? setInterval(paintStep, 1000) : null;
+  if (!on) stepNow = null;
   // 도는 동안에도 의뢰 화면은 쓸 수 있다 — 단추가 "대기줄에 넣기"로 바뀐다
   $("start").textContent = on ? "대기줄에 넣기" : "분석 시작";
   showResume([]);
 }
-/* 남은 줄이 있을 때만 도크 위에 한 줄이 뜬다(평소엔 아예 없다). */
+/* 중단된 것이 남아 있을 때만 도크 위에 한 줄이 뜬다(평소엔 아예 없다). */
 function showResume(missed) {
   const box = $("resumeRow");
-  if (running || !queue.length) { box.hidden = true; return; }
+  if (running || !resumable) { box.hidden = true; return; }
   const tail = (missed && missed.length)
     ? "분석하지 못한 " + missed.length + "개가 있습니다."
-    : "중단된 분석 " + queue.length + "개가 남아 있습니다.";
+    : "중단된 분석이 남아 있습니다.";
   box.innerHTML = '<div class="dw-alert" data-variant="info">' + ICON_INFO +
     '<p class="dw-alert-description">' + escapeHtml(tail) + "</p>" +
     '<div class="dw-alert-action"><button type="button" class="dw-button" data-variant="secondary" ' +
     'data-size="sm" id="resume">이어서 분석</button></div></div>';
   $("resume").onclick = doResume;
   box.hidden = false;
+}
+/* 검사 중간에 화면을 다시 열면 그 시점부터 다시 잰다(예전 것까지 세면 시간이 틀린다). */
+function markStart(done) {
+  if (startedAt) return;
+  startedAt = Date.now();
+  doneBase = done || 0;
+}
+/* 지금 하는 단계를 글자로 — "도메인 — 무엇을 하는 중 · 몇 초 (몇/몇)" */
+function paintStep() {
+  if (!stepNow) return;
+  const secs = Math.round((Date.now() - stepNow.since) / 1000);
+  $("progressText").textContent = stepNow.domain + " — " + stepNow.label +
+    (secs >= 3 ? " · " + secs + "초" : "") +
+    " (" + Math.min(stepNow.done + 1, stepNow.total) + "/" + stepNow.total + ")";
 }
 /* 지금까지 걸린 시간을 남은 개수에 그대로 늘려 잡는다(잰 게 없으면 알 수 없으니 생략). */
 function etaText(done, total) {
@@ -884,27 +828,17 @@ function etaText(done, total) {
   const left = ((Date.now() - startedAt) / 60000) / measured * (total - done);
   return " · 남은 시간 " + (left < 1 ? "1분 안쪽" : "약 " + Math.round(left) + "분");
 }
-/* 막대는 끝낸 개수에 도는 것들의 진행 몫을 더해 움직인다 — 도메인 하나가 1분 넘게
-   걸려도 막대와 글자가 계속 바뀌어야 "죽은 게 아니구나"를 안다. */
-function paintProgress() {
-  let partial = 0;
-  inflight.forEach((entry) => { partial += entry.frac; });
-  const pct = total ? Math.min(100, Math.round(((doneCount + partial) / total) * 100)) : 0;
+/* frac 은 지금 도는 도메인 안에서의 진행 몫(0~1). 여러 개가 같이 돌 때 값이 서로
+   엇갈려도 막대가 뒤로 물러나 보이지 않게 최고치를 잡아 둔다. */
+function progress(done, total, frac) {
+  let pct = total ? Math.min(100, Math.round(((done + (frac || 0)) / total) * 100)) : 0;
+  if (frac !== undefined) { pct = Math.max(pct, pctHigh); }
+  pctHigh = Math.max(pctHigh, pct);
   $("bar").style.width = pct + "%";
   $("track").setAttribute("aria-valuenow", pct);
   $("progressPct").textContent = total ? pct + "%" : "";
-  if (!running) return;
-  const first = inflight.entries().next().value;
-  let text;
-  if (first) {
-    const [domain, entry] = first;
-    const secs = Math.round((Date.now() - entry.since) / 1000);
-    text = domain + " — " + entry.label + (secs >= 3 ? " · " + secs + "초" : "") +
-      (inflight.size > 1 ? " (외 " + (inflight.size - 1) + "개 같이 도는 중)" : "");
-  } else {
-    text = "준비 중…";
-  }
-  $("progressText").textContent = text + " (" + doneCount + "/" + total + "개" + etaText(doneCount, total) + ")";
+  // 단계 글자가 떠 있으면 덮지 않는다 — 개수 요약은 단계가 없을 때만
+  if (total && frac === undefined) $("progressText").textContent = done + " / " + total + "개" + etaText(done, total);
 }
 
 /* 언제 검사한 저장분인지 안 적으면 묵은 답을 오늘 것으로 읽는다. */
@@ -1369,7 +1303,6 @@ async function loadConfig() {
   });
   // 잠가 둔 서버에서만 나가는 문(로그아웃)을 보여 준다
   $("accountGroup").hidden = !data.locked;
-  if (data.concurrency) concurrency = Math.max(1, Number(data.concurrency) || 1);
 }
 
 $("logout").onclick = async () => {
@@ -1406,9 +1339,7 @@ async function saveConfig() {
 
 /* ---------- 설정: 목록 별 지우기 ---------- */
 /* 갈래 하나를 통째로 지운다 — 저장분·캐시·화면 사진까지. */
-const BUSY_MSG = "분석이 도는 동안에는 지울 수 없습니다. 먼저 중단해 주세요.";
 async function purgeCategory(cat, label) {
-  if (running) { $("cfgMsg").textContent = BUSY_MSG; return; }
   const targets = [...rows.values()].filter((e) => categoryOf(e.data) === cat).map((e) => e.data.domain);
   if (!targets.length) { $("cfgMsg").textContent = label + " 목록이 이미 비어 있습니다."; return; }
   const res = await fetch("/api/results/purge", {
@@ -1424,10 +1355,12 @@ async function purgeCategory(cat, label) {
   });
   applyView();
   $("cfgMsg").textContent = label + " " + targets.length + "개를 지웠습니다.";
-  // 지운 줄은 "이어서 분석" 줄에서도 뺀다 — 안 빼면 이어서 분석을 누르는 순간 되살아난다
-  queue = queue.filter((d) => !targets.includes(d));
-  persistQueue();
-  showResume([]);
+  // 지운 줄은 "이어서 검사" 목록에서도 빠졌다 — 서버에 다시 물어 그 줄을 거둔다.
+  try {
+    const state = await (await fetch("/api/status")).json();
+    resumable = Boolean(state.resumable);
+    showResume([]);
+  } catch (err) { /* 서버가 잠깐 말이 없으면 다음 새로고침 때 맞춰진다 */ }
 }
 /* 매입 예정 표시만 뗀다 — 분석 결과 자체는 그대로 남는다. */
 async function clearPlannedMarks() {
@@ -1437,7 +1370,6 @@ async function clearPlannedMarks() {
 }
 /* 저장된 결과를 통째로 지운다 — 매입 예정 표시도 같이 사라진다. */
 async function clearAllResults() {
-  if (running) { $("cfgMsg").textContent = BUSY_MSG; return; }
   const res = await fetch("/api/results", {method: "DELETE"});
   if (!res.ok) {
     $("cfgMsg").textContent = (await res.json()).detail || "지우지 못했습니다.";
@@ -1447,8 +1379,7 @@ async function clearAllResults() {
   planned.clear();
   $("rows").innerHTML = "";
   $("plannedRows").innerHTML = "";
-  queue = [];
-  persistQueue();
+  resumable = false;
   showResume([]);
   countVisible();
   $("cfgMsg").textContent = "분석 결과를 전부 지웠습니다.";
@@ -1554,11 +1485,12 @@ function offlineNotice() {
   tape.hidden = false;
 }
 loadConfig().catch(offlineNotice);
-// 앱을 껐다 켜도 남은 줄이 이 기기에 적혀 있으면 "이어서 분석"이 살아 있어야 한다.
-loadQueue();
-showResume([]);
-// 화면을 닫는 순간 도는 것은 못 끝낸 것이다 — 줄에 도로 적어 두고 나간다
-window.addEventListener("pagehide", persistQueue);
+fetch("/api/status").then((r) => r.json()).then((s) => {
+  // 앱을 껐다 켜도 중단된 목록이 남아 있으면 "이어서 검사"가 살아 있어야 한다.
+  resumable = Boolean(s.resumable);
+  setRunning(Boolean(s.running));
+  if (s.running) listen();
+}).catch(offlineNotice);
 // 매입 예정 표시를 먼저 읽고 결과를 그린다 — 순서가 바뀌면 체크가 빈 채로 그려진다.
 fetch("/api/planned").then((r) => r.json()).then((p) => {
   (p.domains || []).forEach((d) => planned.add(d));

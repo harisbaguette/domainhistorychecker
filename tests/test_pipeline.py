@@ -1,5 +1,6 @@
 """파이프라인 통합 1건 — 모든 클라이언트를 목(mock)으로 대체한다(실 네트워크 호출 없음)."""
 
+import asyncio
 import json
 import re
 
@@ -299,6 +300,27 @@ async def test_capture_done_carries_the_updated_result(config, monkeypatch, tmp_
 
 
 @respx.mock
+async def test_run_state_survives_a_stop_and_is_cleared_on_success(config, tmp_path):
+    """앱을 껐다 켜도 '이어서 검사'가 살아 있어야 한다(심사 C2)."""
+    from domainchecker.pipeline import load_run_state, run_state_path
+
+    mock_all()
+    base = tmp_path / "data"
+
+    stopped = fast_pipeline(config, [])
+    stopped.stop()  # 시작하자마자 중단 — 목록은 남아야 한다
+    await stopped.run([DOMAIN], use_cache=False)
+
+    assert run_state_path(base).exists()
+    assert load_run_state(base) == [DOMAIN]
+
+    await fast_pipeline(config, []).run([DOMAIN], use_cache=False)
+
+    assert not run_state_path(base).exists()  # 끝까지 갔으면 이어서 할 것이 없다
+    assert load_run_state(base) == []
+
+
+@respx.mock
 async def test_taken_domain_skips_the_rest_of_the_analysis(config):
     """주인이 있으면 웨이백·색인·AI 같은 나머지 분석을 아예 안 한다 — 살 수 없는 도메인이다."""
     mock_all()
@@ -350,26 +372,37 @@ async def test_failed_checks_degrade_to_unchecked_and_block_buy(config):
 
 
 @respx.mock
-async def test_check_one_streams_steps_and_finishes_with_the_result(config):
-    """화면이 한 개씩 부르는 길 — 진행 토막(step)이 먼저, 결과(domain_done)가 마지막."""
+async def test_steps_flow_while_one_domain_runs(config):
+    """도메인 하나가 도는 동안 step 사건이 순서대로 흘러야 막대가 살아 움직인다."""
     mock_all()
     events = []
-    result = await fast_pipeline(config, events).check_one(DOMAIN, use_cache=False)
+    await fast_pipeline(config, events).run([DOMAIN], use_cache=False)
 
-    kinds = [e["type"] for e in events]
-    assert kinds[0] == "step"
-    assert kinds[-1] == "domain_done"
-    assert events[-1]["result"]["domain"] == DOMAIN
-    assert result.domain == DOMAIN
-    labels = [e["label"] for e in events if e["type"] == "step"]
+    steps = [e for e in events if e["type"] == "step"]
+    assert steps, "step 사건이 하나도 없다"
+    labels = [s["label"] for s in steps]
     assert any("살 수 있는" in label for label in labels)
     assert any("웨이백" in label for label in labels)
-    fracs = [e["frac"] for e in events if e["type"] == "step"]
-    assert fracs == sorted(fracs) and 0 < fracs[0] < 1
+    fracs = [s["frac"] for s in steps]
+    assert all(0 < f <= 1 for f in fracs)
+    assert fracs == sorted(fracs)  # 뒤로 가지 않는다
 
-    # 두 번째는 저장분을 쓴다 — 진행 토막 없이 바로 끝난다
-    again = []
-    await fast_pipeline(config, again).check_one(DOMAIN, use_cache=True)
-    assert [e["type"] for e in again] == ["domain_done"]
-    assert again[0]["cached"] is True
+
+async def test_stop_cancels_the_inflight_domain_quickly(config, monkeypatch):
+    """중단을 누르면 돌던 도메인도 그 자리에서 끊겨야 한다 — 몇 분씩 계속 돌면 안 된다."""
+    events = []
+    pipeline = fast_pipeline(config, events)
+
+    async def hang(domain, http):
+        await asyncio.sleep(3600)
+
+    monkeypatch.setattr(pipeline, "check_domain", hang)
+    task = asyncio.create_task(pipeline.run([DOMAIN], use_cache=False))
+    await asyncio.sleep(0.05)
+    pipeline.stop()
+    await asyncio.wait_for(task, timeout=2)  # 2초 안에 끝나야 한다
+    kinds = [e["type"] for e in events]
+    assert kinds[-1] == "finished"
+    assert events[-1]["stopped"] is True
+    assert "domain_failed" not in kinds  # 끊긴 것은 실패가 아니다
 

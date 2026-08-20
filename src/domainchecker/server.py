@@ -30,7 +30,7 @@ from . import config as config_module
 from .config import MODEL_CHAIN, Config
 from .models import DomainResult
 from .normalize import MAX_DOMAINS, parse_domains
-from .pipeline import Pipeline, is_stale
+from .pipeline import Pipeline, clear_run_state, is_stale, load_run_state, save_run_state
 from .report import html as report_html
 
 STATIC_DIR = Path(__file__).resolve().parents[2] / "static"
@@ -61,10 +61,9 @@ AI_OUTPUT_TOKENS = 1_000
 KRW_PER_USD = 1_400  # 원화 병기 기준(2026-08-04)
 
 
-class CheckRequest(BaseModel):
-    """도메인 하나 분석 — 화면이 목록을 들고 한 개씩 보낸다."""
-
-    domain: str = ""
+class RunRequest(BaseModel):
+    raw: str = ""
+    domains: list[str] = []
     use_cache: bool = True
 
 
@@ -134,45 +133,99 @@ class ConfigRequest(BaseModel):
     enable_capture: bool | None = None
 
 
-KEEPALIVE_SECONDS = 15.0  # 알릴 게 없어도 이 간격으로 빈 줄을 흘려 연결이 끊기지 않게 한다
+class RunManager:
+    """Owns the single running pipeline and fans progress events out to the UI."""
 
+    def __init__(self) -> None:
+        self.pipeline: Pipeline | None = None
+        self.task: asyncio.Task | None = None
+        self.subscribers: set[asyncio.Queue] = set()
+        self.history: list[dict] = []
+        self.domains: list[str] = []
+        self.results: dict[str, dict] = {}
+        self.running = False
+        self.error = ""
+        self.base: Path | None = None  # run_state.json 을 찾을 데이터 폴더
+        # 검사가 도는 동안 들어온 다음 묶음들 — 지금 검사가 끝나면 차례로 자동 시작한다
+        self.pending: list[list[str]] = []
+        self.config_loader = None  # create_app 이 넣어 준다(대기줄 자동 시작용)
 
-async def check_stream(pipeline: Pipeline, domain: str, use_cache: bool):
-    """도메인 하나의 분석을 돌리며 진행 사건을 그때그때 흘려보낸다(SSE 본문).
+    def publish(self, event: dict) -> None:
+        # step(한 도메인 안의 진행 토막)은 순간 표시용이다 — 기록에 쌓으면 다시
+        # 붙을 때마다 수백 토막을 재생하게 되므로 지금 보고 있는 사람에게만 보낸다.
+        if event.get("type") != "step":
+            self.history.append(event)
+        # capture_done도 결과를 실어 온다 — 사진이 붙은 최신본으로 갈아 끼워야
+        # 상세 화면이 방금 찍은 캡쳐를 보여 준다.
+        if event.get("type") in ("domain_done", "capture_done") and event.get("result"):
+            self.results[event["result"]["domain"]] = event["result"]
+        for queue in list(self.subscribers):
+            queue.put_nowait(event)
 
-    분석은 옆 일감(task)으로 돌리고, 여기서는 그 일감이 알리는 사건을 받아 적는다.
-    보는 사람이 연결을 끊으면(중단 단추·화면 닫기) 일감도 함께 멈춘다.
-    """
-    queue: asyncio.Queue = asyncio.Queue()
-    pipeline.on_event = queue.put_nowait
+    def subscribe(self) -> asyncio.Queue:
+        queue: asyncio.Queue = asyncio.Queue()
+        self.subscribers.add(queue)
+        return queue
 
-    async def runner() -> None:
-        try:
-            await pipeline.check_one(domain, use_cache=use_cache)
-        except Exception as exc:  # noqa: BLE001 — 무엇이 터졌는지 화면이 알아야 한다
-            queue.put_nowait(
-                {"type": "domain_failed", "domain": domain, "message": f"{type(exc).__name__}: {exc}"}
-            )
-        finally:
-            queue.put_nowait(None)  # 끝 표시
+    def unsubscribe(self, queue: asyncio.Queue) -> None:
+        self.subscribers.discard(queue)
 
-    task = asyncio.create_task(runner())
-    try:
-        while True:
+    @property
+    def finished(self) -> bool:
+        return bool(self.history) and self.history[-1].get("type") in ("finished", "error")
+
+    async def start(self, config: Config, domains: list[str], use_cache: bool) -> None:
+        if self.running:
+            raise HTTPException(status_code=409, detail="이미 분석이 진행 중입니다.")
+        self.history = []
+        self.error = ""
+        self.domains = domains
+        self.results = {}
+        self.running = True
+        self.pipeline = Pipeline(config, on_event=self.publish)
+
+        async def runner() -> None:
             try:
-                event = await asyncio.wait_for(queue.get(), timeout=KEEPALIVE_SECONDS)
-            except TimeoutError:
-                yield ": keepalive\n\n"
-                continue
-            if event is None:
-                return
-            yield _sse(event)
-    finally:
-        if not task.done():
-            pipeline.stop()
-            task.cancel()
-            with contextlib.suppress(BaseException):
-                await task
+                await self.pipeline.run(domains, use_cache=use_cache)
+            except Exception as exc:  # noqa: BLE001 — 파이프라인이 통째로 죽어도 UI는 알아야 한다
+                self.error = f"{type(exc).__name__}: {exc}"
+                self.publish({"type": "error", "message": self.error})
+            finally:
+                self.running = False
+                # 대기줄에 다음 묶음이 있으면 이어서 자동 시작한다.
+                # 터져서 끝났을 때는 시작하지 않는다 — 같은 원인으로 줄줄이 터진다.
+                if self.pending and not self.error and self.config_loader is not None:
+                    next_domains = self.pending.pop(0)
+                    # 참조를 self.task 에 쥔다 — 안 쥐면 GC 가 도는 중에 지울 수 있다
+                    self.task = asyncio.create_task(
+                        self.start(self.config_loader(), next_domains, use_cache=True)
+                    )
+
+        self.task = asyncio.create_task(runner())
+
+    def stop(self) -> None:
+        if self.pipeline is not None:
+            self.pipeline.stop()
+
+    def resume_domains(self) -> list[str]:
+        """이 실행의 목록, 없으면 앱을 껐다 켜기 전에 남겨 둔 목록."""
+        if self.domains:
+            return list(self.domains)
+        return load_run_state(self.base) if self.base else []
+
+    def status(self) -> dict:
+        done = sum(1 for e in self.history if e.get("type") == "domain_done")
+        return {
+            "running": self.running,
+            "total": len(self.domains),
+            "done": done,
+            "domains": self.domains,
+            "error": self.error,
+            "finished": self.finished,
+            "resumable": bool(self.resume_domains()),
+            "queued_batches": len(self.pending),
+            "queued_domains": sum(len(batch) for batch in self.pending),
+        }
 
 
 # 도메인마다 읽을 양이 달라 미리 알 수 없다 — 평균 가정치로 안내한다.
@@ -238,7 +291,9 @@ def mask(value: str) -> str:
 
 def create_app(config_path: Path | None = None) -> FastAPI:
     app = FastAPI(title="낙장도메인 품질 체커", docs_url=None, redoc_url=None)
+    manager = RunManager()
     app.state.config_path = config_path
+    app.state.manager = manager
 
     def load_config() -> Config:
         return config_module.load(app.state.config_path)
@@ -277,6 +332,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
             return response
 
     base = data_root()
+    manager.base = base
     (base / "captures").mkdir(parents=True, exist_ok=True)
     (base / "report").mkdir(parents=True, exist_ok=True)
     app.mount("/captures", StaticFiles(directory=base / "captures"), name="captures")
@@ -289,11 +345,11 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         app.mount("/fonts", StaticFiles(directory=STATIC_DIR / "fonts"), name="fonts")
 
     def stored_results() -> list[DomainResult]:
-        """Union of results.json and the cache — newest source wins.
+        """Union of this run, results.json and the cache — newest source wins.
 
-        예전에는 둘 중 처음 걸리는 한 곳만 읽었다. 그래서 새 검사를 시작하는 순간
+        예전에는 셋 중 처음 걸리는 한 곳만 읽었다. 그래서 새 검사를 시작하는 순간
         지난 회차 결과가 화면에서 통째로 사라졌다 — 묶음을 나눠 검사하는 사람이
-        먼저 검사한 것을 잃지 않도록, 두 곳을 도메인별로 합쳐서 돌려준다.
+        먼저 검사한 것을 잃지 않도록, 세 곳을 도메인별로 합쳐서 돌려준다.
         """
         base_dir = data_root()
         cache_days = load_config().cache_days
@@ -312,6 +368,8 @@ def create_app(config_path: Path | None = None) -> FastAPI:
                         merged[str(payload["domain"])] = payload
             except (OSError, ValueError):
                 pass  # 깨진 파일이면 캐시 몫만 보여 준다
+        for domain, payload in manager.results.items():
+            merged[domain] = payload
         out = []
         for payload in merged.values():
             try:
@@ -321,7 +379,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         return out
 
     def one_result(domain: str) -> DomainResult:
-        payload = cache.load(domain, data_root())
+        payload = manager.results.get(domain) or cache.load(domain, data_root())
         if not payload:
             raise HTTPException(status_code=404, detail="아직 분석하지 않은 도메인입니다.")
         try:
@@ -439,19 +497,70 @@ def create_app(config_path: Path | None = None) -> FastAPI:
             )
         return payload
 
-    @app.post("/api/check")
-    async def check(request: CheckRequest) -> StreamingResponse:
-        """도메인 하나를 분석하며 진행을 흘려보낸다 — 요청 하나 = 도메인 하나.
+    @app.post("/api/run")
+    async def run(request: RunRequest) -> dict:
+        config = load_config()
+        domains = request.domains or parse_domains(request.raw, config.max_domains).domains
+        if not domains:
+            raise HTTPException(status_code=400, detail="분석할 도메인이 없습니다.")
+        # 이미 검사가 도는 중이면 거절하지 않고 대기줄에 세운다 — 지금 검사가
+        # 끝나는 즉시 자동으로 이어서 돈다(사람이 폰을 다시 볼 필요가 없게).
+        if manager.running:
+            manager.pending.append(domains)
+            return {
+                "queued": True,
+                "count": len(domains),
+                "position": len(manager.pending),
+            }
+        manager.config_loader = load_config
+        await manager.start(config, domains, request.use_cache)
+        return {"started": True, "count": len(domains), "estimate": estimate(config, len(domains))}
 
-        화면이 목록을 쥐고 한 개씩 보내 온다. 서버가 긴 목록을 들고 뒤에서 돌지
-        않으니, 요청이 끝나면 잠드는 서버(서버리스)에서도 끝까지 돈다.
-        """
-        domain = parse_domains(request.domain, 1).domains
-        if not domain:
-            raise HTTPException(status_code=400, detail="도메인 모양이 아닙니다.")
-        pipeline = Pipeline(load_config())
+    @app.post("/api/stop")
+    async def stop() -> dict:
+        manager.pending.clear()  # 멈추라는 말은 대기줄까지 포함한다
+        manager.stop()
+        return {"stopped": True, "note": "끝난 도메인은 저장돼 있어 '이어서 분석'으로 재개할 수 있습니다."}
+
+    @app.post("/api/resume")
+    async def resume() -> dict:
+        manager.base = data_root()
+        domains = manager.resume_domains()
+        if not domains:
+            raise HTTPException(status_code=400, detail="이어서 분석할 목록이 없습니다.")
+        config = load_config()
+        manager.config_loader = load_config
+        await manager.start(config, domains, use_cache=True)
+        return {"started": True, "count": len(domains)}
+
+    @app.get("/api/status")
+    async def status() -> dict:
+        manager.base = data_root()
+        return manager.status()
+
+    @app.get("/api/events")
+    async def events() -> StreamingResponse:
+        queue = manager.subscribe()
+        replay = list(manager.history)
+        finished_already = not manager.running and (manager.finished or not replay)
+
+        async def stream():
+            try:
+                yield _sse({"type": "snapshot", **manager.status()})
+                for event in replay:
+                    yield _sse(event)
+                if finished_already:
+                    return
+                while True:
+                    event = await queue.get()
+                    yield _sse(event)
+                    if event.get("type") in ("finished", "error"):
+                        return
+            finally:
+                manager.unsubscribe(queue)
+
         return StreamingResponse(
-            check_stream(pipeline, domain[0], request.use_cache),
+            stream(),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
@@ -481,9 +590,14 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     @app.delete("/api/results")
     async def clear_results() -> dict:
         """저장된 검사 결과를 전부 지운다 — 목록·저장 파일·캐시·화면 사진까지."""
+        if manager.running:
+            raise HTTPException(
+                status_code=409, detail="분석이 도는 동안에는 지울 수 없습니다. 먼저 중단해 주세요."
+            )
         base_dir = data_root()
         (base_dir / "results.json").unlink(missing_ok=True)
         (base_dir / PLANNED_NAME).unlink(missing_ok=True)  # 근거가 사라지면 표시도 지운다
+        clear_run_state(base_dir)
         cache_root = cache.cache_dir(base_dir)
         if cache_root.exists():
             for path in cache_root.glob("*.json"):
@@ -492,6 +606,10 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         if captures_dir.exists():
             shutil.rmtree(captures_dir, ignore_errors=True)
             captures_dir.mkdir(parents=True, exist_ok=True)
+        manager.history = []
+        manager.domains = []
+        manager.results = {}
+        manager.pending.clear()
         return {"cleared": True}
 
     @app.post("/api/results/purge")
@@ -502,6 +620,10 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         한 곳만 지우면 다음에 켤 때 지운 줄이 되살아난다(stored_results 가
         results.json → 캐시 순으로 되읽기 때문).
         """
+        if manager.running:
+            raise HTTPException(
+                status_code=409, detail="분석이 도는 동안에는 지울 수 없습니다. 먼저 중단해 주세요."
+            )
         targets = {d.strip().lower() for d in request.domains if d.strip()}
         if not targets:
             raise HTTPException(status_code=400, detail="지울 도메인이 없습니다.")
@@ -531,8 +653,20 @@ def create_app(config_path: Path | None = None) -> FastAPI:
                 for shot in captures_dir.glob(f"{stem}_*.png"):
                     shot.unlink(missing_ok=True)
 
+        for domain in targets:
+            manager.results.pop(domain, None)
+        manager.domains = [d for d in manager.domains if d.lower() not in targets]
+
         # 매입 예정 표시에서도 뺀다 — 결과가 사라진 도메인이 예정 목록에 유령으로 남지 않게.
         save_planned(base_dir, [d for d in load_planned(base_dir) if d not in targets])
+
+        # "이어서 검사" 목록에서도 빼야 한다 — 안 빼면 앱을 다시 켜고 이어서 검사를
+        # 누르는 순간 방금 치운 줄이 그대로 되살아난다.
+        left = [d for d in load_run_state(base_dir) if d.lower() not in targets]
+        if left:
+            save_run_state(base_dir, left)
+        else:
+            clear_run_state(base_dir)
         return {"removed": len(targets)}
 
     @app.get("/api/results/{domain}")
@@ -555,8 +689,6 @@ def create_app(config_path: Path | None = None) -> FastAPI:
             "models": list(MODEL_CHAIN),
             "speed_mode": config.speed_mode,
             "enable_capture": config.enable_capture,
-            # 화면이 한꺼번에 몇 개까지 보낼지 — 서버 설정을 따른다
-            "concurrency": config.concurrency,
             "missing_keys": config.missing_required_keys(),
             "free_fallbacks": config.free_fallbacks(),
             "config_path": str(app.state.config_path or config_module.CONFIG_PATH),
