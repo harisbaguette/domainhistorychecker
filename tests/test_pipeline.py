@@ -216,6 +216,11 @@ async def test_full_run_produces_a_buy_verdict(config, tmp_path):
     # 원본 HTML은 저장하지 않는다
     assert all("html" not in page for page in result.wayback.pages)
 
+    # 4단까지 간 도메인이 받아 온 옛 화면 본문 장수 — 3단의 최신 한 장 +
+    # 앞페이지 변경본 10장 + 하위 유형 대표 2장. 3단에서 걸리면 이게 1장이 된다.
+    fetched = [c for c in respx.calls if "id_/" in str(c.request.url)]
+    assert len(fetched) == len(YEARS) + 3
+
     # 진행 이벤트 + 결과 파일
     kinds = [e["type"] for e in events]
     assert kinds[0] == "start" and kinds[-1] == "finished"
@@ -417,7 +422,7 @@ async def test_capture_phase_stays_silent_after_a_stop(config, sample_result):
     assert events == []
 
 
-# ─────────────────────────── 깔때기 3단 ───────────────────────────
+# ─────────────────────────── 깔때기 4단 ───────────────────────────
 
 
 class ListedResolver:
@@ -427,9 +432,50 @@ class ListedResolver:
         return ["127.0.1.2"]
 
 
+def mock_ai(payload: dict) -> None:
+    """OpenRouter 답을 통째로 갈아 끼운다 — 나중에 건 것이 이긴다."""
+    respx.post("https://openrouter.ai/api/v1/chat/completions").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {"message": {"content": json.dumps(payload, ensure_ascii=False)}}
+                ],
+                "model": "deepseek/deepseek-v4-flash-0731",
+            },
+        )
+    )
+
+
+def body_calls() -> list[str]:
+    """실제로 받아 온 옛 화면 본문 주소만 — 목록 조회는 빼고 센다."""
+    return [str(c.request.url) for c in respx.calls if "id_/" in str(c.request.url)]
+
+
 @respx.mock
-async def test_stage0_listed_domain_is_rejected_without_touching_the_network(config, tmp_path):
-    """0단 — 받아 둔 명단에 있으면 바깥으로 한 번도 안 나가고 그 자리에서 끝난다."""
+async def test_stage1_taken_domain_ends_before_the_blocklist_is_even_checked(config, tmp_path):
+    """1단 — 주인이 있으면 명단 대조조차 하지 않는다. 살 수 없는 도메인이다."""
+    mock_all()
+    put_blacklist(tmp_path / "data", "gambling", [DOMAIN])
+    respx.post(gabia.CHECK_URL).mock(
+        return_value=httpx.Response(
+            200, json={"flag": "A", "status": "10002", "result": "이미 등록된 도메인"}
+        )
+    )
+
+    result = (await fast_pipeline(config, []).run([DOMAIN], use_cache=False))[0]
+
+    assert result.availability == "taken"
+    assert result.blocklist.check.status is CheckStatus.NOT_RUN
+    assert result.wayback.check.status is CheckStatus.NOT_RUN
+    called = [str(call.request.url) for call in respx.calls]
+    assert not any("web.archive.org" in url for url in called)
+    assert not any("openrouter.ai" in url for url in called)
+
+
+@respx.mock
+async def test_stage2_listed_domain_is_rejected_before_any_wayback_call(config, tmp_path):
+    """2단 — 받아 둔 명단에 있으면 판매처 확인 말고는 아무 데도 안 나가고 끝난다."""
     mock_all()
     put_blacklist(tmp_path / "data", "gambling", [DOMAIN])
 
@@ -440,16 +486,19 @@ async def test_stage0_listed_domain_is_rejected_without_touching_the_network(con
     assert result.blocklist.listed is True
     assert "도박 명단(UT1 툴루즈" in result.blocklist.codes[0]
     assert any("세계 공개 위험 명단" in reason for reason in result.fatal_reasons)
-    # 판매처·웨이백·AI 어느 쪽으로도 나가지 않았다 — 0단이 공짜인 이유다.
-    assert len(respx.calls) == 0
-    assert result.registration.check.status is CheckStatus.NOT_RUN
+    # 주인 여부(1단)만 물어봤고 웨이백·AI 어느 쪽으로도 나가지 않았다.
+    called = [str(call.request.url) for call in respx.calls]
+    assert len(called) == 1
+    assert not any("web.archive.org" in url for url in called)
+    assert not any("openrouter.ai" in url for url in called)
+    assert result.registration.check.status is CheckStatus.OK
     assert result.wayback.check.status is CheckStatus.NOT_RUN
     assert result.ai.check.status is CheckStatus.NOT_RUN
 
 
 @respx.mock
-async def test_stage0_leaves_a_clean_domain_alone(config, tmp_path):
-    """명단에 없는 도메인은 0단에서 아무것도 잃지 않고 2단까지 그대로 간다."""
+async def test_stage2_leaves_a_clean_domain_alone(config, tmp_path):
+    """명단에 없는 도메인은 2단에서 아무것도 잃지 않고 4단까지 그대로 간다."""
     mock_all()
     put_blacklist(tmp_path / "data", "gambling", ["someone-else.com"])
 
@@ -461,8 +510,8 @@ async def test_stage0_leaves_a_clean_domain_alone(config, tmp_path):
 
 
 @respx.mock
-async def test_stage1_blacklist_hit_skips_the_expensive_deep_read(config):
-    """1단 — 블랙리스트에 걸리면 옛 화면 본문은 한 장도 안 받는다(비싼 정독 생략)."""
+async def test_stage3_blacklist_hit_skips_the_expensive_deep_read(config):
+    """3단 — 블랙리스트에 걸리면 옛 화면 본문은 한 장도 안 받는다(최신 한 장조차)."""
     mock_all()
 
     pipeline = fast_pipeline(config, [])
@@ -474,24 +523,105 @@ async def test_stage1_blacklist_hit_skips_the_expensive_deep_read(config):
     # 웨이백은 목록 조회(싼 것)만 하고, 본문 받기(비싼 것)는 0건이어야 한다.
     called = [str(call.request.url) for call in respx.calls]
     assert any("cdx/search/cdx" in url for url in called)
-    assert not any("id_/" in url for url in called)
+    assert body_calls() == []
     assert not any("openrouter.ai" in url for url in called)
     assert result.ai.check.status is CheckStatus.NOT_RUN
     assert result.rules.check.status is CheckStatus.NOT_RUN
 
 
 @respx.mock
-async def test_stage1_never_hands_out_a_buy_on_its_own(config):
-    """1단에서는 '좋아 보인다'로 통과시키지 않는다 — 매입 후보는 2단을 지나야 한다."""
+async def test_stage3_never_hands_out_a_buy_on_its_own(config):
+    """앞 단에서는 '좋아 보인다'로 통과시키지 않는다 — 매입 후보는 4단을 지나야 한다."""
     mock_all()
-    # AI를 끄면 2단까지 가더라도 합격 도장은 안 나온다(뜻 읽기 없이 ✅ 금지).
+    # AI를 끄면 4단까지 가더라도 합격 도장은 안 나온다(뜻 읽기 없이 ✅ 금지).
     config.keys.openrouter = ""
 
     result = (await fast_pipeline(config, []).run([DOMAIN], use_cache=False))[0]
 
     assert result.verdict is not Verdict.BUY
-    # 그래도 2단은 실제로 돌았다 — 본문을 읽었다는 증거
+    # 그래도 4단은 실제로 돌았다 — 본문을 읽었다는 증거
     assert result.wayback.versions_read > 0
+
+
+# ── 3단 신설 — 가장 최근 화면 딱 한 장으로 거르기 ──────────────────────
+
+
+@respx.mock
+async def test_stage3_machine_rules_reject_on_the_latest_page_alone(config):
+    """3단 — 최신 화면 한 장에 스팸 흔적이 겹치면 옛 화면은 한 장도 안 읽는다."""
+    mock_all()
+    # 저장된 모든 화면이 스팸 — 그중 가장 최근 한 장만 읽고 끝나야 한다.
+    respx.get(url__regex=r"https://web\.archive\.org/web/\d+id_/.*").mock(
+        side_effect=lambda request: httpx.Response(
+            200, text=spam_page(int(re.search(r"/web/(\d{4})", str(request.url)).group(1)))
+        )
+    )
+
+    result = (await fast_pipeline(config, []).run([DOMAIN], use_cache=False))[0]
+
+    assert result.verdict is Verdict.REJECT
+    assert len(body_calls()) == 1  # 최신 한 장이 전부다
+    assert "가장 최근 화면 1장" in result.wayback.coverage_note
+    assert result.rules.check.status is CheckStatus.OK
+    # 기계 규칙만으로 확정됐으면 돈 드는 AI 호출은 아예 안 한다.
+    assert result.ai.check.status is CheckStatus.NOT_RUN
+    assert not any("openrouter.ai" in str(c.request.url) for c in respx.calls)
+
+
+@respx.mock
+async def test_stage3_ai_rejects_a_page_the_rules_cannot_see(config):
+    """규칙에는 안 걸려도 AI가 인용을 들고 확신하면 3단에서 떨어뜨린다."""
+    mock_all()
+    mock_ai({"verdict": "spam", "confidence": 0.95, "quotes": ["가입 즉시 첫 충전 보너스 지급"]})
+
+    result = (await fast_pipeline(config, []).run([DOMAIN], use_cache=False))[0]
+
+    assert result.verdict is Verdict.REJECT
+    assert result.ai.spam.verdict == "spam"
+    assert len(body_calls()) == 1
+    assert "가장 최근 화면 1장" in result.wayback.coverage_note
+    # AI에게도 딱 한 번(최신 한 장)만 물었다 — 전수 판정 호출까지 가지 않았다.
+    assert len([c for c in respx.calls if "openrouter.ai" in str(c.request.url)]) == 1
+
+
+@respx.mock
+async def test_stage3_unclear_ai_is_not_a_rejection(config):
+    """애매하면 떨어뜨리지 않는다 — 좋은 도메인을 잃지 않는 쪽이 먼저다."""
+    mock_all()
+    mock_ai({"verdict": "unclear", "confidence": 0.4, "quotes": []})
+
+    result = (await fast_pipeline(config, []).run([DOMAIN], use_cache=False))[0]
+
+    assert result.verdict is not Verdict.REJECT
+    assert result.wayback.versions_read == len(YEARS)  # 4단 전수 정독까지 갔다
+    assert len(body_calls()) > 1
+
+
+@respx.mock
+async def test_stage3_ai_failure_is_not_a_pass(config):
+    """AI 호출이 실패하면 '판정 불가'다 — 합격이 아니라 4단으로 내려보낸다."""
+    mock_all()
+    respx.post("https://openrouter.ai/api/v1/chat/completions").mock(
+        return_value=httpx.Response(500)
+    )
+
+    result = (await fast_pipeline(config, []).run([DOMAIN], use_cache=False))[0]
+
+    assert result.verdict is not Verdict.REJECT
+    assert result.verdict is not Verdict.BUY  # AI 없이 합격 도장도 없다
+    assert result.wayback.versions_read == len(YEARS)  # 4단 전수 정독은 그대로 돌았다
+
+
+@respx.mock
+async def test_stage3_without_an_ai_key_still_goes_down_to_stage4(config):
+    """키가 없는 것도 '판정 불가'다 — 3단이 조용히 통과시키면 안 된다."""
+    mock_all()
+    config.keys.openrouter = ""
+
+    result = (await fast_pipeline(config, []).run([DOMAIN], use_cache=False))[0]
+
+    assert result.wayback.versions_read == len(YEARS)
+    assert result.verdict is not Verdict.BUY
 
 
 @respx.mock
@@ -534,23 +664,33 @@ def spam_page(year: int) -> str:
 
 @respx.mock
 async def test_machine_veto_stops_reading_the_rest_of_the_pages(config):
-    """2단 조기 종료 — 제외가 확정되면 남은 옛 화면은 안 받는다(웨이백 부하 절감)."""
+    """4단 조기 종료 — 제외가 확정되면 남은 옛 화면은 안 받는다(웨이백 부하 절감).
+
+    최신 화면(2024년)만 멀쩡하게 두어 3단을 통과시킨 뒤, 옛 화면들이 스팸이라
+    4단 정독 도중에 멈추는 길을 시험한다.
+    """
     mock_all()
     respx.get(url__regex=r"https://web\.archive\.org/web/\d+id_/.*").mock(
         side_effect=lambda request: httpx.Response(
-            200, text=spam_page(int(re.search(r"/web/(\d{4})", str(request.url)).group(1)))
+            200,
+            text=(
+                page_html(2024)
+                if str(request.url).startswith("https://web.archive.org/web/2024")
+                else spam_page(int(re.search(r"/web/(\d{4})", str(request.url)).group(1)))
+            ),
         )
     )
+    mock_ai({"verdict": "unclear", "confidence": 0.3, "quotes": []})
 
     result = (await fast_pipeline(config, []).run([DOMAIN], use_cache=False))[0]
 
     assert result.verdict is Verdict.REJECT
-    body_calls = [c for c in respx.calls if "id_/" in str(c.request.url)]
-    assert 0 < len(body_calls) < len(YEARS)  # 다 읽지 않고 중간에 멈췄다
+    assert 1 < len(body_calls()) < len(YEARS)  # 다 읽지 않고 중간에 멈췄다
     assert "제외가 확정" in result.wayback.coverage_note
-    # 판정이 안 바뀌는데 돈이 드는 AI 호출을 더 하지 않는다
+    # 판정이 안 바뀌는데 돈이 드는 AI 호출을 더 하지 않는다 —
+    # 남은 openrouter 호출은 3단의 '최신 한 장' 물음 하나뿐이다.
     assert result.ai.check.status is CheckStatus.NOT_RUN
-    assert not any("openrouter.ai" in str(c.request.url) for c in respx.calls)
+    assert len([c for c in respx.calls if "openrouter.ai" in str(c.request.url)]) == 1
 
 
 @respx.mock
@@ -561,6 +701,8 @@ async def test_progress_events_say_which_stage_we_are_in(config):
     await fast_pipeline(config, events).run([DOMAIN], use_cache=False)
 
     stages = {e.get("stage") for e in events if e["type"] in ("step", "notice")}
-    assert "1단" in stages
-    assert "2단" in stages
+    assert "1단" in stages  # 주인 여부
+    assert "2단" in stages  # 공개 위험 명단
+    assert "3단" in stages  # 가장 최근 화면 한 장 + 싼 조회
+    assert "4단" in stages  # 옛 화면 전수 정독
 

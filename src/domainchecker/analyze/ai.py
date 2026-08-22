@@ -273,6 +273,66 @@ async def pick_paths(
     return picked[:limit]
 
 
+# ── 3단 — 가장 최근 화면 딱 한 장만 보고 "지금 이게 스팸인가"를 묻는다 ──
+SCREEN_SYSTEM_PROMPT = (
+    "당신은 만료 도메인을 매입 전에 검수하는 SEO 리스크 심사관이다. "
+    "지금 보여 주는 것은 이 도메인의 **가장 최근에 저장된 화면 한 장**뿐이다. "
+    "이 한 장만 보고 '지금 이 도메인이 스팸으로 굴러가고 있는가'만 답하라. "
+    "spam으로 답해도 되는 경우는 이 한 장에 스팸 운영의 증거가 그대로 보일 때뿐이다 — "
+    "도어웨이 페이지, 숨긴 글자·링크, 링크 판매, 자동 생성 대량 페이지, 해킹 삽입 문구, "
+    "불법 도박·성인물·의약품·복제품 판매 같은 위험 업종 영업 화면. "
+    "판매용 빈 화면(파킹)이나 접속 오류 화면은 그 자체로는 스팸이 아니다 — "
+    "만료를 앞둔 도메인은 대부분 파킹 화면이므로 파킹만 보이면 unclear로 답하라. "
+    "합법 업종이라는 이유만으로 스팸으로 보지도 마라. "
+    "spam 판정에는 반드시 화면 본문에서 그대로 따온 인용을 근거로 넣어라. "
+    "조금이라도 애매하면 unclear로 답하라 — 여기서 잘못 떨어뜨리면 멀쩡한 도메인을 잃는다. "
+    "모든 출력 문장은 한국어로 쓴다."
+)
+
+SCREEN_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "verdict": {"type": "string", "enum": ["spam", "clean", "unclear"]},
+        "confidence": {"type": "number", "description": "0~1"},
+        "quotes": {"type": "array", "items": {"type": "string"}, "description": "본문에서 그대로 따온 근거"},
+    },
+    "required": ["verdict", "confidence", "quotes"],
+}
+
+SCREEN_TEXT_LIMIT = 12_000  # 한 장짜리 검사라 통째로 넣어도 한 호출 예산 안이다
+
+
+async def screen_latest(
+    domain: str, snapshot: SnapshotContent, client: OpenRouterClient | None
+) -> SpamJudgement | None:
+    """가장 최근 화면 한 장만 보고 스팸인지 묻는다. None = 못 물어봤다.
+
+    None은 "합격"이 아니라 "판정 불가"다 — 부르는 쪽은 이걸 통과로 읽으면 안 되고
+    다음 단(옛 화면 전수 정독)으로 내려보내야 한다.
+    """
+    if client is None or not client.api_key or not snapshot.text:
+        return None
+    prompt = (
+        f"# 검사 대상 도메인\n{domain}\n\n"
+        f"# 가장 최근 저장 화면 ({snapshot.timestamp[:4]}-{snapshot.timestamp[4:6]}"
+        f", {LANG_LABEL.get(snapshot.lang, snapshot.lang)}"
+        f"{', 파킹 페이지로 보임' if snapshot.parking else ''})\n"
+        + (f"제목: {snapshot.title}\n" if snapshot.title else "")
+        + snapshot.text[:SCREEN_TEXT_LIMIT]
+        + "\n\n# 지시\n이 한 장만 보고 스키마대로 한국어 JSON을 채워라. "
+        "확정적인 스팸 증거가 이 화면에 보일 때만 spam으로 답하고, "
+        "그 근거를 quotes에 본문 그대로 옮겨라. 애매하면 unclear."
+    )
+    try:
+        data, _, _ = await client.complete_json(
+            SCREEN_SYSTEM_PROMPT, prompt, SCREEN_SCHEMA, schema_name="latest_screen", max_tokens=600
+        )
+    except OpenRouterError:
+        return None
+    return _parse_spam(data)
+
+
 def dedupe_texts(snapshots: list[SnapshotContent]) -> list[SnapshotContent]:
     """본문이 완전히 같은 저장분은 한 번만 읽는다 — 같은 글을 두 번 읽는 건 낭비다."""
     seen: set[str] = set()

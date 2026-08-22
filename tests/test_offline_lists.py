@@ -1,4 +1,4 @@
-"""0단 — 공개 위험 명단. 실제 네트워크에는 나가지 않는다(가짜 서버로만 시험)."""
+"""2단 — 공개 위험 명단. 실제 네트워크에는 나가지 않는다(가짜 서버로만 시험)."""
 
 import os
 import time
@@ -101,7 +101,7 @@ async def test_a_failed_download_keeps_using_the_list_we_already_have(tmp_path, 
 
 @respx.mock
 async def test_no_list_at_all_just_skips_this_step(tmp_path, http):
-    """한 장도 못 받으면 0단만 건너뛴다 — 검사를 막지는 않는다."""
+    """한 장도 못 받으면 그 단만 건너뛴다 — 검사를 막지는 않는다."""
     respx.get(url__startswith=BASE).mock(side_effect=httpx.ConnectError("boom"))
 
     lists = lists_for(tmp_path, "gambling")

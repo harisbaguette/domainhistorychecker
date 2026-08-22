@@ -23,7 +23,15 @@ from .clients.openrouter import OpenRouterClient
 from .clients.wayback import WaybackClient, cluster_representatives
 from .clients.wayback import short_path as wayback_short_path
 from .config import Config, data_dir
-from .models import CheckState, CheckStatus, DomainResult, Reputation
+from .models import (
+    CheckState,
+    CheckStatus,
+    DomainResult,
+    Reputation,
+    RuleFindings,
+    SpamJudgement,
+    WaybackHistory,
+)
 from .ratelimit import AdaptiveRateLimiter
 from .report import html as report_html
 
@@ -58,14 +66,19 @@ RUN_STATE_NAME = "run_state.json"
 # 15: 깔때기 3단으로 재배치 — 0단(공짜 공개 위험 명단) → 1단(싼 조회 한 번)
 #     → 2단(살아남은 것만 본문 정독). 걸러진 도메인은 옛 화면을 아예 안 읽으므로
 #     예전 결과와 확인 범위가 달라진다 — 다시 검사해야 한다(2026-08-22)
-ENGINE_VERSION = 15
+# 16: 깔때기 4단으로 순서 재배치 — 1단(주인 여부) → 2단(공개 위험 명단) →
+#     3단(가장 최근 화면 한 장 + 싼 조회) → 4단(옛 화면 전수 정독). 3단에서
+#     걸린 도메인은 옛 화면을 한 장도 안 읽으므로 확인 범위가 달라진다 —
+#     저장분을 다시 검사해야 한다(2026-08-22)
+ENGINE_VERSION = 16
 
 # 화면 진행 문구 앞에 붙는 단계 이름 — 지금 어느 단에서 걸러지는 중인지 보이게 한다.
-STAGE_LIST = "0단"  # 공짜 — 받아 둔 명단만 본다(바깥 요청 0회)
-STAGE_CHEAP = "1단"  # 싼 조회 — 판매처·블랙리스트·웨이백 목록 한 번
-STAGE_DEEP = "2단"  # 비싼 정독 — 살아남은 것만 옛 본문을 읽는다
+STAGE_OWNER = "1단"  # 주인 여부 — 계산으로 금방 끝난다(주인이 있으면 살 수가 없다)
+STAGE_LIST = "2단"  # 공짜 — 받아 둔 명단만 본다(바깥 요청 0회)
+STAGE_RECENT = "3단"  # 가장 최근 화면 한 장 + 싼 조회(블랙리스트·색인·웨이백 목록)
+STAGE_DEEP = "4단"  # 비싼 정독 — 살아남은 것만 옛 본문을 전수로 읽는다
 
-# 2단 조기 종료 — 읽는 도중 "이건 확정 제외"가 되면 남은 장을 안 읽는다.
+# 4단 조기 종료 — 읽는 도중 "이건 확정 제외"가 되면 남은 장을 안 읽는다.
 # 흔적 3종이 겹쳐야 확정이라 몇 장은 모여야 하고, 장마다 따지면 그 계산이 더 비싸다.
 VETO_MIN_PAGES = 4  # 이만큼은 읽고 나서 따진다
 VETO_EVERY = 3  # 새 장이 이만큼 쌓일 때마다 한 번씩 따진다
@@ -154,7 +167,7 @@ class Pipeline:
         self.base = Path(base_dir) if base_dir else data_dir(config)
         self.wayback_limiter = AdaptiveRateLimiter(rpm=config.start_rpm)
         self.cancel = asyncio.Event()
-        # 0단 — 공개 위험 명단. 판이 시작할 때 한 번만 받아 두고, 도메인마다는
+        # 2단 — 공개 위험 명단. 판이 시작할 때 한 번만 받아 두고, 도메인마다는
         # 받아 둔 파일만 본다(도메인당 바깥 요청 0회).
         self.lists = OfflineLists(self.base)
         self._blocked: dict[str, list[str]] = {}
@@ -216,7 +229,7 @@ class Pipeline:
                         continue
                 pending.append(domain)
 
-            # 0단 — 공개 위험 명단을 한 번만 받아 두고, 이번 판의 도메인을 한꺼번에
+            # 2단 — 공개 위험 명단을 한 번만 받아 두고, 이번 판의 도메인을 한꺼번에
             # 걸러 둔다. 명단 훑기는 파일 읽기라 딴 일을 멈추게 하지 않도록 옆으로 뺀다.
             if pending:
                 await self._emit(
@@ -311,6 +324,7 @@ class Pipeline:
             result,
             "주인이 있는 도메인이라 나머지 분석은 하지 않았습니다(살 수 없음).",
             (
+                result.blocklist,
                 result.wayback,
                 result.spamhaus,
                 result.index,
@@ -321,7 +335,7 @@ class Pipeline:
         )
 
     def _blocklist_state(self, domain: str) -> Reputation:
-        """0단 결과 — 명단에 걸렸는지, 아니면 명단 자체를 못 봤는지."""
+        """2단 결과 — 명단에 걸렸는지, 아니면 명단 자체를 못 봤는지."""
         state = Reputation()
         if not self.lists.available:
             state.check = CheckState(status=CheckStatus.NOT_RUN, note=self.lists.note)
@@ -337,40 +351,77 @@ class Pipeline:
             state.check = CheckState(status=CheckStatus.OK, note=self.lists.note)
         return state
 
-    async def check_domain(self, domain: str, http: httpx.AsyncClient) -> DomainResult:
-        """도메인 하나의 검사 — 3단 깔때기. 어느 검사가 터져도 미확인으로만 내려앉는다.
+    async def screen_recent(
+        self,
+        domain: str,
+        wayback: WaybackClient,
+        history: WaybackHistory,
+        client: OpenRouterClient | None,
+    ) -> tuple[RuleFindings | None, SpamJudgement | None, bool]:
+        """3단 — 가장 최근 화면 **딱 한 장**만 받아 보고 "지금 스팸인가"만 따진다.
 
-        0단(공짜) 받아 둔 위험 명단에 이름이 있나 → 있으면 여기서 끝.
-        1단(싼 조회) 살 수 있나 · 블랙리스트 · 옛 기록이 얼마나 되나. 위험이
-           눈에 보이면(명단 등재·주인 있음) 여기서 끝난다. 하지만 "좋아 보인다"는
-           이유로는 절대 여기서 합격시키지 않는다 — 매입 후보는 2단을 지나야 한다.
-        2단(비싼 정독) 살아남은 것만 옛 화면 본문을 읽고 AI가 판정한다.
+        (규칙 검사 결과, AI의 스팸 판정, 확정 스팸인가)를 돌려준다. 확정일 때만
+        마지막 값이 참이다. 못 받았거나 AI가 답을 못 주면 그건 "판정 불가"이지
+        "합격"이 아니다 — 거짓으로 돌려보내 4단(전수 정독)에서 다시 보게 한다.
+
+        기계 규칙만으로 확정되면 AI에게는 아예 묻지 않는다 — 판정이 안 바뀌는데
+        도메인마다 돈이 드는 호출이다.
+        """
+        snapshot = history.latest
+        if snapshot is None:
+            return None, None, False
+        html = await wayback.fetch_snapshot(snapshot)
+        if html is None:
+            return None, None, False  # 못 읽음 = 판정 불가 → 4단으로
+
+        content = snapshot_from_page(
+            {
+                "timestamp": snapshot.timestamp,
+                "url": snapshot.raw_url,
+                "html": html,
+                "fetched": True,
+            },
+            domain,
+            self.config.snapshot_text_limit,
+        )
+        # ① 기계 규칙 — 이미 있는 계산 규칙(숨긴 글자·링크 무더기·키워드 나열)을
+        #    그 한 장에 그대로 돌린다. 흔적이 3종 겹쳐야 확정이다(4단과 같은 잣대).
+        findings = rules_analyze.analyze([content])
+        probe = DomainResult(domain=domain, rules=findings)
+        if scoring.fatal_reasons(probe):
+            return findings, None, True
+        # ② AI — 뜻을 읽어야 잡히는 것(위험 업종 영업 화면 등)은 AI가 본다.
+        spam = await ai_analyze.screen_latest(domain, content, client)
+        confirmed = bool(
+            spam is not None
+            and spam.verdict == "spam"
+            and spam.confidence >= scoring.AI_FATAL_CONFIDENCE
+            and spam.quotes
+        )
+        return findings, spam, confirmed
+
+    async def check_domain(self, domain: str, http: httpx.AsyncClient) -> DomainResult:
+        """도메인 하나의 검사 — 4단 깔때기. 어느 검사가 터져도 미확인으로만 내려앉는다.
+
+        1단(주인 여부) 살 수 있나 — 주인이 있으면 볼 것도 없이 여기서 끝.
+        2단(공짜) 받아 둔 세계 공개 위험 명단에 이름이 있나 → 있으면 여기서 끝.
+        3단(최근 모습) 가장 최근 화면 **한 장**만 보고, 같은 묶음에서 블랙리스트·
+           색인·웨이백 목록(싼 조회)도 함께 돌린다. 스팸이 확정되면 여기서 끝.
+        4단(비싼 정독) 살아남은 것만 옛 화면 본문을 전수로 읽고 AI가 판정한다.
+
+        앞 세 단은 **"나쁘다"만 판정할 수 있다.** "깨끗해 보인다"로는 어느 단도
+        매입 후보를 만들지 못하고, 매입 후보는 반드시 4단을 지난다.
         """
         result = DomainResult(domain=domain)
+        current = {"stage": STAGE_OWNER}
 
-        async def step(label: str, frac: float, stage: str = STAGE_CHEAP) -> None:
+        async def step(label: str, frac: float, stage: str = "") -> None:
             # 한 도메인 안에서 지금 무엇을 하는지 — 화면 막대가 이 토막만큼 움직인다
-            await self._emit("step", domain=domain, label=label, frac=frac, stage=stage)
-
-        # ── 0단 — 바깥으로 나가지 않는다. 판 시작 때 받아 둔 명단만 본다.
-        result.blocklist = self._blocklist_state(domain)
-        if result.blocklist.listed:
-            await step("위험 명단에 올라 있어 여기서 끝", 1.0, STAGE_LIST)
-            return self._finish(
-                result,
-                "세계 공개 위험 명단에 올라 있어 나머지 분석은 하지 않았습니다.",
-                (
-                    result.wayback,
-                    result.registration,
-                    result.spamhaus,
-                    result.index,
-                    result.safebrowsing,
-                    result.ai,
-                    result.rules,
-                ),
+            await self._emit(
+                "step", domain=domain, label=label, frac=frac, stage=stage or current["stage"]
             )
 
-        # ── 1단 — 싼 조회만. 판매처 확인이 먼저다(주인이 있으면 볼 것도 없다).
+        # ── 1단 — 주인 여부. 계산으로 금방 끝나고 AI가 필요 없는 검사라 맨 앞이다.
         await step("살 수 있는 도메인인지 확인 중", 0.05)
         try:
             result.registration = await gabia.check(domain)
@@ -383,10 +434,29 @@ class Pipeline:
         if scoring.availability_of(result.registration.acquisition) == "taken":
             return self._finish_taken(result)
 
-        # 여기까지가 싼 검사다. 웨이백도 이 단에서는 **목록 조회 한 번**만 한다 —
-        # 기록이 얼마나 되는지, 몇 해에 걸쳐 있는지, 빈 해가 있는지, 넘겨보내기만
-        # 하던 시절이 있는지, 서로 다른 내용이 몇 가지인지가 그 한 번에 다 나온다.
-        await step("옛날 기록(웨이백)이 얼마나 되는지 보는 중", 0.15)
+        # ── 2단 — 바깥으로 나가지 않는다. 판 시작 때 받아 둔 명단만 본다.
+        current["stage"] = STAGE_LIST
+        result.blocklist = self._blocklist_state(domain)
+        if result.blocklist.listed:
+            await step("위험 명단에 올라 있어 여기서 끝", 1.0)
+            return self._finish(
+                result,
+                "세계 공개 위험 명단에 올라 있어 나머지 분석은 하지 않았습니다.",
+                (
+                    result.wayback,
+                    result.spamhaus,
+                    result.index,
+                    result.safebrowsing,
+                    result.ai,
+                    result.rules,
+                ),
+            )
+
+        # ── 3단 — 가장 최근 모습 한 장 + 싼 조회 묶음. 웨이백은 여기서 **목록 조회
+        # 한 번**만 한다 — 기록이 얼마나 되는지, 빈 해가 있는지, 넘겨보내기만 하던
+        # 시절이 있는지, 그리고 가장 최근 저장분 주소가 그 한 번에 다 나온다.
+        current["stage"] = STAGE_RECENT
+        await step("가장 최근 모습과 옛날 기록(웨이백) 규모 보는 중", 0.15)
         wayback = WaybackClient(
             http,
             self.wayback_limiter,
@@ -412,9 +482,7 @@ class Pipeline:
             else:
                 setattr(result, name, value)
 
-        # 1단 즉시 제외 — **위험이 눈에 보일 때만**이다(블랙리스트 등재 같은 사실).
-        # "좋아 보인다"로는 여기서 통과시키지 않는다. 그래야 매입 후보가 2단의
-        # 본문 정독을 반드시 거친다(놓치는 스팸이 생기지 않게 하는 안전장치).
+        # 3단 즉시 제외 ① — **위험이 눈에 보일 때만**이다(블랙리스트 등재 같은 사실).
         if scoring.fatal_reasons(result):
             await step("블랙리스트에 걸려 여기서 끝", 1.0)
             return self._finish(
@@ -431,12 +499,41 @@ class Pipeline:
             )
             return self._finish(result, note, (result.ai, result.rules))
 
-        # ── 2단 — 여기부터가 비싼 정독이다. 살아남은 도메인만 들어온다.
         client = (
             OpenRouterClient(http, self.config.keys.openrouter, self.config.model_chain())
             if self.config.keys.openrouter
             else None
         )
+
+        # 3단 즉시 제외 ② — 가장 최근 화면 한 장이 확정 스팸이면 옛 화면은 안 읽는다.
+        await step("가장 최근 화면 한 장 보는 중", 0.2)
+        latest_rules, latest_spam, recent_spam = await self.screen_recent(
+            domain, wayback, result.wayback, client
+        )
+        if recent_spam:
+            result.rules = latest_rules
+            if latest_spam is not None:
+                result.ai.spam = latest_spam
+                result.ai.verdict = "reject"
+                result.ai.verdict_reason = "가장 최근 화면이 스팸으로 판정됐습니다."
+                result.ai.check = CheckState(
+                    status=CheckStatus.OK,
+                    note="가장 최근 화면 한 장만 AI가 보고 판정했습니다(옛 화면 전수 정독은 하지 않았습니다).",
+                )
+            else:
+                result.ai.check = CheckState(
+                    status=CheckStatus.NOT_RUN,
+                    note="가장 최근 화면만으로 제외가 확정되어 AI 판정은 건너뛰었습니다.",
+                )
+            result.wayback.coverage_note = (
+                "가장 최근 화면 1장을 읽은 자리에서 제외가 확정되어 옛 화면 전수 정독은 하지 않았습니다."
+            )
+            result.wayback.subpages = []
+            await step("가장 최근 화면이 스팸이라 여기서 끝", 1.0)
+            return self._finish(result, "", ())
+
+        # ── 4단 — 여기부터가 비싼 정독이다. 살아남은 도메인만 들어온다.
+        current["stage"] = STAGE_DEEP
         # 기계 거부권이 확정되면 남은 장을 더 읽지 않는다 — 판정이 안 바뀌는 읽기다.
         # 읽은 화면은 한 번만 뜯어 두고(같은 장을 다시 뜯으면 장수의 제곱만큼 느려진다),
         # 새 장이 몇 개 쌓였을 때만 다시 따져 본다.
@@ -465,7 +562,7 @@ class Pipeline:
             result.wayback = await wayback.deep_read(
                 domain, result.wayback, on_progress=page_progress, should_stop=machine_veto
             )
-        except Exception as exc:  # noqa: BLE001 — 정독이 터져도 1단까지의 사실은 지킨다
+        except Exception as exc:  # noqa: BLE001 — 정독이 터져도 3단까지의 사실은 지킨다
             result.errors.append(f"wayback: {type(exc).__name__}: {exc}")
             result.wayback.check = CheckState(
                 status=CheckStatus.UNCHECKED, note=f"옛 화면 정독 중 오류가 났습니다({type(exc).__name__})."

@@ -78,7 +78,7 @@ def test_estimate_matches_the_plan_budget():
     assert numbers["minutes"] == pytest.approx(150.0)
     assert numbers["table_minutes"] == pytest.approx(143.3, abs=0.1)
     assert numbers["slow_minutes"] == pytest.approx(375.0)
-    # 깔때기 바닥값 — 전부 1단에서 끝나면 도메인당 웨이백 목록 한 번뿐이다
+    # 깔때기 바닥값 — 전부 3단에서 끝나면 도메인당 웨이백 목록 한 번뿐이다
     assert numbers["fast_minutes"] == pytest.approx(3.3, abs=0.1)
 
 

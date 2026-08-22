@@ -1,10 +1,11 @@
-"""Wayback Machine — 싼 목록 조회(1단)와 전수 정독(2단)을 나눠 둔 자리.
+"""Wayback Machine — 싼 목록 조회(3단)와 전수 정독(4단)을 나눠 둔 자리.
 
-`timeline()` 하나가 1단이다 — 목록 조회 **한 번**으로 이력 규모·연도 범위·빈 해·
-넘겨보내기 비율·서로 다른 내용 수를 뽑는다. 여기서 걸러진 도메인은 아래 정독으로
+`timeline()` 하나가 3단이다 — 목록 조회 **한 번**으로 이력 규모·연도 범위·빈 해·
+넘겨보내기 비율·서로 다른 내용 수를 뽑고, 덤으로 **가장 최근 저장분 한 장**(`latest`)의
+주소까지 얻는다. 3단은 그 한 장만 받아 보고, 여기서 걸러진 도메인은 아래 정독으로
 내려오지 않으므로, 웨이백을 두드리는 횟수가 도메인 수만큼이 아니라 살아남은 수만큼이 된다.
 
-`deep_read()` 가 2단(비싼 정독)이다. 표본을 몇 장 뽑아 읽는 방식은 버리고 세 가지를
+`deep_read()` 가 4단(비싼 정독)이다. 표본을 몇 장 뽑아 읽는 방식은 버리고 세 가지를
 전부 가져온다:
   1) 활동 통계 — 월별로 접은 저장 목록(연도 분포·공백·리다이렉트 비율).
   2) 앞페이지 변경본 전부 — 내용이 바뀐 시점마다 저장된 서로 다른 판(digest
@@ -173,6 +174,8 @@ class WaybackClient:
         history.total_captures = len(captures)
         history.first_seen = captures[0].timestamp
         history.last_seen = captures[-1].timestamp
+        # 3단이 "가장 최근 모습"으로 받아 볼 딱 한 장 — 같은 조회에서 그냥 나온다.
+        history.latest = captures[-1]
         # 같은 조회로 함께 나온 내용 지문(digest)을 세어 둔다 — 달마다 저장은 됐는데
         # 내용이 한 가지뿐이면 여러 해 동안 빈 화면만 걸려 있었다는 뜻이다.
         history.unique_digests = len({c.digest for c in captures if c.digest})
@@ -230,9 +233,9 @@ class WaybackClient:
         return response.text
 
     async def collect(self, domain: str, on_progress=None) -> WaybackHistory:
-        """싼 목록 조회(1단)와 비싼 본문 정독(2단)을 이어서 한 번에 하는 길.
+        """싼 목록 조회(3단)와 비싼 본문 정독(4단)을 이어서 한 번에 하는 길.
 
-        깔때기를 쓰는 파이프라인은 이 둘을 따로 부른다 — 1단에서 걸러진 도메인은
+        깔때기를 쓰는 파이프라인은 이 둘을 따로 부른다 — 3단에서 걸러진 도메인은
         본문 정독까지 가지 않기 때문이다. 이 함수는 둘을 붙여 둔 편의용이다.
         """
         history = await self.timeline(domain)
@@ -247,7 +250,7 @@ class WaybackClient:
         on_progress=None,
         should_stop=None,
     ) -> WaybackHistory:
-        """2단(비싼 정독) — 목록은 전부 훑고, 읽을 곳은 골라 본문을 읽는다.
+        """4단(비싼 정독) — 목록은 전부 훑고, 읽을 곳은 골라 본문을 읽는다.
 
         on_progress(i, n)를 주면 변경본 한 장을 받을 때마다 알려 준다 — 긴 구간이라
         이게 없으면 진행 막대가 죽은 것처럼 보인다.

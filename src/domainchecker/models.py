@@ -62,7 +62,7 @@ CHECK_LABEL = {
     "ai": "AI 분석",
     "rules": "운영방식 규칙 검사",
     "safebrowsing": "세이프 브라우징",
-    # 0단은 맨 뒤에 적는다 — 명단을 못 받은 날엔 모든 도메인에 이 줄이 붙는데,
+    # 공개 위험 명단(2단)은 맨 뒤에 적는다 — 명단을 못 받은 날엔 모든 도메인에 이 줄이 붙는데,
     # 그게 미실시 목록 맨 앞에 서면 진짜 못 한 검사가 뒤로 밀려 안 보인다.
     "blocklist": "공개 위험 명단(UT1)",
 }
@@ -112,12 +112,14 @@ class WaybackHistory(BaseModel):
     path_samples: list[str] = Field(default_factory=list)  # "YYYY /경로" — 전체 주소 목록
     versions_total: int = 0  # 앞페이지의 서로 다른 변경본 수
     versions_read: int = 0  # 그중 본문을 실제로 읽은 수
-    # 1단(싼 검사)에서 목록 한 번만 보고 센 서로 다른 본문 수 — 내내 한 가지면
+    # 3단(싼 검사)에서 목록 한 번만 보고 센 서로 다른 본문 수 — 내내 한 가지면
     # 판매용 빈 화면일 가능성이 크고, 여럿이면 진짜 굴러간 사이트다.
     unique_digests: int = 0
     coverage_note: str = ""  # 확인 범위를 숫자로 적은 한 줄
     # 하위 주소별 저장분(정독 후보 선별용) — 결과 파일에는 싣지 않는다.
     subpages: list[Snapshot] = Field(default_factory=list, exclude=True)
+    # 가장 최근에 저장된 화면 한 장(3단이 이 한 장만 받아 본다) — 결과에는 안 싣는다.
+    latest: Snapshot | None = Field(default=None, exclude=True)
 
     @property
     def has_history(self) -> bool:
@@ -239,7 +241,7 @@ class DomainResult(BaseModel):
     availability: str = "unknown"  # free | soon | auction | taken | unknown
     availability_label: str = AVAILABILITY_LABEL["unknown"]
 
-    blocklist: Reputation = Reputation()  # 0단 — 공개 위험 명단 등재 여부
+    blocklist: Reputation = Reputation()  # 2단 — 공개 위험 명단 등재 여부
     wayback: WaybackHistory = WaybackHistory()
     registration: Registration = Registration()
     spamhaus: Reputation = Reputation()

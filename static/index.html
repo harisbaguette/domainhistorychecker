@@ -813,8 +813,9 @@ function markStart(done) {
   startedAt = Date.now();
   doneBase = done || 0;
 }
-/* 검사는 세 단으로 나뉘어 있다 — 몇 단에서 하는 일인지 앞에 붙여 준다.
-   0단은 공짜, 1단은 싼 조회, 2단은 옛 화면을 통째로 읽는 비싼 단계다. */
+/* 검사는 네 단으로 나뉘어 있다 — 몇 단에서 하는 일인지 앞에 붙여 준다.
+   1단은 주인 여부, 2단은 공짜 위험 명단, 3단은 가장 최근 화면 한 장 + 싼 조회,
+   4단은 옛 화면을 통째로 읽는 비싼 단계다. */
 function stepLabel(ev) { return ev.stage ? ev.stage + " · " + ev.label : ev.label; }
 /* 지금 하는 단계를 글자로 — "도메인 — 무엇을 하는 중 · 몇 초 (몇/몇)" */
 function paintStep() {

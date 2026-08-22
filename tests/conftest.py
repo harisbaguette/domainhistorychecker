@@ -25,7 +25,7 @@ OK = CheckState(status=CheckStatus.OK)
 
 @pytest.fixture(autouse=True)
 def _offline_lists_stay_offline(monkeypatch):
-    """0단 위험 명단을 진짜로 내려받지 않는다 — 시험은 인터넷에 나가지 않는다.
+    """위험 명단(2단)을 진짜로 내려받지 않는다 — 시험은 인터넷에 나가지 않는다.
 
     명단 받기 자체를 시험하는 파일(test_offline_lists.py)은 이 자리를 다시
     덮어써서 가짜 서버로 받아 본다.
@@ -49,7 +49,7 @@ def blacklist_bytes(category: str, domains: list[str]) -> bytes:
 
 
 def put_blacklist(base: Path | str, category: str, domains: list[str]) -> Path:
-    """받아 둔 명단이 이미 있는 상태로 만든다(내려받기 없이 0단을 켜는 길)."""
+    """받아 둔 명단이 이미 있는 상태로 만든다(내려받기 없이 2단을 켜는 길)."""
     from domainchecker.clients.offline_lists import cache_dir
 
     target = cache_dir(base) / f"{category}.tar.gz"

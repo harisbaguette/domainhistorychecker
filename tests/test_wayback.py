@@ -124,7 +124,7 @@ async def test_collect_reads_every_distinct_front_page_version(http):
 
 @respx.mock
 async def test_timeline_counts_how_many_different_contents_there_were(http):
-    """1단은 목록 조회 한 번으로 '서로 다른 내용이 몇 가지였나'까지 뽑는다.
+    """3단은 목록 조회 한 번으로 '서로 다른 내용이 몇 가지였나'까지 뽑는다.
 
     달마다 저장은 됐는데 내용이 한 가지뿐이면 여러 해 동안 빈 화면만 걸려 있던 것이다.
     """
