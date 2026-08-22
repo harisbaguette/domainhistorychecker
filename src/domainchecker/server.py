@@ -236,16 +236,25 @@ class RunManager:
 # 도메인마다 읽을 양이 달라 미리 알 수 없다 — 평균 가정치로 안내한다.
 # (앞페이지 변경본 평균 25장 + AI가 고른 하위 페이지 최대 20장 ≈ 40, 목록 조회 3번.)
 AVG_PAGES_ASSUMED = 40
+# 3단 깔때기의 바닥값 — 1단에서 끝나는 도메인이 웨이백에 쓰는 횟수는 목록 조회 한 번뿐이다.
+# 위험 명단(0단)에 걸린 도메인은 이마저도 0회지만, 목록에 몇 개가 걸릴지는 미리 알 수 없어
+# 바닥값에는 세지 않는다(실제는 이보다 짧아진다).
+CHEAP_STAGE_REQUESTS = 1
 
 
 def estimate(config: Config, count: int) -> dict:
-    """예상 소요 시간과 무료 쿼터 소진량 — 전수 확인이라 평균 가정치 기준."""
+    """예상 소요 시간과 무료 쿼터 소진량.
+
+    깔때기라서 도메인마다 드는 값이 다르다 — 1단에서 끝나면 웨이백 한 번, 2단까지
+    가면 본문 수십 장이다. 그래서 하나의 값이 아니라 바닥과 천장을 함께 안내한다.
+    """
     per_domain = 3 + AVG_PAGES_ASSUMED + (2 if config.enable_capture else 0)
     table_per_domain = 3 + AVG_PAGES_ASSUMED
     rpm = config.start_rpm
     minutes = count * per_domain / rpm
     table_minutes = count * table_per_domain / rpm
     slow_minutes = count * per_domain / 12
+    fast_minutes = count * CHEAP_STAGE_REQUESTS / rpm
     ai_cost = count * (
         AI_INPUT_TOKENS * AI_INPUT_PRICE + AI_OUTPUT_TOKENS * AI_OUTPUT_PRICE
     ) / 1_000_000
@@ -258,14 +267,17 @@ def estimate(config: Config, count: int) -> dict:
         "count": count,
         "wayback_requests": count * per_domain,
         "minutes": round(minutes, 1),
+        "fast_minutes": round(fast_minutes, 1),
         "table_minutes": round(table_minutes, 1),
         "slow_minutes": round(slow_minutes, 1),
         "summary": (
             "분석할 도메인이 없습니다."
             if count == 0
             else (
-                f"도메인 {count}개 · 오래 걸려도 표 결과는 {_minutes(table_minutes)}, 사진까지 {_minutes(minutes)} 안쪽입니다. "
-                f"주인 있는 도메인과 기록 없는 도메인은 몇 초 만에 끝나 실제로는 훨씬 짧아질 수 있고, "
+                f"도메인 {count}개 · 위험 명단에 걸리거나 이미 주인이 있는 것은 앞 단계에서 끝나서, "
+                f"그런 것만 있으면 {_minutes(fast_minutes)}에 끝납니다. "
+                f"반대로 전부 옛 화면 정독까지 가면 표 결과 {_minutes(table_minutes)}, "
+                f"사진까지 {_minutes(minutes)}이고, "
                 f"옛날 화면 보관소(웨이백)가 잠깐 막으면 {_minutes(slow_minutes)}까지 늘어날 수 있습니다."
             )
         ),

@@ -8,6 +8,7 @@ import dns.resolver
 import httpx
 import pytest
 import respx
+from conftest import put_blacklist
 
 from domainchecker.clients import freeindex, gabia
 from domainchecker.config import ApiKeys, Config
@@ -414,4 +415,152 @@ async def test_capture_phase_stays_silent_after_a_stop(config, sample_result):
     pipeline.stop()
     await pipeline.capture_phase([sample_result])
     assert events == []
+
+
+# ─────────────────────────── 깔때기 3단 ───────────────────────────
+
+
+class ListedResolver:
+    """스팸하우스 조회: 127.0.1.2 = 스팸 도메인으로 등재됨."""
+
+    async def resolve(self, qname, rdtype):
+        return ["127.0.1.2"]
+
+
+@respx.mock
+async def test_stage0_listed_domain_is_rejected_without_touching_the_network(config, tmp_path):
+    """0단 — 받아 둔 명단에 있으면 바깥으로 한 번도 안 나가고 그 자리에서 끝난다."""
+    mock_all()
+    put_blacklist(tmp_path / "data", "gambling", [DOMAIN])
+
+    results = await fast_pipeline(config, []).run([DOMAIN], use_cache=False)
+    result = results[0]
+
+    assert result.verdict is Verdict.REJECT
+    assert result.blocklist.listed is True
+    assert "도박 명단(UT1 툴루즈" in result.blocklist.codes[0]
+    assert any("세계 공개 위험 명단" in reason for reason in result.fatal_reasons)
+    # 판매처·웨이백·AI 어느 쪽으로도 나가지 않았다 — 0단이 공짜인 이유다.
+    assert len(respx.calls) == 0
+    assert result.registration.check.status is CheckStatus.NOT_RUN
+    assert result.wayback.check.status is CheckStatus.NOT_RUN
+    assert result.ai.check.status is CheckStatus.NOT_RUN
+
+
+@respx.mock
+async def test_stage0_leaves_a_clean_domain_alone(config, tmp_path):
+    """명단에 없는 도메인은 0단에서 아무것도 잃지 않고 2단까지 그대로 간다."""
+    mock_all()
+    put_blacklist(tmp_path / "data", "gambling", ["someone-else.com"])
+
+    result = (await fast_pipeline(config, []).run([DOMAIN], use_cache=False))[0]
+
+    assert result.blocklist.check.status is CheckStatus.OK
+    assert result.blocklist.listed is False
+    assert result.verdict is Verdict.BUY
+
+
+@respx.mock
+async def test_stage1_blacklist_hit_skips_the_expensive_deep_read(config):
+    """1단 — 블랙리스트에 걸리면 옛 화면 본문은 한 장도 안 받는다(비싼 정독 생략)."""
+    mock_all()
+
+    pipeline = fast_pipeline(config, [])
+    pipeline.resolver = ListedResolver()
+    result = (await pipeline.run([DOMAIN], use_cache=False))[0]
+
+    assert result.verdict is Verdict.REJECT
+    assert result.spamhaus.listed is True
+    # 웨이백은 목록 조회(싼 것)만 하고, 본문 받기(비싼 것)는 0건이어야 한다.
+    called = [str(call.request.url) for call in respx.calls]
+    assert any("cdx/search/cdx" in url for url in called)
+    assert not any("id_/" in url for url in called)
+    assert not any("openrouter.ai" in url for url in called)
+    assert result.ai.check.status is CheckStatus.NOT_RUN
+    assert result.rules.check.status is CheckStatus.NOT_RUN
+
+
+@respx.mock
+async def test_stage1_never_hands_out_a_buy_on_its_own(config):
+    """1단에서는 '좋아 보인다'로 통과시키지 않는다 — 매입 후보는 2단을 지나야 한다."""
+    mock_all()
+    # AI를 끄면 2단까지 가더라도 합격 도장은 안 나온다(뜻 읽기 없이 ✅ 금지).
+    config.keys.openrouter = ""
+
+    result = (await fast_pipeline(config, []).run([DOMAIN], use_cache=False))[0]
+
+    assert result.verdict is not Verdict.BUY
+    # 그래도 2단은 실제로 돌았다 — 본문을 읽었다는 증거
+    assert result.wayback.versions_read > 0
+
+
+@respx.mock
+async def test_no_history_domain_finishes_without_reading_anything(config):
+    """기록이 없으면 몇 초 만에 끝난다 — 변경본·하위 주소 조회조차 하지 않는다."""
+    respx.get(url__startswith="https://web.archive.org/cdx/search/cdx").mock(
+        return_value=httpx.Response(200, json=[])
+    )
+    respx.post(gabia.CHECK_URL).mock(return_value=httpx.Response(200, json=GABIA_BACKORDER))
+    respx.get(freeindex.COLLINFO_URL).mock(
+        return_value=httpx.Response(200, json=[{"id": "CC-MAIN-2026-30", "cdx-api": CDX}])
+    )
+    respx.get(url__startswith=CDX).mock(return_value=httpx.Response(200, text=CRAWL_TEXT))
+    respx.get(f"https://{DOMAIN}/").mock(return_value=httpx.Response(200, html="<html></html>"))
+    respx.get(url__startswith="https://transparencyreport.google.com/").mock(
+        return_value=httpx.Response(200, text=SAFEBROWSING_CLEAN)
+    )
+
+    result = (await fast_pipeline(config, []).run([DOMAIN], use_cache=False))[0]
+
+    assert result.verdict is Verdict.NO_HISTORY
+    cdx_calls = [c for c in respx.calls if "cdx/search/cdx" in str(c.request.url)]
+    assert len(cdx_calls) == 1  # 목록 조회 딱 한 번
+    assert not any("id_/" in str(c.request.url) for c in respx.calls)
+    assert result.ai.check.status is CheckStatus.NOT_RUN
+
+
+def spam_page(year: int) -> str:
+    """규칙 검사가 흔적 3종 넘게 잡을 화면 — 숨긴 글자 + 링크 무더기 + 키워드 나열."""
+    links = "".join(
+        f'<a href="https://out{i}.example.org/go">바로가기</a>' for i in range(60)
+    )
+    stuffed = ", ".join(["바카라", "슬롯", "룰렛", "블랙잭", "포커", "토토", "환전", "가입", "쿠폰"] * 20)
+    return (
+        "<html><head><title>추천 순위</title></head><body>"
+        '<div style="display:none">숨긴 글자입니다</div>'
+        f"<p>{stuffed}</p>{links}</body></html>"
+    )
+
+
+@respx.mock
+async def test_machine_veto_stops_reading_the_rest_of_the_pages(config):
+    """2단 조기 종료 — 제외가 확정되면 남은 옛 화면은 안 받는다(웨이백 부하 절감)."""
+    mock_all()
+    respx.get(url__regex=r"https://web\.archive\.org/web/\d+id_/.*").mock(
+        side_effect=lambda request: httpx.Response(
+            200, text=spam_page(int(re.search(r"/web/(\d{4})", str(request.url)).group(1)))
+        )
+    )
+
+    result = (await fast_pipeline(config, []).run([DOMAIN], use_cache=False))[0]
+
+    assert result.verdict is Verdict.REJECT
+    body_calls = [c for c in respx.calls if "id_/" in str(c.request.url)]
+    assert 0 < len(body_calls) < len(YEARS)  # 다 읽지 않고 중간에 멈췄다
+    assert "제외가 확정" in result.wayback.coverage_note
+    # 판정이 안 바뀌는데 돈이 드는 AI 호출을 더 하지 않는다
+    assert result.ai.check.status is CheckStatus.NOT_RUN
+    assert not any("openrouter.ai" in str(c.request.url) for c in respx.calls)
+
+
+@respx.mock
+async def test_progress_events_say_which_stage_we_are_in(config):
+    """화면에 단계가 보여야 '지금 싼 검사인지 비싼 정독인지'를 사람이 안다."""
+    mock_all()
+    events = []
+    await fast_pipeline(config, events).run([DOMAIN], use_cache=False)
+
+    stages = {e.get("stage") for e in events if e["type"] in ("step", "notice")}
+    assert "1단" in stages
+    assert "2단" in stages
 

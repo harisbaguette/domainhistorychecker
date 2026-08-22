@@ -78,6 +78,16 @@ def test_estimate_matches_the_plan_budget():
     assert numbers["minutes"] == pytest.approx(150.0)
     assert numbers["table_minutes"] == pytest.approx(143.3, abs=0.1)
     assert numbers["slow_minutes"] == pytest.approx(375.0)
+    # 깔때기 바닥값 — 전부 1단에서 끝나면 도메인당 웨이백 목록 한 번뿐이다
+    assert numbers["fast_minutes"] == pytest.approx(3.3, abs=0.1)
+
+
+def test_estimate_tells_the_user_both_ends_of_the_funnel():
+    """천장만 알려 주면 실제보다 몇 배 길게 겁을 준다 — 바닥도 함께 적혀야 한다."""
+    summary = estimate(Config(), 100)["summary"]
+
+    assert "앞 단계에서 끝나서" in summary
+    assert "전부 옛 화면 정독까지 가면" in summary
 
 
 def test_config_saves_keys_and_keeps_them_when_left_blank(client, config_path, monkeypatch):

@@ -1,6 +1,11 @@
-"""Wayback Machine — 전수 확인.
+"""Wayback Machine — 싼 목록 조회(1단)와 전수 정독(2단)을 나눠 둔 자리.
 
-표본을 몇 장 뽑아 읽는 방식은 버렸다. 세 가지를 전부 가져온다:
+`timeline()` 하나가 1단이다 — 목록 조회 **한 번**으로 이력 규모·연도 범위·빈 해·
+넘겨보내기 비율·서로 다른 내용 수를 뽑는다. 여기서 걸러진 도메인은 아래 정독으로
+내려오지 않으므로, 웨이백을 두드리는 횟수가 도메인 수만큼이 아니라 살아남은 수만큼이 된다.
+
+`deep_read()` 가 2단(비싼 정독)이다. 표본을 몇 장 뽑아 읽는 방식은 버리고 세 가지를
+전부 가져온다:
   1) 활동 통계 — 월별로 접은 저장 목록(연도 분포·공백·리다이렉트 비율).
   2) 앞페이지 변경본 전부 — 내용이 바뀐 시점마다 저장된 서로 다른 판(digest
      기준)을 모두 받아, 그 본문을 전부 읽는다. 내용이 같은 저장분을 또 읽는
@@ -168,6 +173,9 @@ class WaybackClient:
         history.total_captures = len(captures)
         history.first_seen = captures[0].timestamp
         history.last_seen = captures[-1].timestamp
+        # 같은 조회로 함께 나온 내용 지문(digest)을 세어 둔다 — 달마다 저장은 됐는데
+        # 내용이 한 가지뿐이면 여러 해 동안 빈 화면만 걸려 있었다는 뜻이다.
+        history.unique_digests = len({c.digest for c in captures if c.digest})
         for capture in captures:
             key = capture.timestamp[:4]
             history.year_counts[key] = history.year_counts.get(key, 0) + 1
@@ -222,20 +230,35 @@ class WaybackClient:
         return response.text
 
     async def collect(self, domain: str, on_progress=None) -> WaybackHistory:
-        """사람이 보는 방식 그대로 — 목록은 전부 훑고, 읽을 곳은 골라 정독한다.
+        """싼 목록 조회(1단)와 비싼 본문 정독(2단)을 이어서 한 번에 하는 길.
+
+        깔때기를 쓰는 파이프라인은 이 둘을 따로 부른다 — 1단에서 걸러진 도메인은
+        본문 정독까지 가지 않기 때문이다. 이 함수는 둘을 붙여 둔 편의용이다.
+        """
+        history = await self.timeline(domain)
+        if not history.check.ok or not history.has_history:
+            return history
+        return await self.deep_read(domain, history, on_progress=on_progress)
+
+    async def deep_read(
+        self,
+        domain: str,
+        history: WaybackHistory,
+        on_progress=None,
+        should_stop=None,
+    ) -> WaybackHistory:
+        """2단(비싼 정독) — 목록은 전부 훑고, 읽을 곳은 골라 본문을 읽는다.
 
         on_progress(i, n)를 주면 변경본 한 장을 받을 때마다 알려 준다 — 긴 구간이라
         이게 없으면 진행 막대가 죽은 것처럼 보인다.
+        should_stop()이 참을 돌려주면 남은 장은 읽지 않고 멈춘다 — 이미 제외가
+        확정된 도메인의 옛 화면을 더 받는 것은 시간과 남의 서버만 축내는 일이다.
 
         ① 앞페이지가 내용이 바뀐 시점의 판은 전부 본문을 읽는다(달력에서 바뀐
            지점을 찍어 보는 것과 같음). ② 하위 주소는 목록을 전부 받아 두되,
            본문 정독은 AI가 수상하다고 고른 곳만 한다(선별·정독은 파이프라인).
         몇 장을 읽었는지는 coverage_note에 숫자로 남는다.
         """
-        history = await self.timeline(domain)
-        if not history.check.ok or not history.has_history:
-            return history
-
         versions = await self.versions(domain)
         if versions is None:
             history.check = CheckState(
@@ -259,7 +282,11 @@ class WaybackClient:
         history.subpages = subpages
         history.path_samples = _year_paths(subpages)
 
+        stopped_at = 0
         for i, snapshot in enumerate(reps, start=1):
+            if should_stop is not None and should_stop():
+                stopped_at = i - 1
+                break
             if on_progress is not None:
                 await on_progress(i, len(reps))
             html = await self.fetch_snapshot(snapshot)
@@ -273,10 +300,16 @@ class WaybackClient:
             )
         history.versions_read = sum(1 for p in history.pages if p["fetched"])
 
-        failed = len(reps) - history.versions_read
+        read_count = stopped_at or len(reps)
+        failed = read_count - history.versions_read
         over_v = " 이상(조회 한도)" if len(versions) >= CDX_LIMIT else ""
         over_s = " 이상(조회 한도)" if len(subpages) >= CDX_LIMIT - 1 else ""
-        if len(reps) == len(versions):
+        if stopped_at:
+            read_part = (
+                f"앞페이지 변경본 {len(versions)}장{over_v} 중 {stopped_at}장을 읽은 자리에서 "
+                "제외가 확정되어 나머지는 읽지 않음"
+            )
+        elif len(reps) == len(versions):
             read_part = f"앞페이지 변경본 {len(versions)}장{over_v} 전부 읽음"
         else:
             read_part = (
@@ -290,10 +323,16 @@ class WaybackClient:
         )
         return history
 
-    async def read_subpages(self, snapshots: list[Snapshot]) -> list[dict]:
-        """골라낸 하위 페이지들의 본문을 읽어 pages 형식으로 돌려준다."""
+    async def read_subpages(self, snapshots: list[Snapshot], should_stop=None) -> list[dict]:
+        """골라낸 하위 페이지들의 본문을 읽어 pages 형식으로 돌려준다.
+
+        should_stop()이 참이 되면 그 자리에서 멈춘다 — 제외가 이미 확정됐는데
+        옛 화면을 더 받아 봐야 판정은 바뀌지 않는다.
+        """
         pages = []
         for snapshot in snapshots:
+            if should_stop is not None and should_stop():
+                break
             html = await self.fetch_snapshot(snapshot)
             pages.append(
                 {

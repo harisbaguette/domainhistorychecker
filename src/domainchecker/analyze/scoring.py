@@ -4,6 +4,7 @@
 살 가치가 있나, 어떤 주제로 이어야 하나)는 AI가 하고, 기계는 사실만으로
 거부권을 행사한다:
 
+  0. 공개 위험 명단(UT1 툴루즈) 등재 → 무조건 제외(0단에서 바로 끝난다)
   1. 전과 명단(스팸하우스·세이프 브라우징) 등재 → 무조건 제외
   2. 규칙 검사(구조 세기)가 스팸 흔적 3종 이상 → 제외
   3. AI가 인용을 들고 확신(0.7 이상)으로 스팸 판정 → 제외
@@ -35,6 +36,7 @@ RULES_FATAL_HITS = 3  # AI 없이 규칙만으로 치명(❌)을 낼 최소 흔�
 
 def _check_of(result: DomainResult, name: str):
     return {
+        "blocklist": result.blocklist.check,
         "wayback": result.wayback.check,
         "registration": result.registration.check,
         "spamhaus": result.spamhaus.check,
@@ -159,6 +161,8 @@ def availability_of(acquisition: str) -> str:
 def fatal_reasons(result: DomainResult) -> list[str]:
     """기계 거부권 — 명단 등재, 또는 확정된 스팸 운영."""
     reasons = []
+    if result.blocklist.check.ok and result.blocklist.listed:
+        reasons.append("세계 공개 위험 명단에 올라 있습니다: " + ", ".join(result.blocklist.codes))
     if result.spamhaus.check.ok and result.spamhaus.listed:
         reasons.append("스팸하우스 블랙리스트에 올라 있습니다: " + ", ".join(result.spamhaus.codes))
     if result.safebrowsing.check.ok and result.safebrowsing.listed:

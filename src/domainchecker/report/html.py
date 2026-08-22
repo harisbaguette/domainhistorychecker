@@ -482,7 +482,8 @@ def detail_fragment(result: DomainResult, capture_base: str = "../captures") -> 
 <p>{index_line}</p>
 {_list(result.index.titles[:10], "색인된 제목 없음")}
 <h3>블랙리스트</h3>
-<p>스팸하우스: {_check_line(result.spamhaus.check)}<br>
+<p>공개 위험 명단(UT1): {_check_line(result.blocklist.check)}<br>
+스팸하우스: {_check_line(result.spamhaus.check)}<br>
 세이프 브라우징: {_check_line(result.safebrowsing.check)}</p>
 
 <h2>8. 확인하지 못한 것</h2>

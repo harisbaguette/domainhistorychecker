@@ -123,6 +123,52 @@ async def test_collect_reads_every_distinct_front_page_version(http):
 
 
 @respx.mock
+async def test_timeline_counts_how_many_different_contents_there_were(http):
+    """1단은 목록 조회 한 번으로 '서로 다른 내용이 몇 가지였나'까지 뽑는다.
+
+    달마다 저장은 됐는데 내용이 한 가지뿐이면 여러 해 동안 빈 화면만 걸려 있던 것이다.
+    """
+    respx.get(url__startswith="https://web.archive.org/cdx").mock(
+        return_value=httpx.Response(
+            200,
+            json=rows(
+                [
+                    ["20180101000000", "http://x.com/", "200", "text/html", "SAME"],
+                    ["20190101000000", "http://x.com/", "200", "text/html", "SAME"],
+                    ["20200101000000", "http://x.com/", "200", "text/html", "OTHER"],
+                ]
+            ),
+        )
+    )
+
+    history = await WaybackClient(http, fast_limiter()).timeline("x.com")
+
+    assert history.total_captures == 3
+    assert history.unique_digests == 2
+
+
+@respx.mock
+async def test_reading_stops_where_the_machine_veto_lands(http):
+    """제외가 확정된 뒤의 옛 화면 받기는 판정을 못 바꾼다 — 그 자리에서 멈춘다."""
+    snaps = [
+        Snapshot(timestamp=f"20{y}0101000000", original="http://x.com/p", status_code="200")
+        for y in range(10, 20)
+    ]
+    route = respx.get(url__regex=r"https://web\.archive\.org/web/\d+id_/.*").mock(
+        return_value=httpx.Response(200, text="<html><body>본문</body></html>")
+    )
+    stop = {"after": 3}
+
+    def should_stop():
+        return route.call_count >= stop["after"]
+
+    pages = await WaybackClient(http, fast_limiter()).read_subpages(snaps, should_stop=should_stop)
+
+    assert len(pages) == 3
+    assert route.call_count == 3
+
+
+@respx.mock
 async def test_version_query_failure_is_reported_not_hidden(http):
     """변경본 목록을 못 받으면 '확인함'이라 말하지 않는다 — 전수 약속이 깨진 것이다."""
 

@@ -1,7 +1,11 @@
+import io
+import tarfile
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
+from domainchecker.clients.offline_lists import OfflineLists
 from domainchecker.models import (
     AIAnalysis,
     CheckState,
@@ -17,6 +21,41 @@ from domainchecker.models import (
 )
 
 OK = CheckState(status=CheckStatus.OK)
+
+
+@pytest.fixture(autouse=True)
+def _offline_lists_stay_offline(monkeypatch):
+    """0단 위험 명단을 진짜로 내려받지 않는다 — 시험은 인터넷에 나가지 않는다.
+
+    명단 받기 자체를 시험하는 파일(test_offline_lists.py)은 이 자리를 다시
+    덮어써서 가짜 서버로 받아 본다.
+    """
+
+    async def no_download(self, http, category):
+        return False
+
+    monkeypatch.setattr(OfflineLists, "_download", no_download)
+
+
+def blacklist_bytes(category: str, domains: list[str]) -> bytes:
+    """UT1 명단 뭉치와 똑같은 모양의 가짜 파일 — <갈래>/domains 한 줄에 한 도메인."""
+    body = ("\n".join(domains) + "\n").encode("utf-8")
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w:gz") as tar:
+        info = tarfile.TarInfo(f"{category}/domains")
+        info.size = len(body)
+        tar.addfile(info, io.BytesIO(body))
+    return buffer.getvalue()
+
+
+def put_blacklist(base: Path | str, category: str, domains: list[str]) -> Path:
+    """받아 둔 명단이 이미 있는 상태로 만든다(내려받기 없이 0단을 켜는 길)."""
+    from domainchecker.clients.offline_lists import cache_dir
+
+    target = cache_dir(base) / f"{category}.tar.gz"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(blacklist_bytes(category, domains))
+    return target
 
 
 @pytest.fixture

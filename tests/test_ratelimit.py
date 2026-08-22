@@ -55,6 +55,33 @@ async def test_backoff_is_exponential_and_capped(clock):
     assert limiter.hits_429 == 5
 
 
+async def test_repeated_429_keeps_slowing_down_to_the_floor(clock):
+    """같은 속도로 계속 두드리면 한 시간 차단을 부른다 — 막힐수록 더 물러선다."""
+    limiter = AdaptiveRateLimiter(clock=clock, sleeper=clock.sleep)
+    limiter.note_429()  # 30 → 12
+    limiter.note_429()  # 아직은 기다림만 늘린다(아까 걸린 벌일 수 있어서)
+    assert limiter.rpm == 12
+
+    for _ in range(8):
+        limiter.note_429()
+
+    assert limiter.rpm == 4  # 바닥 밑으로는 안 내려간다
+
+
+async def test_recovery_creeps_back_only_to_the_safe_line(clock):
+    """회복은 조금씩만, 그리고 오래 두드려도 되는 선(15/분)에서 멈춘다."""
+    limiter = AdaptiveRateLimiter(clock=clock, sleeper=clock.sleep)
+    limiter.note_429()
+
+    for _ in range(9):
+        limiter.note_success()
+    assert limiter.rpm == 12  # 아홉 번 성공으로는 아직 안 올라간다
+
+    for _ in range(200):
+        limiter.note_success()
+    assert limiter.rpm == 15  # 처음의 30으로는 절대 돌아가지 않는다
+
+
 async def test_success_resets_backoff_but_keeps_degraded_rate(clock):
     limiter = AdaptiveRateLimiter(clock=clock, sleeper=clock.sleep)
     limiter.note_429()
