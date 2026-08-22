@@ -7,9 +7,7 @@ config.json
 .pytest_cache/
 .ruff_cache/
 *.egg-info/
-.vercel/
 dist/
 build/
 .DS_Store
-.vercel
 .env*

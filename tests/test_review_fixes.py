@@ -119,20 +119,23 @@ def test_report_drops_pages_left_over_from_an_earlier_run(tmp_path):
     assert (report_dir / "example.com.html").exists()
 
 
-# ── 접속 비밀번호 검사가 터지던 문제 ────────────────────────────────────
-def test_password_gate_rejects_a_non_ascii_header_without_crashing(monkeypatch, tmp_path):
-    from fastapi.testclient import TestClient
+# ── 아주 긴 도메인은 지워도 사진만 남던 문제 ─────────────────────────────
+def test_a_very_long_domain_names_its_cache_and_its_photos_the_same_way():
+    """이름을 다듬는 자리가 세 군데라 자르는 길이가 어긋나 있었다.
 
-    from domainchecker.server import create_app
+    저장분은 120자로, 화면 사진은 100자로 잘랐다. 지우기는 저장분 이름으로
+    사진을 찾기 때문에(`{stem}_*.png`), 100자가 넘는 긴 도메인은 결과를 지워도
+    사진이 통째로 남았다. 이제 다듬는 자리가 한 곳뿐이라 둘이 늘 맞는다.
+    """
+    from domainchecker.cache import safe_name
+    from domainchecker.capture import _filename
 
-    monkeypatch.setenv("DOMAINCHECKER_PASSWORD", "비밀")
-    monkeypatch.chdir(tmp_path)
-    client = TestClient(create_app())
-
-    assert client.get("/api/status", headers={"Authorization": "Basic zzzz"}).status_code == 401
-    # 아스키가 아닌 바이트가 와도 500 이 아니라 401 로 막혀야 한다
-    bad = client.get("/api/status", headers={b"Authorization": b"Basic \xed\x95\x9c"})
-    assert bad.status_code == 401
+    long_domain = "a" * 130 + ".com"
+    stem = safe_name(long_domain)
+    photo = _filename(long_domain, "20240101000000")
+    # 지우기가 쓰는 바로 그 짝 맞추기
+    assert photo.startswith(f"{stem}_"), "사진 이름이 저장분 이름으로 시작해야 지우기가 찾는다"
+    assert len(stem) == 120
 
 
 def test_result_without_wayback_history_is_stale():

@@ -26,13 +26,13 @@ self.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
       const cache = await caches.open(SHELL_CACHE);
-      // addAll 은 하나만 실패해도 전부 되돌린다 — 비밀번호 화면이나 잠깐의 오류로
-      // 설치가 통째로 엎어지지 않도록 하나씩 따로 담는다.
+      // addAll 은 하나만 실패해도 전부 되돌린다 — 잠깐의 오류로 설치가 통째로
+      // 엎어지지 않도록 하나씩 따로 담는다.
       await Promise.all(
         PRECACHE.map(async (url) => {
           try {
             const res = await fetch(url, { cache: "no-cache" });
-            // 로그인 화면으로 넘겨진 답장은 담지 않는다 — 담아 두면 나중에 꺼내 줄 때
+            // 다른 주소로 넘겨진 답장은 담지 않는다 — 담아 두면 나중에 꺼내 줄 때
             // 브라우저가 화면 자체를 거부해서 끊긴 상태에서 아무것도 안 뜬다.
             if (res.ok && !res.redirected) await cache.put(url, res);
           } catch (_) {
@@ -60,8 +60,8 @@ async function networkFirst(request, cacheName, fallbackKey) {
   const cache = await caches.open(cacheName);
   try {
     const res = await fetch(request);
-    // 다른 주소로 넘겨진(로그인 화면 등) 답장은 담지 않는다 — 그걸 저장해 두면
-    // 다음에 꺼내 줄 때 브라우저가 화면 자체를 거부한다.
+    // 다른 주소로 넘겨진 답장은 담지 않는다 — 그걸 저장해 두면 다음에
+    // 꺼내 줄 때 브라우저가 화면 자체를 거부한다.
     if (res.ok && !res.redirected) cache.put(request, res.clone());
     return res;
   } catch (err) {

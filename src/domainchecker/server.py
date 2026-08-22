@@ -1,7 +1,7 @@
 """Local FastAPI server: UI, run control, SSE progress, settings, report.
 
-Binds to 127.0.0.1 by default — the API keys live in this process, so the
-server must not be reachable from outside the machine unless the user opts in.
+Binds to 127.0.0.1 only — the API keys live in this process, so nothing outside
+this machine can reach it. That binding is the lock; there is no login screen.
 """
 
 from __future__ import annotations
@@ -13,19 +13,17 @@ import os
 import shutil
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
 
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import (
     FileResponse,
     JSONResponse,
-    RedirectResponse,
     StreamingResponse,
 )
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import auth, cache
+from . import cache
 from . import config as config_module
 from .config import MODEL_CHAIN, Config
 from .models import DomainResult
@@ -112,14 +110,6 @@ def save_planned(base: Path, domains: list[str]) -> None:
         (base / PLANNED_NAME).write_text(
             json.dumps({"domains": domains}, ensure_ascii=False, indent=2), encoding="utf-8"
         )
-
-
-class LoginRequest(BaseModel):
-    """로그인 화면이 보내는 것 — remember 가 참이면 30일 동안 다시 안 묻는다."""
-
-    user: str = ""
-    password: str = ""
-    remember: bool = True
 
 
 class ConfigRequest(BaseModel):
@@ -317,28 +307,6 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     def data_root() -> Path:
         return config_module.data_dir(load_config())
 
-    attempts = auth.Attempts()
-
-    @app.middleware("http")
-    async def require_login(request: Request, call_next):
-        """접속 비밀번호를 정했을 때만 켜지는 로그인 잠금(키 노출 방지).
-
-        예전에는 브라우저가 띄우는 회색 물음창(기본 인증)을 썼는데, 그 창은
-        모양을 바꿀 수도 없고 '로그인 유지'도 안 된다. 이제 우리 로그인 화면으로
-        보내고, 들어온 사람에게는 쪽지(쿠키)를 맡겨 다음부터 그냥 통과시킨다.
-        """
-        if not auth.locked() or auth.is_public(request.url.path):
-            return await call_next(request)
-        if auth.valid_token(request.cookies.get(auth.COOKIE_NAME, "")):
-            return await call_next(request)
-        wants_page = request.method == "GET" and "text/html" in request.headers.get("accept", "")
-        if wants_page:
-            target = request.url.path + (f"?{request.url.query}" if request.url.query else "")
-            return RedirectResponse(f"/login?next={quote(target, safe='')}", status_code=303)
-        # 화면 뒤에서 오가는 요청은 튕겨 보내지 않고 401 로 알려 준다 — 화면 쪽 글이
-        # 이 표시를 보고 스스로 로그인 화면으로 옮겨 간다.
-        return JSONResponse({"detail": "로그인이 필요합니다.", "login": True}, status_code=401)
-
     if dev_mode():
         # 개발 중에는 브라우저가 옛 화면을 붙들고 있으면 안 된다 — 그냥 새로고침으로 최신이 뜨게 한다.
         @app.middleware("http")
@@ -409,53 +377,6 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         if not page.exists():
             return JSONResponse({"error": "static/index.html 을 찾을 수 없습니다."}, status_code=500)
         return FileResponse(page)
-
-    @app.get("/login")
-    async def login_page(request: Request) -> Any:
-        # 잠금이 없거나 이미 들어온 사람에게 로그인 화면을 또 보여 줄 이유가 없다.
-        if not auth.locked() or auth.valid_token(request.cookies.get(auth.COOKIE_NAME, "")):
-            return RedirectResponse("/", status_code=303)
-        page = STATIC_DIR / "login.html"
-        if not page.exists():
-            return JSONResponse({"error": "static/login.html 을 찾을 수 없습니다."}, status_code=500)
-        return FileResponse(page, headers={"Cache-Control": "no-store"})
-
-    @app.post("/api/login")
-    async def do_login(body: LoginRequest, request: Request) -> Response:
-        if not auth.locked():
-            return JSONResponse({"ok": True, "locked": False})
-        who = request.client.host if request.client else "?"
-        if attempts.blocked(who):
-            return JSONResponse(
-                {"detail": "여러 번 틀렸습니다. 1분 뒤에 다시 해 주세요."}, status_code=429
-            )
-        if not auth.check_login(body.user, body.password):
-            attempts.failed(who)
-            return JSONResponse(
-                {"detail": "아이디나 비밀번호가 맞지 않습니다."}, status_code=401
-            )
-        attempts.passed(who)
-        ttl = auth.REMEMBER_SECONDS if body.remember else auth.SESSION_SECONDS
-        response = JSONResponse({"ok": True})
-        response.set_cookie(
-            auth.COOKIE_NAME,
-            auth.make_token(auth.account()[0], ttl),
-            # 유지에 체크하면 30일짜리로 저장하고, 아니면 창을 닫을 때 사라지게 둔다
-            max_age=ttl if body.remember else None,
-            httponly=True,  # 화면 글(자바스크립트)이 쪽지를 읽지 못하게
-            samesite="lax",
-            # 인터넷에 올린 곳은 앞에 문지기 서버가 한 겹 있어서, 진짜 https 인지는
-            # 그 문지기가 붙여 주는 표시(x-forwarded-proto)를 봐야 안다.
-            secure=request.headers.get("x-forwarded-proto", request.url.scheme) == "https",
-            path="/",
-        )
-        return response
-
-    @app.post("/api/logout")
-    async def do_logout() -> Response:
-        response = JSONResponse({"ok": True})
-        response.delete_cookie(auth.COOKIE_NAME, path="/")
-        return response
 
     @app.get("/style.css")
     async def style() -> Response:
@@ -685,10 +606,6 @@ def create_app(config_path: Path | None = None) -> FastAPI:
             clear_run_state(base_dir)
         return {"removed": len(targets)}
 
-    @app.get("/api/results/{domain}")
-    async def result_one(domain: str) -> dict:
-        return one_result(domain).model_dump(mode="json")
-
     @app.get("/api/detail/{domain}")
     async def detail(domain: str) -> dict:
         """The same evidence view the static report uses."""
@@ -708,8 +625,6 @@ def create_app(config_path: Path | None = None) -> FastAPI:
             "missing_keys": config.missing_required_keys(),
             "free_fallbacks": config.free_fallbacks(),
             "config_path": str(app.state.config_path or config_module.CONFIG_PATH),
-            # 잠금이 걸린 서버에서만 '로그아웃' 단추를 보여 주려고 함께 내려준다
-            "locked": auth.locked(),
         }
 
     @app.post("/api/config")
@@ -747,7 +662,7 @@ def _sse(event: dict) -> str:
 app = create_app()
 
 
-LOCAL_HOSTS = ("127.0.0.1", "localhost", "::1")
+HOST = "127.0.0.1"  # 내 컴퓨터 전용 — 이 묶임 자체가 잠금이라 로그인 화면이 없다
 
 
 def main() -> None:
@@ -756,15 +671,7 @@ def main() -> None:
 
     import uvicorn
 
-    host = os.environ.get("DOMAINCHECKER_HOST", "127.0.0.1")
     port = int(os.environ.get("DOMAINCHECKER_PORT", "8765"))
-    if host not in LOCAL_HOSTS and not os.environ.get("DOMAINCHECKER_PASSWORD"):
-        # 밖에서 접속되게 열면서 비밀번호가 없으면 API 키가 통째로 노출된다.
-        raise SystemExit(
-            "이 컴퓨터 밖에서도 접속하게 하려면 접속 비밀번호를 반드시 정해야 합니다.\n"
-            "  DOMAINCHECKER_PASSWORD=원하는비밀번호 DOMAINCHECKER_HOST=0.0.0.0 uv run domainchecker\n"
-            "(비밀번호 없이 밖으로 열면 저장해 둔 API 키가 그대로 새어 나갑니다.)"
-        )
     reload = dev_mode()
     if reload and find_spec("watchfiles") is None:
         raise SystemExit("자동 재시작을 쓰려면 먼저 `uv sync --group dev` 를 한 번 실행해 주세요.")
@@ -772,7 +679,7 @@ def main() -> None:
         print("[개발 모드] 파일을 고치면 서버가 알아서 다시 켜집니다. 끄려면 DOMAINCHECKER_RELOAD=0")
     uvicorn.run(
         "domainchecker.server:app",
-        host=host,
+        host=HOST,
         port=port,
         log_level="info",
         reload=reload,

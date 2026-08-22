@@ -16,6 +16,7 @@ from html import escape
 from pathlib import Path
 from urllib.parse import quote
 
+from ..cache import safe_name
 from ..capture import period_label
 from ..models import (
     AVAILABILITY_LABEL,
@@ -521,10 +522,6 @@ def render_detail_page(result: DomainResult, capture_base: str = "../captures") 
     return _page(f"{result.domain} 상세 — 낙장도메인 품질 체커", result.domain, body, action=back)
 
 
-def _safe_name(domain: str) -> str:
-    return re.sub(r"[^a-z0-9.\-]", "_", domain.lower())[:120] or "unknown"
-
-
 # 지금 살 수 있는 것 → 곧 살 수 있는 것 → 경매 → 모름 → 남이 쓰는 중 순서.
 _BUY_RANK = {"free": 0, "soon": 1, "auction": 2, "unknown": 3, "taken": 4}
 
@@ -555,7 +552,7 @@ def render_index(results: list[DomainResult]) -> str:
                             else ""
                         ),
                     ],
-                    href=f"{_t(_safe_name(r.domain))}.html",
+                    href=f"{_t(safe_name(r.domain))}.html",
                     title_class="app-domain",
                     footer=f'<span class="app-badges">{_stamp(r)}{_avail(r)}</span>'
                     f'<span class="app-score">{_t(_score_text(r))}</span>',
@@ -617,7 +614,7 @@ def write_report(results: list[DomainResult], base: Path | str) -> Path:
     _copy_fonts(out_dir)
     keep = {"index.html"}
     for result in results:
-        name = f"{_safe_name(result.domain)}.html"
+        name = f"{safe_name(result.domain)}.html"
         keep.add(name)
         (out_dir / name).write_text(render_detail_page(result), encoding="utf-8")
     # 지난 실행에서 남은 도메인 페이지는 지운다 — 목록에 없는데 파일만 남으면

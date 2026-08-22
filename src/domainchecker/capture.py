@@ -8,9 +8,9 @@ the pipeline.
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
+from .cache import safe_name
 from .models import Capture, Captures, CheckState, CheckStatus, DomainResult, Snapshot
 from .ratelimit import AdaptiveRateLimiter
 
@@ -18,8 +18,6 @@ TIMEOUT_MS = 20_000
 VIEWPORT = {"width": 1280, "height": 800}
 # The archive injects its own toolbar into playback pages; hide it.
 TOOLBAR_CSS = "#wm-ipp-base, #wm-ipp, #donato { display: none !important; }"
-
-_SAFE = re.compile(r"[^a-z0-9.\-]")
 
 
 def playback_url(timestamp: str, original: str) -> str:
@@ -95,7 +93,7 @@ def capture_dir(base: Path | str) -> Path:
 
 
 def _filename(domain: str, timestamp: str) -> str:
-    return f"{_SAFE.sub('_', domain.lower())[:100]}_{timestamp}.png"
+    return f"{safe_name(domain)}_{timestamp}.png"
 
 
 async def capture_domain(

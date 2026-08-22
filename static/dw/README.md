@@ -17,23 +17,22 @@
 | `ui/alert.css` | `ui/alert/alert.css` |
 | `ui/badge.css` | `ui/badge/badge.css` |
 | `ui/button.css` | `ui/button/button.css` |
-| `ui/button-group.css` | `ui/button-group/button-group.css` |
 | `ui/card.css` | `ui/card/card.css` |
-| `ui/checkbox.css` | `ui/checkbox/checkbox.css` |
 | `ui/collapsible.css` | `ui/collapsible/collapsible.css` |
 | `ui/empty-state.css` | `ui/empty-state/empty-state.css` |
 | `ui/field.css` | `ui/field/field.css` |
 | `ui/input.css` | `ui/input/input.css` |
 | `ui/label.css` | `ui/label/label.css` |
 | `ui/list-item.css` | `ui/list-item/list-item.css` |
-| `ui/native-select.css` | `ui/native-select/native-select.css` |
 | `ui/progress.css` | `ui/progress/progress.css` |
 | `ui/textarea.css` | `ui/textarea/textarea.css` |
 | `blocks/app-shell-mobile.css` | `blocks/app-shell-mobile/app-shell-mobile.css` |
 | `blocks/settings.css` | `blocks/settings/settings.css` |
 
-스타일 3장(토큰·기본·프로즈) + 부품 15종 + 블록(화면 뼈대) 2종.
+스타일 3장(토큰·기본·프로즈) + 부품 12종 + 블록(화면 뼈대) 2종.
 `toggle-group` 은 판정 필터를 doweek 본체의 알약 탭으로 갈아 끼우면서 쓰는 데가 없어져 지웠다(DESIGN.md 3-2절).
+`button-group` `checkbox` `native-select` 도 같은 이유로 지웠다(2026-08-22) — 마크업에 쓰는 데가 한 곳도 없다.
+이 폴더는 통째로 보고서 style.css 에 합쳐지므로, 안 쓰는 한 장이 보고서마다 따라다닌다.
 이 앱이 쓰지 않는 나머지는 zip 배포 무게 때문에 복사하지 않았다.
 
 `typography.css`(`.dw-prose`)는 DW 가 "읽어 내려가는 글에만 쓰고 UI 껍데기에는 쓰지 말라"고 못 박은
@@ -51,8 +50,8 @@ DW 부품이 아니라 **doweek 본체가 실제로 쓰는 모양**(떠 있는 �
 cp "Z:/Doweek/design-system/tokens/tokens.css"       static/dw/tokens.css
 cp "Z:/Doweek/design-system/styles/base.css"         static/dw/base.css
 cp "Z:/Doweek/design-system/styles/typography.css"   static/dw/typography.css
-for c in alert badge button button-group card checkbox collapsible empty-state field input \
-         label list-item native-select progress textarea; do
+for c in alert badge button card collapsible empty-state field input \
+         label list-item progress textarea; do
   cp "Z:/Doweek/design-system/ui/$c/$c.css" "static/dw/ui/$c.css"
 done
 for b in app-shell-mobile settings; do

@@ -294,21 +294,27 @@ def test_damaged_run_state_is_ignored(client, config_path):
     assert client.post("/api/resume").status_code == 400
 
 
-def test_external_access_requires_a_login(config_path, monkeypatch):
-    """비밀번호를 정했을 때만 밖에서 접속할 수 있게 잠근다(키 노출 방지)."""
-    monkeypatch.setenv("DOMAINCHECKER_PASSWORD", "열쇠말")
-    with TestClient(create_app(config_path)) as guarded:
-        blocked = guarded.get("/api/status")
-        assert blocked.status_code == 401
-        assert blocked.json()["login"] is True
-        # 브라우저가 띄우는 회색 물음창이 다시 나오면 안 된다 — 그래서 이 머리글을 안 보낸다
-        assert "WWW-Authenticate" not in blocked.headers
-        wrong = guarded.post("/api/login", json={"user": "domainchecker", "password": "틀린값"})
-        assert wrong.status_code == 401
-        assert guarded.get("/api/status").status_code == 401
-        right = guarded.post("/api/login", json={"user": "domainchecker", "password": "열쇠말"})
-        assert right.status_code == 200
-        assert guarded.get("/api/status").status_code == 200
+def test_the_server_only_ever_binds_to_this_computer(monkeypatch):
+    """잠금은 로그인 화면이 아니라 '127.0.0.1 에만 묶는다'는 이 한 줄이다.
+
+    밖으로 열 수 있는 길이 다시 생기면 저장해 둔 API 키가 그대로 새어 나간다.
+    설정값으로도 주소를 바꿀 수 없어야 한다.
+    """
+    import uvicorn
+
+    monkeypatch.setenv("DOMAINCHECKER_HOST", "0.0.0.0")  # 옛 설정값이 남아 있어도 무시해야 한다
+    called = {}
+    monkeypatch.setattr(uvicorn, "run", lambda *a, **kw: called.update(kw))
+    monkeypatch.setattr(server, "dev_mode", lambda: False)
+    server.main()
+    assert called["host"] == "127.0.0.1"
+
+
+def test_the_login_screen_is_gone(client):
+    """로그인은 통째로 없앴다 — 흔적이 되살아나면 잡아낸다."""
+    for path in ("/login", "/api/login", "/api/logout"):
+        assert client.get(path).status_code == 404, path
+    assert "locked" not in client.get("/api/config").json()
 
 
 def test_home_screen_app_files_are_served(client):
@@ -335,25 +341,6 @@ def test_home_screen_app_files_are_served(client):
     # 개발 중에는 위쪽 미들웨어가 no-store 로 한 번 더 덮는다 — 둘 다 "쟁여 두지 마라"다
     assert worker.headers["Cache-Control"] in {"no-cache", "no-store"}
     assert client.get("/favicon.ico").status_code == 200
-
-
-def test_home_screen_app_files_stay_open_while_locked(config_path, monkeypatch):
-    """잠가 둬도 표지(설명서·아이콘·심부름꾼)는 열려 있어야 설치 단추가 뜬다."""
-    monkeypatch.setenv("DOMAINCHECKER_PASSWORD", "열쇠말")
-    with TestClient(create_app(config_path)) as guarded:
-        assert guarded.get("/api/status").status_code == 401  # 알맹이는 여전히 잠겨 있다
-        for path in ("/manifest.webmanifest", "/sw.js", "/favicon.ico"):
-            assert guarded.get(path).status_code == 200, path
-        for icon in guarded.get("/manifest.webmanifest").json()["icons"]:
-            assert guarded.get(icon["src"]).status_code == 200, icon["src"]
-
-
-def test_serving_outside_localhost_without_a_password_refuses_to_start(monkeypatch):
-    monkeypatch.setenv("DOMAINCHECKER_HOST", "0.0.0.0")
-    monkeypatch.delenv("DOMAINCHECKER_PASSWORD", raising=False)
-    with pytest.raises(SystemExit) as raised:
-        server.main()
-    assert "접속 비밀번호" in str(raised.value)
 
 
 def test_report_without_results_is_rejected(client):

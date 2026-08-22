@@ -28,7 +28,7 @@ DW가 갱신되면 같은 자리에 다시 덮어쓰면 끝이다(복사 방법�
 ```
 static/dw/tokens.css        ← Z:\Doweek\design-system\tokens\tokens.css     (편집 금지)
 static/dw/base.css          ← Z:\Doweek\design-system\styles\base.css       (편집 금지)
-static/dw/ui/<이름>.css     ← Z:\Doweek\design-system\ui\<이름>\<이름>.css   (편집 금지, 이 앱이 쓰는 15종만)
+static/dw/ui/<이름>.css     ← Z:\Doweek\design-system\ui\<이름>\<이름>.css   (편집 금지, 이 앱이 쓰는 12종만)
 static/dw/blocks/<이름>.css ← Z:\Doweek\design-system\blocks\<이름>\<이름>.css (편집 금지, 화면 뼈대 2종)
 static/app.css              ← 이 앱만의 레이아웃(DW 부품·블록이 덮지 못하는 것만). 이 프로젝트 소유
 static/fonts/               ← 손글씨 글꼴 한 벌 + 라이선스 원문(§4). 화면과 보고서가 함께 쓴다
@@ -45,11 +45,13 @@ static/fonts/               ← 손글씨 글꼴 한 벌 + 라이선스 원문(�
 쓴다. hex 직접 사용 0. 토큰 이름도 DW 원본 그대로다(`--dw-ring`, `--dw-font-body`, `--dw-space-*` …).
 
 가져다 쓴 DW 스타일 3장: `tokens` `base` `typography`(`.dw-prose` — 읽는 글 조판).
-가져다 쓴 DW 부품 16종:
-`alert` `badge` `button` `button-group` `card` `checkbox` `collapsible` `empty-state` `field` `input`
-`label` `list-item` `native-select` `progress` `textarea`.
+가져다 쓴 DW 부품 12종:
+`alert` `badge` `button` `card` `collapsible` `empty-state` `field` `input`
+`label` `list-item` `progress` `textarea`.
 가져다 쓴 DW 블록(화면 뼈대) 2종: `app-shell-mobile` `settings`.
 안 쓰는 나머지는 zip 무게 때문에 복사하지 않았다.
+`button-group` `checkbox` `native-select` 는 한때 복사해 뒀다가 2026-08-22에 지웠다 —
+마크업에 쓰는 데가 한 곳도 없는데 보고서 style.css 에는 매번 실려 나갔다(`toggle-group` 과 같은 이유).
 
 **표(`table`)와 상단 세그먼트 탭(`tabs`)은 뺐다(2026-08-06).** 이 앱은 doweek 그대로 모바일 형식이라
 폭이 440px이고, 열이 여섯인 표는 그 안에 들어가지 않는다. DW가 목록에 내놓는 답은 `list-item`(목록 한 줄)이라
@@ -115,7 +117,7 @@ DW 디자인 시스템은 doweek에서 **뽑아낸** 것이라 부품 값은 같
 | 목록 한 줄 | `list-item` | **같음** | 도메인 이름만은 잘리지 않게 이 자리에서만 줄바꿈 허용(`.app-domain`). 도메인이 잘리면 무엇인지 알 수 없어 도구가 못 쓰이게 된다 |
 | 부품 쓰는 법 | React 컴포넌트(jsx) | 같은 CSS + 손으로 쓴 HTML | 빌드 도구(node·vite) 없이 파이썬만으로 zip 배포한다. DW 부품 CSS는 클래스+`data-*` 방식의 순수 CSS라 React 없이 그대로 붙는다. jsx는 마크업 구조를 읽는 참고용으로만 열었다 |
 | 상태 있는 부품 | React 상태 | 20줄 안쪽 바닐라 JS | 아래 탭 줄(`data-current`·`aria-current`·제목 갈아 끼우기)과 `collapsible`(펴짐 표시·`inert`)만 손으로 배선했다. 나머지는 CSS만으로 동작 |
-| 아이콘 | `lucide-react` | lucide 원본 path를 인라인 SVG로 | 번들러가 없다. 임의 창작이 아니라 lucide(ISC) 원본 path 그대로. 쓰는 것: 돋보기·서류·톱니(아래 탭 줄), 경고·안내(alert), 체크(checkbox), 아래꺾쇠(collapsible·native-select), 오른꺾쇠(list-item), 받은편지함(empty-state), 목록 한 줄의 체크·물음표·가위표(판정 도장)와 열린 자물쇠·시계·점선동그라미·달력(살 수 있나·만료일) |
+| 아이콘 | `lucide-react` | lucide 원본 path를 인라인 SVG로 | 번들러가 없다. 임의 창작이 아니라 lucide(ISC) 원본 path 그대로. 쓰는 것: 돋보기·서류·톱니(아래 탭 줄), 경고·안내(alert), 아래꺾쇠(collapsible), 오른꺾쇠(list-item), 받은편지함(empty-state), 목록 한 줄의 체크·물음표·가위표(판정 도장)와 열린 자물쇠·시계·점선동그라미·달력(살 수 있나·만료일), 매입 예정 도장의 체크·더하기 |
 | 이모지 | 금지 | 금지 | DW·ECC 공통 규칙 |
 | 다크 테마 | 라이트+다크 | 라이트만 나온다 | `tokens.css` 를 통째로 복사해 다크 값도 함께 실려 있지만, 이 앱은 `data-theme` 을 설정하지 않아 항상 라이트다. 굳이 지우지 않는다 — 지우면 원본과 달라진다 |
 
@@ -126,7 +128,7 @@ DW 디자인 시스템은 doweek에서 **뽑아낸** 것이라 부품 값은 같
 | 화면 뼈대(본문·구름 규칙) | `app-shell-mobile` | 제목 줄(알약 바)은 2026-08-07 운영자 지시로 뺐다(커밋 d47ac2e) — 화면 이름은 도크의 켜진 칸이 말해 준다. 아래 탭 줄만은 doweek 본체의 도크로 갈아 끼웠다(3-2절) |
 | 화면 이동 | doweek 도크 | 분석 의뢰·분석 결과·매입 예정·설정 네 칸. 고른 칸은 `data-current` + `aria-current="page"` |
 | 매입 예정 담기 | 자체(`.app-pick`) | 후보 카드 옆에 선 44px 동그란 도장 자리 — 안 담김은 +가 든 점선 원(잉크 `--dw-text-muted-aa`), 담김은 `--dw-success-ink` 면 채움 + 흰 체크. 판정 도장(체크)과 그림이 겹치지 않게 안 담김에는 체크를 안 그린다. 카드가 `button`이라 안에 단추를 못 넣어(HTML 규칙) 옆에 세웠고, 후보가 아닌 줄도 같은 폭(`.app-pick-slot`)을 비워 오른끝을 맞춘다. `aria-pressed`로 상태를 알린다. 검토 필요 갈래는 필터 탭에 없다 — 운영자가 정한 네 칸(전체·주인 있음·스팸·매입 후보)을 지키고, 검토 필요는 전체에서만 보인다 |
-| 설정 화면 묶음 | `settings` | `dw-block-settings-group` + 조용한 묶음 제목. 처음 보이는 것은 꼭 필요한 키 1칸뿐이고, 나머지(속도·선택 키 4개·선택 검사)는 "고급 설정" `collapsible` 안에 접어 둔다 |
+| 설정 화면 묶음 | `settings` | `dw-block-settings-group` + 조용한 묶음 제목. 서는 것은 `지우기` 단추 하나와, 접어 둔 "분석 키"(OpenRouter 1칸)뿐이다. 속도·화면 사진은 화면에서 아예 뺐다(늘 좋은 기본값으로 돈다) |
 | 지우기 고르기 · 되돌릴 수 없는 일 되묻기 | 자체(`.app-sheet` 재사용, `#sheetPurge`) | 설정에는 `지우기` 단추 하나만 서고, 무엇을 지울지는 아래에서 올라오는 판에서 고른다(2026-08-09 운영자 지시 "지우기 버튼 있고 누르면 모달에서 선택하게"). 줄마다 개수를 글자에 넣고 0개인 줄은 `disabled` — 왜 못 누르는지는 "0개"가 말해 준다. 고른 다음 같은 판 안에서 한 번 더 묻는다(브라우저 회색 창 `confirm` 은 쓰지 않는다 — 앱과 다른 옷을 입고, 글씨도 우리 것이 아니다). 저장된 키 빼기도 이 판으로 묻는다 |
 | 결과 목록 · 점수 내역 | `list-item` | 한 줄에 도메인(제목) · 살 수 있나와 만료일(작은 그림 한 쌍) · 점수 숫자와 판정 도장(동그란 그림). 문장(한줄평)은 상세로 내렸다 — 수백 줄을 훑는 자리에 문장이 있으면 눈이 읽느라 멈춘다(2026-08-08 운영자 지시 "리스트는 간단해야지"). 그림 뜻은 `aria-label`·`title` 이 든다. 누를 수 있는 줄은 `button`, 보고서에서는 `a` |
 | 갈래로 거르기 | doweek 알약 탭 | 화면 맨 위 고정. 전체·주인 있음·스팸·매입 후보 + 개수 알약. 띠 하나가 Tab 한 번이고 안에서는 화살표로 옮긴다 |
@@ -137,13 +139,10 @@ DW 디자인 시스템은 doweek에서 **뽑아낸** 것이라 부품 값은 같
 | 입력 카드·요약 타일 | `card` | `data-elevation="float"`(시그니처 그림자). 요약 타일은 `data-size="sm"` 로 한 줄에 하나씩 |
 | 도메인 붙여넣기 칸 | `textarea` | |
 | API 키 칸 | `input` + `field` + `label` | |
-| 속도·줄 세우기 고르기 | `native-select` | 폰에서 기본 휠이 뜨도록 브라우저 것을 그대로. AI 모델은 실패하면 자동으로 다음 것으로 넘어가므로 고르는 칸을 두지 않는다 |
-| 선택 검사 | `checkbox` | 화면 사진. 세이프 브라우징은 켜고 끌 이유가 없어 키 없이 그냥 돈다 |
 | 진행률 | `progress` | `role="progressbar"` + 진행 문구를 `aria-labelledby` 로 가리킨다 |
 | 결과 없음 | `empty-state` | |
 | 키 받는 법 그림 · 고급 설정 | `collapsible` | 접힌 동안 `inert` — 눈에도 안 보이고 Tab 으로도 안 들어간다. 그림 안내는 칸마다 달지 않고 셋을 한 곳에 모은다 |
-| 주요 버튼 1개/화면 | `button` | 검사 시작·설정 저장만 `data-variant="primary" data-size="lg" data-block`(폭을 다 쓴다). 나머지는 `secondary` |
-| 보조 버튼 줄(중단·이어서·지우기) | `button-group` | 셋을 이어 붙인 한 줄, `data-size="sm"`(손가락 기기에서는 DW가 알아서 44px로 키운다) |
+| 주요 버튼 1개/화면 | `button` | 검사 시작만 `data-variant="primary" data-size="lg" data-block`(폭을 다 쓴다). 나머지는 `secondary`. 설정에는 저장 단추가 없다 — 키를 붙여넣으면 저절로 저장된다 |
 
 DW 부품·블록이 덮지 못해 `static/app.css` 에 남긴 것: 조작판(글이 아닌 화면)의 문단·안내상자 간격,
 고르기 줄을 담는 종이(`.app-filter`),

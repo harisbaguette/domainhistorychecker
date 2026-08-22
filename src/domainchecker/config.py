@@ -1,8 +1,7 @@
 """User config stored at ~/.domainchecker/config.json (plain text, local single-user tool).
 
-배포한 서버(서버리스)는 자기 폴더가 잠깐 있다 지워져서 저 파일이 남지 않는다.
-그래서 키는 서버 설정값(환경변수)에서도 읽어 온다 — 파일에 적힌 키가 먼저,
-비어 있을 때만 환경변수 값을 쓴다.
+키는 설정값(환경변수)에서도 읽어 온다 — 파일에 적힌 키가 먼저이고, 비어 있을
+때만 환경변수 값을 쓴다. 파일에 키를 남기고 싶지 않을 때 쓰는 길이다.
 """
 
 from __future__ import annotations

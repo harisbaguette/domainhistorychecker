@@ -1,7 +1,0 @@
-# Vercel 배포용 — playwright(화면 사진)는 서버리스에서 못 돌아 뺐다.
-httpx>=0.27
-dnspython>=2.6
-beautifulsoup4>=4.12
-lxml>=5.2
-pydantic>=2.7
-fastapi>=0.111
