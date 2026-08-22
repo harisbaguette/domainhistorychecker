@@ -4,10 +4,14 @@
    tokens.css를 먼저 불러온 뒤 이 파일을 불러온다.
    ========================================================================== */
 
+/* 시그니처 손글씨 — BM 연성체(Yeon Sung), 우아한형제들, SIL Open Font License 1.1.
+   OFL은 웹 임베딩·수정(서브셋)·재배포를 모두 허용하고 Reserved Font Name도 선언돼 있지 않다.
+   라이선스 전문은 ../assets/fonts/OFL.txt, 확인 근거·서브셋 내역은 ../assets/fonts/NOTICE.md.
+   (2026-08-06 교체 — 이전에 쓰던 메모먼트 꾹꾹체는 웹 임베딩·수정·재배포가 모두 금지라 제거했다.)
+   KS X 1001 완성형 2,350자 + ASCII + 문장부호로 서브셋해 327KB. */
 @font-face {
-  font-family: 'MemomentKkukkukk';
-  /* 출처: 메모먼트 꾹꾹체 subset. 실제 파일 위치 design-system/assets/fonts/ */
-  src: url('../assets/fonts/MemomentKkukkukk-subset.woff') format('woff');
+  font-family: 'Yeon Sung';
+  src: url('../assets/fonts/YeonSung-subset.woff2') format('woff2');
   font-weight: normal;
   font-style: normal;
   font-display: swap;

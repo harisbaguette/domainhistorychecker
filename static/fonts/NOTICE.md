@@ -3,8 +3,11 @@
 ## MemomentKkukkukk (메모먼트 꾹꾹체)
 
 - 파일: `MemomentKkukkukk.woff2` (1.9MB · 한글 음절 11,172자 + 라틴 95자 전부 들어 있다)
-- 가져온 곳: `Z:\Doweek\design-system\assets\fonts\MemomentKkukkukk-subset.woff`
-  (doweek 본체 앱이 `public/fonts/` 에서 쓰는 것과 같은 파일)
+- 가져온 곳: `Z:\Doweek\public\fonts\MemomentKkukkukk-subset.woff`
+  (doweek 본체 앱이 실제로 쓰는 것과 같은 파일)
+  2026-08-22 확인: 예전에 적어 두었던 `design-system\assets\fonts\` 쪽 경로는 이제 없다.
+  DW 디자인 시스템이 2026-08-10 에 이 글꼴을 빼고 BM 연성체로 갈아탔기 때문이다(바로 아래 참고).
+  doweek 본체는 그대로 이 글꼴을 쓰고 있어서, 이 도구도 본체와 같은 파일을 계속 쓴다.
 - 손댄 것: 글자 모양은 하나도 고치지 않았고, 웹에서 빨리 받아지도록 `woff2` 로 다시 압축만 했다
   (2.6MB → 1.9MB).
 - 쓰는 자리: 앱 전체. doweek 본체(`src/index.css` 의 `--font-app`)가 제목만이 아니라 본문까지
@@ -18,5 +21,18 @@
 
 이 사실을 운영자에게 알린 뒤, **운영자가 "손글씨 폰트도 꼭 써야 함"이라고 지시하여 그대로 싣는다**
 (2026-08-07). 밖으로 배포할 때는 원 배포처에 사용 허락을 따로 확인하는 것이 안전하다.
-빼야 할 일이 생기면 `static/app.css` 의 `@font-face` 한 덩이와 이 폴더의 woff2 만 지우면 되고,
-그러면 자동으로 Pretendard 계열 본문 글꼴로 돌아간다.
+
+### 갈아탈 손글씨가 이미 준비되어 있다 (2026-08-22 확인)
+
+DW 디자인 시스템은 2026-08-10 에 이 글꼴을 **빼고** BM 연성체(Yeon Sung · 우아한형제들)로 갈아탔다.
+이유가 바로 위의 임베딩 금지다. BM 연성체는 SIL Open Font License 1.1 이라 웹에 실어 보내는 것도,
+글자를 덜어내 가볍게 만드는 것도, 다시 나눠 주는 것도 모두 허용된다. 파일도 훨씬 가볍다(327KB).
+doweek 본체도 이 글꼴을 이미 받아 두고 첫째 자리만 아직 꾹꾹체로 두고 있다.
+
+- 준비된 파일: `Z:\Doweek\design-system\assets\fonts\YeonSung-subset.woff2` (라이선스 원문 `OFL.txt` 같은 폴더)
+- 갈아타려면: 그 woff2 를 이 폴더에 복사하고, `static/app.css` 의 `@font-face` 가 가리키는 파일 이름만 바꾸면 된다.
+  `DoweekHand` 라는 이름은 그대로 둔다 — 이름을 바꾸면 `--dw-font-*` 를 덮어쓴 줄까지 같이 고쳐야 한다.
+- 아예 손글씨를 빼려면: `static/app.css` 의 `@font-face` 한 덩이와 이 폴더의 woff2 만 지우면 되고,
+  그러면 자동으로 Pretendard 계열 본문 글꼴로 돌아간다.
+
+**갈아탈지 말지는 운영자가 정한다.** 2026-08-07 지시가 아직 살아 있어서 지금은 꾹꾹체 그대로 둔다.

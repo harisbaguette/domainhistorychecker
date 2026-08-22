@@ -120,8 +120,12 @@ uv sync                     # 의존성 설치
 uv run pytest               # 테스트
 uv run domainchecker        # 서버 실행 (127.0.0.1:8765)
 DOMAINCHECKER_PORT=9000 uv run domainchecker   # 포트 변경
+DOMAINCHECKER_RELOAD=0 uv run domainchecker    # 고칠 때마다 다시 켜지는 것 끄기
 uv run playwright install chromium             # 캡쳐용 브라우저
 ```
+
+소스를 받아서 켜면 파일을 고칠 때마다 서버가 알아서 다시 켜집니다. 그게 거슬리면 위의
+`DOMAINCHECKER_RELOAD=0` 으로 끄고, 반대로 `=1` 로 켤 수도 있습니다.
 
 **이 프로그램은 내 컴퓨터 전용입니다.** 접속 주소가 `127.0.0.1` 한 곳에 못 박혀 있어서, 같은 와이파이에
 있는 다른 기기도 접속할 수 없습니다. 그래서 로그인 화면이 없습니다 — 이 못 박음 자체가 잠금입니다.

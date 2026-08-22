@@ -185,9 +185,13 @@
   --dw-brand-youtube-ink: var(--dw-youtube-700);
 
   /* ── 타이포 ──────────────────────────────────────────────────── */
-  --dw-font-display: 'MemomentKkukkukk', 'Pretendard', 'Apple SD Gothic Neo', system-ui, sans-serif;
+  --dw-font-display: 'Yeon Sung', 'Pretendard', 'Apple SD Gothic Neo', system-ui, sans-serif;
   --dw-font-body: 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', -apple-system,
     BlinkMacSystemFont, system-ui, 'Segoe UI', sans-serif;
+  /* 자판 글쇠(kbd)와 코드 칸이 쓰는 고정폭. 글꼴을 따로 내려받지 않고 기기에
+     이미 있는 것만 쓴다 — 글쇠 한 줄 때문에 파일을 더 받게 할 수는 없다. */
+  --dw-font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas,
+    'Liberation Mono', monospace;
 
   /* 프로즈 3단(ratio 1.25) — 위계는 크기가 아니라 웨이트로 만든다 */
   --dw-size-body: 1rem;       /* 16px */
