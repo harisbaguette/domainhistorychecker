@@ -6,31 +6,40 @@
    화면(static/index.html)과 보고서(report/html.py)가 함께 쓴다.
    ========================================================================== */
 
-/* ── 손글씨 — doweek 앱과 똑같이 화면 전체를 손글씨로 쓴다 ────────────────────
-   doweek 본체(src/index.css)는 `--font-app` 한 줄로 앱 전체 글씨를 꾹꾹체로 깐다.
-   그래서 여기서도 제목만이 아니라 본문까지 같은 글씨로 간다(운영자 지시 2026-08-07).
-   이름을 base.css 의 것과 다르게 지었다 — 같은 이름이면 브라우저가 base.css 에 적힌
+/* ── 표시용 글꼴 — 화면 전체를 페이퍼로지로 쓴다 ──────────────────────────────
+   제목만이 아니라 본문까지 같은 글씨로 간다(운영자 지시 2026-08-07 · 글꼴만 2026-08-22 교체).
+   예전에 쓰던 메모먼트 꾹꾹체는 배포처가 웹 임베딩을 금지해서 빼고, 웹에 실어 보내도 되는
+   페이퍼로지(SIL 오픈폰트라이선스)로 갈아탔다 — 근거는 `static/fonts/NOTICE.md`.
+   이름은 base.css 의 손글씨 선언('Yeon Sung')과 겹치지 않는다 — 겹치면 브라우저가 거기 적힌
    (이 앱에 없는) 경로까지 같이 받으러 가 404 가 난다. */
-/* doweek 원본(src/index.css)처럼 normal 로 등록한다 — "100~900 다 있다"고 적으면
-   브라우저가 굵게 만들기(합성 볼드)를 그만둬서 앱 전체의 굵기 차이가 죽는다. */
+/* 보통(400)·굵게(700) 두 벌만 싣는다. 화면이 쓰는 500·600 은 브라우저가 400 에서,
+   900 은 700 에서 알아서 만들어 준다. 아홉 벌을 다 실으면 받을 것만 무거워진다. */
 @font-face {
-  font-family: 'DoweekHand';
-  src: url('fonts/MemomentKkukkukk.woff2') format('woff2');
-  font-weight: normal;
+  font-family: 'Paperlogy';
+  src: url('fonts/Paperlogy-4Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Paperlogy';
+  src: url('fonts/Paperlogy-7Bold.woff2') format('woff2');
+  font-weight: 700;
   font-style: normal;
   font-display: swap;
 }
 
 :root {
-  --dw-font-display: 'DoweekHand', 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
-  --dw-font-body: 'DoweekHand', 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
-  /* 판독용 글자 — 도메인 이름·점수는 읽는 게 일이라 손글씨 대신 이 글꼴을 쓴다 */
+  --dw-font-display: 'Paperlogy', 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
+  --dw-font-body: 'Paperlogy', 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
+  /* 판독용 글자 — 도메인 이름·점수는 한 글자씩 읽는 게 일이라 표시용 글꼴 대신 이 글꼴을 쓴다 */
   --font-data: 'Segoe UI', 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
   /* doweek 원본 카드 그림자(--shadow-sm) — DW 토큰(0.04)보다 한 단 또렷하다 */
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
-/* 도메인·점수·경로는 판독 대상 데이터다 — 손글씨로 쓰면 1과 0, \ 가 안 읽힌다 */
+/* 도메인·점수·경로는 판독 대상 데이터다 — 표시용 글꼴로 쓰면 1과 0, \ 가 헷갈린다 */
 .app-domain,
 .app-score,
 #detailTitle {

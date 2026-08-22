@@ -7,7 +7,8 @@
  * 검사 결과처럼 매번 달라지는 것(/api/…)은 손대지 않고 그대로 지나보낸다.
  */
 
-const VERSION = "v1";
+/* 글꼴을 바꾸면 이 번호를 올린다 — 예전에 받아 둔 글꼴을 계속 꺼내 쓰지 않도록. */
+const VERSION = "v2";
 const SHELL_CACHE = `domainchecker-shell-${VERSION}`;
 const ASSET_CACHE = `domainchecker-assets-${VERSION}`;
 const MINE = new Set([SHELL_CACHE, ASSET_CACHE]);
@@ -17,7 +18,8 @@ const PRECACHE = [
   "/",
   "/style.css",
   "/manifest.webmanifest",
-  "/fonts/MemomentKkukkukk.woff2",
+  "/fonts/Paperlogy-4Regular.woff2",
+  "/fonts/Paperlogy-7Bold.woff2",
   "/static/icons/icon-192.png",
   "/static/icons/icon-512.png",
 ];

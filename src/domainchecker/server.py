@@ -323,7 +323,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     app.mount("/report", StaticFiles(directory=base / "report", html=True), name="report")
     if STATIC_DIR.exists():
         app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-    # 손글씨 글꼴은 /style.css 옆자리(/fonts/…)에서 부른다 — 스타일 한 장이 화면과
+    # 표시용 글꼴은 /style.css 옆자리(/fonts/…)에서 부른다 — 스타일 한 장이 화면과
     # 보고서 양쪽에서 같은 상대 경로로 글꼴을 찾게 하려는 것이다.
     if (STATIC_DIR / "fonts").is_dir():
         app.mount("/fonts", StaticFiles(directory=STATIC_DIR / "fonts"), name="fonts")

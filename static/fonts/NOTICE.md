@@ -1,38 +1,54 @@
 # 글꼴 출처
 
-## MemomentKkukkukk (메모먼트 꾹꾹체)
+## Paperlogy (페이퍼로지)
 
-- 파일: `MemomentKkukkukk.woff2` (1.9MB · 한글 음절 11,172자 + 라틴 95자 전부 들어 있다)
-- 가져온 곳: `Z:\Doweek\public\fonts\MemomentKkukkukk-subset.woff`
-  (doweek 본체 앱이 실제로 쓰는 것과 같은 파일)
-  2026-08-22 확인: 예전에 적어 두었던 `design-system\assets\fonts\` 쪽 경로는 이제 없다.
-  DW 디자인 시스템이 2026-08-10 에 이 글꼴을 빼고 BM 연성체로 갈아탔기 때문이다(바로 아래 참고).
-  doweek 본체는 그대로 이 글꼴을 쓰고 있어서, 이 도구도 본체와 같은 파일을 계속 쓴다.
-- 손댄 것: 글자 모양은 하나도 고치지 않았고, 웹에서 빨리 받아지도록 `woff2` 로 다시 압축만 했다
-  (2.6MB → 1.9MB).
-- 쓰는 자리: 앱 전체. doweek 본체(`src/index.css` 의 `--font-app`)가 제목만이 아니라 본문까지
-  이 글꼴로 깔기 때문에, 이 도구도 같은 방식으로 쓴다.
+- 파일: `Paperlogy-4Regular.woff2` (428KB · 보통 굵기 400) · `Paperlogy-7Bold.woff2` (430KB · 굵게 700)
+  두 벌 다 글자 14,098자가 들어 있다(한글 음절 전부 + 라틴 + 기호).
+- 만든 곳: 페이퍼로지(발표 자료를 다루는 한국 유튜브 채널) — G마켓 산스의 한글과 Montserrat 의
+  영문을 이어 붙여 만든 글꼴. 굵기는 얇은 것부터 아주 굵은 것까지 아홉 벌이 나와 있다.
+- 받은 곳(공식): <https://freesentation.blog/paperlogy> 가 안내하는 공식 저장소
+  <https://github.com/Freesentation/paperlogy> 의 `woff2/` 폴더에서 그대로 내려받았다
+  (2026-08-22 확인). 손댄 것은 하나도 없다 — 글자를 덜어내지도, 다시 압축하지도 않은 원본 그대로다.
+- 두 벌만 싣는 이유: 화면이 쓰는 굵기는 400·500·600·700·900 인데, 500·600 은 브라우저가 400 에서,
+  900 은 700 에서 알아서 만들어 준다. 아홉 벌을 다 실으면 받을 것만 4MB 가까이 무거워진다.
+- 쓰는 자리: 앱 전체(제목·본문 모두)와 보고서. `static/app.css` 의 `@font-face` 두 덩이가
+  `Paperlogy` 라는 이름으로 등록하고, `--dw-font-display` · `--dw-font-body` 가 그 이름을 가리킨다.
 
-### 라이선스에 대해 알고 있는 것
+### 라이선스 — 웹에 실어 보내도 된다
 
-배포처(눈누)의 허용 범위표에는 **임베딩(앱·웹사이트에 글꼴 파일을 실어 보내는 것) 금지**로
-적혀 있다(2026-08-07 확인 · <https://noonnu.cc/font_page/1663> ·
-원문 <https://mem0ment.notion.site/38ea7af66521805699d1e29efed3c920>).
+**SIL 오픈폰트라이선스(OFL) 1.1** 이다. 공식 저장소의 라이선스 파일
+(<https://github.com/Freesentation/paperlogy/blob/main/OFL%20license.txt> · 2026-08-22 확인) 첫 줄과
+OFL 원문에 이렇게 적혀 있다.
 
-이 사실을 운영자에게 알린 뒤, **운영자가 "손글씨 폰트도 꼭 써야 함"이라고 지시하여 그대로 싣는다**
-(2026-08-07). 밖으로 배포할 때는 원 배포처에 사용 허락을 따로 확인하는 것이 안전하다.
+> Copyright 2024 The PAPERLOGY Authors (https://freesentation.blog/paperlogy)
+> This Font Software is licensed under the SIL Open Font License, Version 1.1.
 
-### 갈아탈 손글씨가 이미 준비되어 있다 (2026-08-22 확인)
+> The fonts, including any derivative works, can be bundled, embedded,
+> redistributed and/or sold with any software provided that any reserved
+> names are not used by derivative works.
+> (글꼴을 소프트웨어에 함께 담고, 심고, 다시 나눠 주는 것이 모두 된다는 뜻)
 
-DW 디자인 시스템은 2026-08-10 에 이 글꼴을 **빼고** BM 연성체(Yeon Sung · 우아한형제들)로 갈아탔다.
-이유가 바로 위의 임베딩 금지다. BM 연성체는 SIL Open Font License 1.1 이라 웹에 실어 보내는 것도,
-글자를 덜어내 가볍게 만드는 것도, 다시 나눠 주는 것도 모두 허용된다. 파일도 훨씬 가볍다(327KB).
-doweek 본체도 이 글꼴을 이미 받아 두고 첫째 자리만 아직 꾹꾹체로 두고 있다.
+배포처인 눈누(<https://noonnu.cc/font_page/1456> · 2026-08-22 확인)의 허용 범위표에도 같은 내용이
+한국어로 적혀 있다.
 
-- 준비된 파일: `Z:\Doweek\design-system\assets\fonts\YeonSung-subset.woff2` (라이선스 원문 `OFL.txt` 같은 폴더)
-- 갈아타려면: 그 woff2 를 이 폴더에 복사하고, `static/app.css` 의 `@font-face` 가 가리키는 파일 이름만 바꾸면 된다.
-  `DoweekHand` 라는 이름은 그대로 둔다 — 이름을 바꾸면 `--dw-font-*` 를 덮어쓴 줄까지 같이 고쳐야 한다.
-- 아예 손글씨를 빼려면: `static/app.css` 의 `@font-face` 한 덩이와 이 폴더의 woff2 만 지우면 되고,
-  그러면 자동으로 Pretendard 계열 본문 글꼴로 돌아간다.
+> 웹사이트 및 프로그램 서버 내 폰트 탑재, E-book 제작 (허용)
 
-**갈아탈지 말지는 운영자가 정한다.** 2026-08-07 지시가 아직 살아 있어서 지금은 꾹꾹체 그대로 둔다.
+> SIL 오픈폰트라이선스(OFL)에 따라 글꼴 단독 판매 또는 글꼴 라이선스 변경을 제외한
+> 모든 상업적 행위 및 수정, 재배포가 가능합니다.
+
+지키면 되는 것은 두 가지뿐이다. ① 글꼴 파일만 따로 떼어 파는 것은 안 된다(프로그램에 실어
+보내는 것은 된다). ② 글자 모양을 고쳐 다시 내놓을 때 `Paperlogy` 라는 이름을 쓰면 안 된다.
+이 프로젝트는 원본을 고치지 않고 그대로 싣기만 하므로 둘 다 걸리지 않는다.
+
+### 예전에 쓰던 글꼴 (2026-08-22 퇴출)
+
+메모먼트 꾹꾹체(`MemomentKkukkukk.woff2`)를 쓰다가 지웠다. 배포처(눈누) 허용 범위표에
+**임베딩(앱·웹사이트에 글꼴 파일을 실어 보내는 것) 금지**로 적혀 있었기 때문이다
+(<https://noonnu.cc/font_page/1663>). 운영자 지시로 페이퍼로지로 갈아탔다.
+
+### 손대야 할 때
+
+- 다른 글꼴로 갈아타려면: 새 woff2 를 이 폴더에 넣고, `static/app.css` 의 `@font-face` 두 덩이가
+  가리키는 파일 이름과 `Paperlogy` 라는 이름, 그리고 `--dw-font-*` 두 줄을 함께 고친다.
+  `static/sw.js` 의 미리 받아 두는 목록과 `report/html.py` 의 복사 목록에도 같은 파일 이름이 적혀 있다.
+- 아예 빼려면: `@font-face` 두 덩이와 이 폴더의 woff2 를 지우면 Pretendard 계열 본문 글꼴로 돌아간다.

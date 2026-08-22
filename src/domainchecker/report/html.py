@@ -587,10 +587,10 @@ def render_index(results: list[DomainResult]) -> str:
 
 
 def _copy_fonts(out_dir: Path) -> None:
-    """손글씨 글꼴을 보고서 폴더에도 한 벌 둔다.
+    """표시용 글꼴을 보고서 폴더에도 한 벌 둔다.
 
     보고서는 폴더째 메일로 나간다. `style.css` 가 글꼴을 `fonts/…` 로 부르므로,
-    글꼴이 옆에 없으면 받는 사람 화면에서는 제목이 손글씨로 나오지 않는다.
+    글꼴이 옆에 없으면 받는 사람 화면에서는 글씨가 이 글꼴로 나오지 않는다.
     글꼴이 없어도 보고서 자체는 나와야 하니 실패는 조용히 넘긴다.
     """
     src_dir = STATIC_DIR / "fonts"
@@ -598,7 +598,7 @@ def _copy_fonts(out_dir: Path) -> None:
         return
     dest_dir = out_dir / "fonts"
     dest_dir.mkdir(parents=True, exist_ok=True)
-    for name in ("MemomentKkukkukk.woff2",):
+    for name in ("Paperlogy-4Regular.woff2", "Paperlogy-7Bold.woff2"):
         one = src_dir / name
         if one.is_file():
             with contextlib.suppress(OSError):
