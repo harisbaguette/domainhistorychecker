@@ -56,6 +56,12 @@ class WaybackClient:
         self.limiter = limiter or AdaptiveRateLimiter()
         # 웨이백이 429로 막아 쉬어 갈 때 화면에 알릴 통로(없으면 조용히 쉰다)
         self.on_wait = on_wait
+        # 이미 받아 둔 저장분의 본문 — 3단(최신 한 장)이 받은 것을 4단(전수 정독)이
+        # 또 받지 않게 하는 장부다. 이 장부가 없으면 도메인마다 본문 요청 한 번이
+        # 그냥 버려진다(부채 대장 1번). 열쇠는 내용 지문(digest)이고, 지문이 없으면
+        # 주소로 잡는다 — 지문이 같으면 바이트가 같은 저장분이라 다시 받을 이유가 없다.
+        # 이 장부는 도메인 하나가 끝나면 함께 사라진다(파이프라인이 도메인마다 새로 만든다).
+        self._bodies: dict[str, str] = {}
 
     async def _get(self, url: str, params: dict | None = None) -> httpx.Response | None:
         """One rate-limited GET; 429/5xx get a breather and up to two more tries.
@@ -254,24 +260,23 @@ class WaybackClient:
         return [c for c in rows if short_path(c.original)]
 
     async def fetch_snapshot(self, snapshot: Snapshot) -> str | None:
-        """Fetch the stored bytes of one capture (`id_` = no archive rewriting)."""
+        """Fetch the stored bytes of one capture (`id_` = no archive rewriting).
+
+        이미 받아 둔 장이면 장부에서 꺼내 주고 웨이백을 다시 두드리지 않는다.
+        실패(None)는 장부에 적지 않는다 — 웨이백은 바쁜 날 같은 주소를 몇 초 뒤에
+        열어 주므로, 못 받았다는 사실을 기억해 두면 다시 시도할 길이 막힌다.
+        """
+        key = snapshot.digest or snapshot.raw_url
+        kept = self._bodies.get(key)
+        if kept is not None:
+            return kept
         response = await self._get(snapshot.raw_url)
         if response is None or response.status_code >= 400:
             return None
         if _is_excluded(response.text):
             return None
+        self._bodies[key] = response.text
         return response.text
-
-    async def collect(self, domain: str, on_progress=None) -> WaybackHistory:
-        """싼 목록 조회(3단)와 비싼 본문 정독(4단)을 이어서 한 번에 하는 길.
-
-        깔때기를 쓰는 파이프라인은 이 둘을 따로 부른다 — 3단에서 걸러진 도메인은
-        본문 정독까지 가지 않기 때문이다. 이 함수는 둘을 붙여 둔 편의용이다.
-        """
-        history = await self.timeline(domain)
-        if not history.check.ok or not history.has_history:
-            return history
-        return await self.deep_read(domain, history, on_progress=on_progress)
 
     async def deep_read(
         self,

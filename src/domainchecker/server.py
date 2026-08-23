@@ -131,6 +131,10 @@ class RunManager:
         self.task: asyncio.Task | None = None
         self.subscribers: set[asyncio.Queue] = set()
         self.history: list[dict] = []
+        # 끝난 도메인 수는 쌓아 두고 센다. 예전에는 /api/status 를 부를 때마다
+        # 기록 전체를 처음부터 다시 훑어 셌다 — 화면이 이 주소를 1초마다 부르고
+        # 기록은 도메인 수만큼 길어지므로, 도메인이 늘수록 훑는 양이 제곱으로 는다.
+        self.done_count = 0
         self.domains: list[str] = []
         self.results: dict[str, dict] = {}
         self.running = False
@@ -145,6 +149,8 @@ class RunManager:
         # 붙을 때마다 수백 토막을 재생하게 되므로 지금 보고 있는 사람에게만 보낸다.
         if event.get("type") != "step":
             self.history.append(event)
+        if event.get("type") == "domain_done":
+            self.done_count += 1
         # capture_done도 결과를 실어 온다 — 사진이 붙은 최신본으로 갈아 끼워야
         # 상세 화면이 방금 찍은 캡쳐를 보여 준다.
         if event.get("type") in ("domain_done", "capture_done") and event.get("result"):
@@ -168,6 +174,7 @@ class RunManager:
         if self.running:
             raise HTTPException(status_code=409, detail="이미 분석이 진행 중입니다.")
         self.history = []
+        self.done_count = 0
         self.error = ""
         self.domains = domains
         self.results = {}
@@ -219,11 +226,10 @@ class RunManager:
         return load_run_state(self.base) if self.base else []
 
     def status(self) -> dict:
-        done = sum(1 for e in self.history if e.get("type") == "domain_done")
         return {
             "running": self.running,
             "total": len(self.domains),
-            "done": done,
+            "done": self.done_count,
             "domains": self.domains,
             "error": self.error,
             "finished": self.finished,
@@ -265,6 +271,10 @@ def estimate(config: Config, count: int) -> dict:
     quota += [f"{note} — 공개 자료라 키도 돈도 안 듭니다" for note in config.free_fallbacks()]
     return {
         "count": count,
+        # 화면이 쓸 값은 문장이 아니라 값으로 넘긴다. 예전에는 아래 quota 문장에서
+        # 화면이 정규식으로 금액을 도로 뽑아 썼다 — 문구를 한 글자만 손봐도 조용히
+        # 빈칸이 되는 방식이라, 이미 숫자로 갖고 있는 것을 그대로 실어 보낸다.
+        "ai_cost_short": _money_short(ai_cost) if config.keys.openrouter else "",
         "wayback_requests": count * per_domain,
         "minutes": round(minutes, 1),
         "fast_minutes": round(fast_minutes, 1),
@@ -290,6 +300,11 @@ def _money(usd: float) -> str:
     if usd < 0.01:
         return "몇 원 수준"
     return f"약 ${usd:.2f} (약 {round(usd * KRW_PER_USD):,}원, 1달러=1,400원 기준)"
+
+
+def _money_short(usd: float) -> str:
+    """미리보기 한 줄에 들어갈 짧은 꼴 — 화면이 그대로 찍어 쓴다."""
+    return "몇 원" if usd < 0.01 else f"약 {round(usd * KRW_PER_USD):,}원"
 
 
 def _minutes(value: float) -> str:

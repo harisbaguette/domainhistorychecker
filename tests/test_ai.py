@@ -58,7 +58,10 @@ def test_prompt_respects_the_input_cap():
 def test_prompt_marks_parking_and_language():
     parked = SnapshotContent(timestamp="20200101000000", text="본문", lang="ko", parking=True)
     prompt = build_prompt("x.com", [parked])
-    assert "파킹 페이지" in prompt
+    # 파킹은 기계가 문구로 짐작한 것이라 단정해서 넘기지 않는다 — 최종 판단은 AI 몫.
+    assert "파킹" in prompt
+    assert "짐작" in prompt
+    assert "직접 판단" in prompt
     assert "한국어" in prompt
 
 
@@ -228,3 +231,27 @@ async def test_one_failed_chunk_means_no_full_check_claim(http):
 
     assert result.check.status is CheckStatus.UNCHECKED
     assert "전수 확인을 못 했습니다" in result.check.note
+
+
+@respx.mock
+async def test_topics_found_in_each_chunk_reach_the_final_merge(http):
+    """본문이 많아 나눠 읽어도 묶음마다 나온 추천 주제가 버려지면 안 된다(부채 대장 3번).
+
+    예전에는 통합 호출에 넘길 항목에서 추천 주제만 빠져 있어, 마지막 호출이 요약본만
+    보고 새로 지어냈다. 이제는 구간별 추천이 그대로 실려 가고, 겹치는 것을 추리는 일은
+    통합 호출이 뜻을 보고 한다.
+    """
+    calls = []
+
+    def record(request):
+        calls.append(json.loads(request.content))
+        return openrouter_response()
+
+    respx.post("https://openrouter.ai/api/v1/chat/completions").mock(side_effect=record)
+    client = OpenRouterClient(http, "key", list(MODEL_CHAIN))
+    await analyze("x.com", snaps(6, 20000), client)
+
+    merge_prompt = calls[-1]["messages"][1]["content"]  # 마지막 호출 = 통합 판정
+    assert "구간별 분석 결과" in merge_prompt
+    assert "홈베이킹" in merge_prompt  # 묶음이 내놓은 추천이 통합 호출까지 실려 갔다
+    assert "3~5개만 남겨라" in merge_prompt  # 겹치는 것을 추리라는 지시도 함께 간다

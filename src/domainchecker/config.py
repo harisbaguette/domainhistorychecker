@@ -42,7 +42,6 @@ class Config(BaseModel):
     speed_mode: str = "adaptive"  # "adaptive" (30/min 시작) | "safe" (12/min 고정)
     enable_capture: bool = True  # 화면 캡쳐(전 검사 완료 후 후행 실행)
     max_domains: int = 1000
-# 표본 수 설정(max_snapshots)은 없앴다 — 앞페이지의 서로 다른 변경본을 전부 읽는다(2026-08-10).
     ai_input_limit: int = 40_000  # 도메인당 AI 입력 상한(문자)
     snapshot_text_limit: int = 12_000  # 긴 글 꼬리에 붙는 스팸 문단까지 읽도록 6천→1.2만(2026-08-11)
     # 한꺼번에 도는 도메인 수 — 서버 한 곳 안에서 같이 돈다. 웨이백 호출은 어차피

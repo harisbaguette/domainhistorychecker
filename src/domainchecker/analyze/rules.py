@@ -9,17 +9,32 @@ word-frequency stuffing, near-identical bodies, language charset flow.
 from __future__ import annotations
 
 import re
+from collections import Counter
 
 from ..models import CheckState, CheckStatus, RuleFindings
 from .extract import SnapshotContent
 
 # 짧은 항목을 쉼표·막대기호로 8번 넘게 이어 붙인 구간 = 키워드 나열.
-_KEYWORD_LIST = re.compile(r"(?:[^,|·\n]{1,20}[,|·]\s*){8,}")
-_DOORWAY_PHRASES = ("지역별", "전국", "추천 순위", "best price", "cheap", "for sale online")
+# 항목 안에는 **낱말이 한 글자라도 있어야** 한다. 예전에는 빈칸도 한 항목으로 세어
+# "| | | | | | | |" 처럼 구분기호만 늘어선 자리가 키워드 나열로 잡혔다 — 링크 글귀를
+# 본문에서 걷어내면 목록 화면에는 이런 빈 구분기호가 줄줄이 남으므로, 아무 뜻도 없는
+# 자리가 도어웨이 증거가 됐다(실측: 해커뉴스 2007년 첫 화면이 도어웨이로 오차단).
+_KEYWORD_LIST = re.compile(r"(?:[^,|·\n]{0,9}[가-힣A-Za-z0-9][^,|·\n]{0,9}[,|·]\s*){8,}")
 
 LINK_FARM_LINKS = 50
 LINK_FARM_HOSTS = 20
+# 링크 농장은 **제 사이트가 없다** — 남의 집으로 보내는 링크만 잔뜩이고 자기 페이지는
+# 몇 개 되지 않는다. 이 조건이 없으면 바깥으로 링크를 많이 내보내는 멀쩡한 첫 화면
+# (실측: 네이버 2001·슬래시닷 2001·해커뉴스 2007)이 전부 링크 농장으로 찍힌다.
+LINK_FARM_OWN_PAGES = 5
 DUPLICATE_SIMILARITY = 0.9
+LINK_REPEAT_MIN = 40  # 서로 다른 링크가 이만큼은 깔려 있어야 "무더기"로 본다
+LINK_REPEAT_RATIO = 0.4  # 그중 서로 다른 글귀가 이 비율 이하면 같은 말의 반복
+# 링크 한 개당 낱말이 이만큼도 안 되면, 남은 글은 사람이 읽으라고 쓴 글이 아니라
+# 목록의 줄 정보다("83 points by 1 day ago"가 줄마다 반복되는 식). 그런 글에 낱말
+# 편중 자를 대면 목록이 통째로 키워드 채우기로 찍힌다(실측: 해커뉴스 2007년 첫 화면
+# — 낱말 205개에 링크 163개, 'points'가 24%). 그 판단은 링크 규칙이 따로 한다.
+PROSE_WORDS_PER_LINK = 2
 
 
 def analyze(snapshots: list[SnapshotContent]) -> RuleFindings:
@@ -48,12 +63,17 @@ def analyze(snapshots: list[SnapshotContent]) -> RuleFindings:
 
     # 외부 링크 무더기
     for snap in real:
-        if snap.external_links >= LINK_FARM_LINKS and snap.external_hosts >= LINK_FARM_HOSTS:
+        if (
+            snap.external_links >= LINK_FARM_LINKS
+            and snap.external_hosts >= LINK_FARM_HOSTS
+            and snap.internal_links < LINK_FARM_OWN_PAGES
+        ):
             findings.link_farm = True
             findings.risk_timestamps.append(snap.timestamp)
             findings.evidence.append(
                 f"{snap.timestamp[:4]}년 페이지에 외부 사이트 링크 {snap.external_links}개"
-                f"(서로 다른 사이트 {snap.external_hosts}곳)가 깔려 있습니다."
+                f"(서로 다른 사이트 {snap.external_hosts}곳)가 깔려 있는데 "
+                f"제 사이트 안으로 가는 링크는 {snap.internal_links}개뿐입니다."
             )
             break
 
@@ -84,36 +104,90 @@ def analyze(snapshots: list[SnapshotContent]) -> RuleFindings:
 
 
 def doorway_reason(snap: SnapshotContent) -> str:
-    """Keyword-stuffed listing pages built to funnel search traffic."""
-    text = snap.text
-    if not text:
+    """Keyword-stuffed listing pages built to funnel search traffic.
+
+    글 쪽 규칙(키워드 나열·낱말 편중)은 **링크 글귀를 뺀 본문**만 본다. 예전에는
+    화면 글자를 한 줄로 납작하게 붙여 놓고 봤는데, 그러면 게시판 목록처럼 글자의
+    거의 전부가 링크 글귀인 화면이 "같은 낱말이 39%인 글"로 보인다(실측:
+    photodiary.co.kr 2001년 '선생님께' 목록 — 멀쩡한 초등학생 일기 서비스가 제외).
+    목록의 반복은 아래 링크 규칙이 링크 자체를 보고 따로 판단한다.
+    """
+    body = distinct_lines(snap.body_text)
+    if body:
+        if _KEYWORD_LIST.search(body):
+            return "키워드를 쉼표로 길게 나열한 구간이 있습니다."
+        words = re.findall(r"[가-힣A-Za-z]{2,}", body.lower())
+        # 한 낱말이 본문의 15%를 넘게 차지하면 사람이 읽으라고 쓴 글이 아니다.
+        # 단, 남은 글이 목록의 줄 정보뿐이면(링크 수에 견줘 낱말이 너무 적으면) 재지 않는다.
+        if len(words) >= 150 and len(words) > len(snap.link_texts) * PROSE_WORDS_PER_LINK:
+            (top, count), = Counter(words).most_common(1)
+            if count / len(words) > 0.15:
+                return f"'{top}' 낱말이 본문의 {int(count / len(words) * 100)}%를 차지합니다(키워드 채우기)."
+    # 예전에는 여기서 낱말 6개("지역별"·"전국"·"cheap" 등)가 본문에 있으면 도어웨이로
+    # 찍었다. 그 낱말은 멀쩡한 사이트가 늘 쓰는 말이라("전국 배송", "cheap shoes"),
+    # 실측에서 정상 사례 5개를 5개 다 도어웨이로 잘못 찍었고 진짜 도어웨이 2개는
+    # 위의 구조 규칙(키워드 나열·링크 글귀 반복)이 이미 잡고 있었다 — 잡은 것은
+    # 없고 멀쩡한 것만 때린 장치라 걷어냈다. 낱말이 아니라 뜻을 봐야 하는 도어웨이
+    # 판정은 AI 몫이다(ai.SYSTEM_PROMPT 가 "도어웨이 페이지"를 이미 명시한다).
+    return link_repeat_reason(snap)
+
+
+def distinct_lines(body: str) -> str:
+    """같은 줄이 여러 번 그려진 것은 한 번만 남긴다.
+
+    목록 화면은 똑같이 생긴 줄을 수십 번 찍어 낸다(실측: photodiary 2001년 목록은
+    "(3학년 1반)" 줄이 32번, 그중 28줄만 링크였다 — 링크를 걷어내도 32번 중 32번이
+    본문에 남아 그 낱말이 본문의 28%가 됐다). 그 줄을 한 번만 세면 목록은 짧은 안내글로
+    돌아오고, 한 낱말을 통째로 박아 넣은 진짜 키워드 채우기는 줄이 하나뿐이라
+    그대로 남는다 — 세는 것만으로 둘을 가르는 자리가 여기다.
+    """
+    return " ".join(dict.fromkeys(line for line in body.split("\n") if line))
+
+
+def link_repeat_reason(snap: SnapshotContent) -> str:
+    """같은 글귀를 단 링크가 서로 다른 주소로 무더기로 깔린 화면.
+
+    세는 대상은 링크 줄 수가 아니라 **(글귀, 주소) 짝**이다. 게시판 목록은 같은
+    글귀가 같은 주소를 가리키며 수십 줄 그려지는 게 정상이라(photodiary 2001년
+    목록: '홍선생님께' 28줄이 전부 같은 주소), 줄 수로 세면 목록을 때린다. 도어웨이는
+    반대로 같은 미끼 글귀를 **서로 다른 돈벌이 주소**마다 붙인다.
+    """
+    links = snap.links
+    if len(links) < LINK_REPEAT_MIN:
         return ""
-    if _KEYWORD_LIST.search(text):
-        return "키워드를 쉼표로 길게 나열한 구간이 있습니다."
-    words = re.findall(r"[가-힣A-Za-z]{2,}", text.lower())
-    # 한 낱말이 본문의 15%를 넘게 차지하면 사람이 읽으라고 쓴 글이 아니다.
-    if len(words) >= 150:
-        top, count = _most_common(words)
-        if count / len(words) > 0.15:
-            return f"'{top}' 낱말이 본문의 {int(count / len(words) * 100)}%를 차지합니다(키워드 채우기)."
-    if len(snap.link_texts) >= 40:
-        unique = len({t.lower() for t in snap.link_texts})
-        if unique <= len(snap.link_texts) * 0.4:
-            return f"거의 같은 링크 글귀 {len(snap.link_texts)}개가 반복됩니다."
-        if any(phrase in text.lower() for phrase in _DOORWAY_PHRASES):
-            return "지역·순위 키워드를 붙인 유사 페이지 링크가 대량으로 있습니다."
+    labels = {label for label, _ in links}
+    if labels and len(labels) <= len(links) * LINK_REPEAT_RATIO:
+        return f"서로 다른 주소 {len(links)}곳에 거의 같은 링크 글귀({len(labels)}종)가 붙어 있습니다."
     return ""
 
 
 def duplicate_pair(snapshots: list[SnapshotContent]) -> tuple[int, int] | None:
-    """Two snapshots from different years whose text is near-identical."""
-    scored = [(s, _shingles(s.text)) for s in snapshots if len(s.text) >= 300]
+    """Two snapshots from different years whose text is near-identical.
+
+    화면 글자 전부가 닮은 것만으로는 모자란다 — 차림표·머리말·꼬리말은 같은 사이트면
+    해마다 그대로라, 내용이 전혀 다른 두 페이지도 그것 때문에 닮아 보인다. 그래서
+    **링크 글귀를 걷어낸 본문까지 닮았을 때만** 자동 생성으로 본다(실측: 진짜 자동
+    생성 목록 한 쌍은 전체 0.96·본문 0.92로 둘 다 넘어 그대로 잡힌다).
+
+    4단 정독은 몇 장 받을 때마다 "이쯤에서 제외가 확정됐나"를 다시 따지므로 이 검사가
+    여러 번 돈다. 잘게 썬 본문을 기억해 두면 빨라질 것 같지만 실측해 보니 아니었다
+    (60장·재검사 19회: 기억 없이 1.49초, 기억해 두고 1.59초). 시간을 쓰는 자리는
+    써는 쪽이 아니라 장끼리 맞대 보는 쪽이라, 기억해 두는 장치는 두지 않는다.
+    """
+    scored = [
+        (s, _shingles(s.text), _shingles(s.body_text or s.text))
+        for s in snapshots
+        if len(s.text) >= 300
+    ]
     for i in range(len(scored)):
         for j in range(i + 1, len(scored)):
             left, right = scored[i], scored[j]
             if left[0].year == right[0].year:
                 continue
-            if jaccard(left[1], right[1]) >= DUPLICATE_SIMILARITY:
+            if (
+                jaccard(left[1], right[1]) >= DUPLICATE_SIMILARITY
+                and jaccard(left[2], right[2]) >= DUPLICATE_SIMILARITY
+            ):
                 return left[0].year, right[0].year
     return None
 
@@ -127,10 +201,3 @@ def jaccard(left: set[str], right: set[str]) -> float:
 def _shingles(text: str, size: int = 4) -> set[str]:
     words = re.findall(r"[가-힣A-Za-z0-9]+", text.lower())
     return {" ".join(words[i : i + size]) for i in range(max(0, len(words) - size + 1))}
-
-
-def _most_common(words: list[str]) -> tuple[str, int]:
-    counts: dict[str, int] = {}
-    for word in words:
-        counts[word] = counts.get(word, 0) + 1
-    return max(counts.items(), key=lambda kv: kv[1])

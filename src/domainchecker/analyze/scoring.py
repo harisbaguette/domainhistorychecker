@@ -23,7 +23,6 @@ from ..models import (
     REQUIRED_CHECKS,
     VERDICT_LABEL,
     DomainResult,
-    Score,
     Verdict,
 )
 
@@ -32,6 +31,13 @@ from ..models import (
 # (진상 검증 지적 7, 2026-08-11). 인용(quotes) 필수는 그대로 둔다.
 AI_FATAL_CONFIDENCE = 0.7
 RULES_FATAL_HITS = 3  # AI 없이 규칙만으로 치명(❌)을 낼 최소 흔적 수
+
+# "이건 도메인 얘기가 아니라 우리 도구 사정"이라는 표식. 화면은 이 표식이 붙은
+# 줄만 뒤로 미룬다. 예전에는 화면이 낱말 목록 정규식(차단·미확인·DNS…)으로 문장의
+# 뜻을 넘겨짚어 갈랐는데, 그러면 "웨이백 열람이 **차단**되어 과거를 볼 수 없습니다"
+# 같은 진짜 도메인 신호가 도구 사정으로 밀려나고, AI가 써 보낸 인용문에 그 낱말이
+# 우연히 들어가면 치명 사유까지 뒤로 밀렸다. 만드는 자리에서 표식을 붙인다.
+UNCHECKED_PREFIX = "필수 검사 미확인 — "
 
 
 def _check_of(result: DomainResult, name: str):
@@ -49,7 +55,6 @@ def _check_of(result: DomainResult, name: str):
 
 def judge(result: DomainResult) -> DomainResult:
     """기계 거부권 → AI 종합 판정 순서로 최종 도장을 정한다(제자리 수정)."""
-    result.scoring = Score()  # 수제 감점표는 폐지 — 예전 저장분과의 호환용 빈 껍데기
     ai_ok = result.ai.check.ok
     result.score = result.ai.buy_score if ai_ok else None
     result.partial_score = not ai_ok  # AI 뜻 읽기 없이 나온 결과는 참고치
@@ -206,7 +211,9 @@ def warn_reasons(result: DomainResult) -> list[str]:
             continue
         check = _check_of(result, name)
         if not check.ok:
-            reasons.append(f"필수 검사 미확인 — {CHECK_LABEL[name]}: {check.note or '확인하지 못했습니다.'}")
+            reasons.append(
+                f"{UNCHECKED_PREFIX}{CHECK_LABEL[name]}: {check.note or '확인하지 못했습니다.'}"
+            )
 
     spam = result.ai.spam
     ai_says_spam = result.ai.check.ok and spam.verdict == "spam"

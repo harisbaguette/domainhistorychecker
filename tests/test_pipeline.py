@@ -159,7 +159,18 @@ def _fresh_collection():
 def fast_pipeline(config, events) -> Pipeline:
     pipeline = Pipeline(config, on_event=events.append, resolver=FakeResolver())
     # 테스트에서는 실제로 기다리지 않는다.
-    pipeline.wayback_limiter = AdaptiveRateLimiter(rpm=6000)
+    # 웨이백이 막으면 실제 앱은 두 가지로 물러선다 — 몇 초씩 쉬고(backoff), 분당
+    # 30건이던 속도를 12건까지 떨어뜨린다(한 번 두드릴 때마다 5초 대기). 기다리는
+    # 값을 전부 0으로 두지 않으면 실패를 다루는 시험 하나가 65초를 잔다(실측).
+    # 물러서는 계산 자체는 test_ratelimit.py 가 가짜 시계로 따로 본다.
+    pipeline.wayback_limiter = AdaptiveRateLimiter(
+        rpm=6000,
+        degraded_rpm=6000,
+        floor_rpm=6000,
+        recover_rpm=6000,
+        backoff_base=0.001,
+        backoff_max=0.001,
+    )
     return pipeline
 
 
@@ -216,10 +227,14 @@ async def test_full_run_produces_a_buy_verdict(config, tmp_path):
     # 원본 HTML은 저장하지 않는다
     assert all("html" not in page for page in result.wayback.pages)
 
-    # 4단까지 간 도메인이 받아 온 옛 화면 본문 장수 — 3단의 최신 한 장 +
-    # 앞페이지 변경본 10장 + 하위 유형 대표 2장. 3단에서 걸리면 이게 1장이 된다.
+    # 4단까지 간 도메인이 웨이백을 두드린 본문 요청 수 — 앞페이지 변경본 10장 +
+    # 하위 유형 대표 2장. 3단이 받아 본 '가장 최근 화면 한 장'은 4단의 변경본 대표와
+    # 같은 장이라, 받아 둔 본문 장부가 그 한 번을 아낀다(부채 대장 1번 상환).
+    # 3단에서 걸러지는 도메인이면 이게 1장이 된다.
     fetched = [c for c in respx.calls if "id_/" in str(c.request.url)]
-    assert len(fetched) == len(YEARS) + 3
+    assert len(fetched) == len(YEARS) + 2
+    # 같은 주소를 두 번 받은 자리가 하나도 없어야 한다 — 이게 낭비의 증거였다
+    assert len({str(c.request.url) for c in fetched}) == len(fetched)
 
     # 진행 이벤트 + 결과 파일
     kinds = [e["type"] for e in events]

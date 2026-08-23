@@ -64,7 +64,38 @@ async def http():
 
 
 def fast_limiter():
-    return AdaptiveRateLimiter(rpm=6000)
+    """시험용 속도 조절기 — 진짜로 기다리지 않는다.
+
+    웨이백이 503·429를 던지면 실제 앱은 두 가지로 물러선다: 3초→6초→12초→24초로
+    쉬고(backoff), 분당 30건이던 속도를 12건까지 떨어뜨린다(그러면 한 번 두드릴
+    때마다 5초를 기다린다). 시험에서 그 둘을 그대로 두면 실패를 다루는 시험 다섯 개가
+    3분을 자고 있었다(실측 183초 중 173초).
+
+    물러서는 계산이 맞는지는 `test_ratelimit.py` 가 가짜 시계로 따로 본다. 여기서 볼
+    것은 "쉬었다 다시 두드려서 결국 받아 오는가"뿐이므로, 기다리는 값만 전부 0으로
+    둔다 — 물러섰다는 사실 자체는 `degraded` 표시로 그대로 확인할 수 있다.
+    """
+    return AdaptiveRateLimiter(
+        rpm=6000,
+        degraded_rpm=6000,
+        floor_rpm=6000,
+        recover_rpm=6000,
+        backoff_base=0.001,
+        backoff_max=0.001,
+    )
+
+
+async def full_read(client, domain="x.com"):
+    """파이프라인이 실제로 하는 순서 그대로 — 3단(목록 한 번) 다음 4단(전수 정독).
+
+    예전에는 이 둘을 붙여 둔 편의 함수(`collect`)를 시험했는데, 프로덕션은 깔때기라
+    둘을 따로 부른다(3단에서 걸러진 도메인은 4단까지 안 간다). 편의 함수를 시험하면
+    정작 실제로 도는 길은 아무도 안 보게 되므로, 여기서 그 길을 그대로 밟는다.
+    """
+    history = await client.timeline(domain)
+    if not history.check.ok or not history.has_history:
+        return history
+    return await client.deep_read(domain, history)
 
 
 def mock_cdx(stats, versions, paths):
@@ -82,7 +113,7 @@ def mock_cdx(stats, versions, paths):
 
 
 @respx.mock
-async def test_collect_reads_every_distinct_front_page_version(http):
+async def test_deep_read_reads_every_distinct_front_page_version(http):
     mock_cdx(
         stats=rows(
             [
@@ -108,7 +139,7 @@ async def test_collect_reads_every_distinct_front_page_version(http):
         return_value=httpx.Response(200, text="<html><body>본문</body></html>")
     )
 
-    history = await WaybackClient(http, fast_limiter()).collect("x.com")
+    history = await full_read(WaybackClient(http, fast_limiter()))
 
     assert history.check.status is CheckStatus.OK
     # 앞페이지 변경본 3장은 전부 본문을 읽고, 하위 주소 2개는 목록으로 전부 훑는다.
@@ -120,6 +151,52 @@ async def test_collect_reads_every_distinct_front_page_version(http):
     assert "변경본 3장" in history.coverage_note
     assert "전부 읽음" in history.coverage_note
     assert "하위 주소 2개" in history.coverage_note
+
+
+@respx.mock
+async def test_a_page_already_fetched_is_never_fetched_twice(http):
+    """3단이 받아 둔 최신 화면 한 장을 4단이 또 받으면 도메인마다 요청 하나가 버려진다.
+
+    받아 둔 본문 장부(부채 대장 1번 상환)가 그 낭비를 없앤다 — 읽는 내용은 그대로이고
+    웨이백을 두드리는 횟수만 줄어든다.
+    """
+    mock_cdx(
+        stats=rows([["20200101000000", "http://x.com/", "200", "text/html", "A"]]),
+        versions=rows([["20200101000000", "http://x.com/", "200", "text/html", "A"]]),
+        paths=rows([]),
+    )
+    route = respx.get(url__regex=r"https://web\.archive\.org/web/\d+id_/.*").mock(
+        return_value=httpx.Response(200, text="<html><body>본문</body></html>")
+    )
+
+    client = WaybackClient(http, fast_limiter())
+    history = await client.timeline("x.com")
+    # 3단 — 가장 최근 화면 한 장만 받아 본다
+    assert await client.fetch_snapshot(history.latest) is not None
+    assert route.call_count == 1
+    # 4단 — 같은 장이 변경본 대표로 다시 나오지만 웨이백을 또 두드리지 않는다
+    history = await client.deep_read("x.com", history)
+
+    assert route.call_count == 1  # 두 번째 받기는 없다
+    assert history.versions_read == 1  # 그래도 읽은 내용은 그대로다
+    assert history.pages[0]["fetched"] is True
+    assert "본문" in history.pages[0]["html"]
+
+
+@respx.mock
+async def test_a_failed_fetch_is_not_remembered_as_an_answer(http):
+    """웨이백은 바쁜 날 같은 주소를 몇 초 뒤에 열어 준다 — 실패를 장부에 적으면 안 된다."""
+    snap = Snapshot(timestamp="20200101000000", original="http://x.com/", digest="A")
+    calls = iter([httpx.Response(503), httpx.Response(503), httpx.Response(503),
+                  httpx.Response(503), httpx.Response(503),
+                  httpx.Response(200, text="<html>본문</html>")])
+    respx.get(url__regex=r"https://web\.archive\.org/web/\d+id_/.*").mock(
+        side_effect=lambda request: next(calls)
+    )
+
+    client = WaybackClient(http, fast_limiter())
+    assert await client.fetch_snapshot(snap) is None  # 다섯 번 두드려도 안 열림
+    assert await client.fetch_snapshot(snap) == "<html>본문</html>"  # 다시 물어보면 열린다
 
 
 @respx.mock
@@ -226,7 +303,7 @@ async def test_version_query_failure_is_reported_not_hidden(http):
 
     respx.get(url__startswith="https://web.archive.org/cdx").mock(side_effect=respond)
 
-    history = await WaybackClient(http, fast_limiter()).collect("x.com")
+    history = await full_read(WaybackClient(http, fast_limiter()))
 
     assert history.check.status is CheckStatus.UNCHECKED
     assert "전수 확인" in history.check.note
@@ -249,7 +326,7 @@ async def test_unreadable_versions_are_counted_in_coverage(http):
         side_effect=lambda request: next(calls)
     )
 
-    history = await WaybackClient(http, fast_limiter()).collect("x.com")
+    history = await full_read(WaybackClient(http, fast_limiter()))
 
     assert history.versions_total == 2
     assert history.versions_read == 1
@@ -305,7 +382,9 @@ async def test_429_triggers_rate_drop_and_retry(http):
     history = await WaybackClient(http, limiter).timeline("x.com")
 
     assert route.call_count == 3
-    assert limiter.rpm == 12  # 429 한 번에 분당 12건으로 하향
+    # 429를 받고 속도를 낮췄다는 사실 — 얼마나 낮추는지(분당 12건)의 계산은
+    # `test_ratelimit.py` 가 가짜 시계로 따로 본다(여기서 재면 시험이 5초를 잔다).
+    assert limiter.degraded is True
     assert history.check.status is CheckStatus.OK
     assert history.total_captures == 2
     assert history.gap_years == [2019]

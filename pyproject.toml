@@ -43,7 +43,9 @@ ignore = [
     "RUF001",   # 한국어 본문의 ‘ ’ “ ” 따옴표는 의도한 표기다
     "RUF002",
     "RUF003",
-    "ASYNC109", # whois_lookup 의 timeout 인자는 공개 API 라 유지한다
+    # gabia.check 의 timeout 인자는 부르는 쪽이 쓰는 공개 자리라 유지한다.
+    # (예전 주석은 이미 없어진 whois_lookup 을 가리키고 있었다 — 자리만 옮겨 적는다.)
+    "ASYNC109",
 ]
 
 [tool.ruff.lint.per-file-ignores]

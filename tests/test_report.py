@@ -153,9 +153,13 @@ def test_plain_words_are_spelled_out_for_the_reader(sample_result):
     assert "판단 유보(unclear)" in detail_fragment(sample_result)
 
 
-def test_index_page_states_the_score_cutoffs(sample_result):
+def test_index_page_says_what_the_score_actually_is(sample_result):
+    """점수 문턱으로 도장을 찍던 감점표는 폐지됐다 — 안내문이 옛 규칙을 말하면 안 된다."""
     judge(sample_result)
-    assert "75점부터 매입 후보" in render_index([sample_result])
+    html = render_index([sample_result])
+
+    assert "매입 매력도" in html
+    assert "75점부터" not in html and "50점 밑" not in html
 
 
 def test_report_survives_a_domain_with_no_evidence():

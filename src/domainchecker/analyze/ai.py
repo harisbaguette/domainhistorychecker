@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 
 from ..clients.openrouter import OpenRouterClient, OpenRouterError
 from ..models import AIAnalysis, CheckState, CheckStatus, SpamJudgement
@@ -28,8 +29,49 @@ SYSTEM_PROMPT = (
     "연도의 경로에 도박·성인·약품 판매성 문구가 몰려 있으면 그 시기의 운영 방식 "
     "증거로 쓰고, 인용에 그 경로를 그대로 적어라. "
     "증거가 부족하면 unclear로 답하고 확신도를 낮춰라. 지어내지 마라. "
+    "각 페이지는 [본문](사람이 읽으라고 쓴 글)과 [링크 글귀](목록·차림표)로 나뉘어 있다. "
+    "게시판·목차 같은 목록 화면은 같은 글귀가 여러 줄 반복되는 것이 정상이므로 "
+    "그 반복만 보고 키워드 채우기라고 판정하지 마라. "
     "모든 출력 문장은 한국어로 쓴다."
 )
+
+# 링크 글귀는 몇 종이 몇 번씩 나왔는지로 줄여 보여 준다 — 같은 줄을 수십 번 그대로
+# 옮기면 그게 바로 AI 를 속이던 납작한 글이 된다.
+LINK_SUMMARY_MAX = 12
+LINK_SUMMARY_LIMIT = 600
+
+
+def link_summary(snap: SnapshotContent) -> str:
+    """이 화면의 링크 글귀를 '무엇이 몇 번'으로 접어 보여 준다."""
+    counts = Counter(t.strip() for t in snap.link_texts if t.strip())
+    if not counts:
+        return ""
+    shown = counts.most_common(LINK_SUMMARY_MAX)
+    listed = ", ".join(f"{label}×{n}" if n > 1 else label for label, n in shown)
+    rest = len(counts) - len(shown)
+    tail = f" 외 {rest}종" if rest > 0 else ""
+    return (
+        f"[링크 글귀 {sum(counts.values())}개 / 서로 다른 글귀 {len(counts)}종 — "
+        "목록·차림표 화면이면 같은 글귀가 반복되는 것이 정상이다]\n"
+        f"{listed}{tail}"
+    )
+
+
+def render_snapshot(snap: SnapshotContent, limit: int) -> str:
+    """AI 에게 넘길 한 장 — 본문과 링크 글귀를 갈라서 보여 준다.
+
+    예전에는 둘을 한 줄로 납작하게 붙여 넘겼다. 그러면 목록 화면이 "같은 낱말이
+    39%인 글"로 보여, 규칙 검사와 AI 가 **같은 원인으로 함께 속는다**. 둘이 독립적으로
+    보고 둘 다 동의할 때만 제외하는 안전장치가 그 순간 무력해진다.
+    """
+    head = "[본문]\n"
+    summary = link_summary(snap)[: min(LINK_SUMMARY_LIMIT, limit)]
+    # 나눠 둔 적이 없는 자료(손으로 만든 것 등)는 있는 글을 그대로 쓴다.
+    body = snap.body_text if (snap.body_text or snap.link_texts) else snap.text
+    if body and summary:
+        body = body[: max(0, limit - len(summary) - len(head) - 1)]
+        return f"{head}{body}\n{summary}" if body else summary
+    return (body or summary)[:limit]
 
 RESPONSE_SCHEMA = {
     "type": "object",
@@ -181,16 +223,18 @@ def build_prompt(
     blocks = []
     used = 0
     for snap in snapshots:
-        if not snap.text:
+        if not snap.text and not snap.link_texts:
             continue
+        # 파킹 여부는 기계가 문구로 **짐작**한 것이다. 단정해서 넘기면 AI 가 그 말을
+        # 믿고 본문을 흘려 읽는다 — 짐작이라고 적어 최종 판단을 AI 에게 넘긴다.
         label = (
             f"## {snap.timestamp[:4]}-{snap.timestamp[4:6]} "
             f"[{LANG_LABEL.get(snap.lang, snap.lang)}]"
-            f"{' (파킹 페이지)' if snap.parking else ''}\n"
+            f"{' (기계는 파킹 화면으로 짐작 — 본문을 읽고 직접 판단하라)' if snap.parking else ''}\n"
         )
         if snap.title:
             label += f"제목: {snap.title}\n"
-        block = label + snap.text[:per_snapshot]
+        block = label + render_snapshot(snap, per_snapshot)
         if used + len(block) > budget:
             block = block[: max(0, budget - used)]
             if block:
@@ -285,6 +329,9 @@ SCREEN_SYSTEM_PROMPT = (
     "만료를 앞둔 도메인은 대부분 파킹 화면이므로 파킹만 보이면 unclear로 답하라. "
     "합법 업종이라는 이유만으로 스팸으로 보지도 마라. "
     "spam 판정에는 반드시 화면 본문에서 그대로 따온 인용을 근거로 넣어라. "
+    "화면은 [본문](사람이 읽으라고 쓴 글)과 [링크 글귀](목록·차림표)로 나뉘어 있다 — "
+    "게시판·목차 같은 목록 화면에서 같은 글귀가 반복되는 것은 정상이니 그것만으로 "
+    "키워드 채우기라고 보지 마라. "
     "조금이라도 애매하면 unclear로 답하라 — 여기서 잘못 떨어뜨리면 멀쩡한 도메인을 잃는다. "
     "모든 출력 문장은 한국어로 쓴다."
 )
@@ -311,15 +358,15 @@ async def screen_latest(
     None은 "합격"이 아니라 "판정 불가"다 — 부르는 쪽은 이걸 통과로 읽으면 안 되고
     다음 단(옛 화면 전수 정독)으로 내려보내야 한다.
     """
-    if client is None or not client.api_key or not snapshot.text:
+    if client is None or not client.api_key or not (snapshot.text or snapshot.link_texts):
         return None
     prompt = (
         f"# 검사 대상 도메인\n{domain}\n\n"
         f"# 가장 최근 저장 화면 ({snapshot.timestamp[:4]}-{snapshot.timestamp[4:6]}"
         f", {LANG_LABEL.get(snapshot.lang, snapshot.lang)}"
-        f"{', 파킹 페이지로 보임' if snapshot.parking else ''})\n"
+        f"{', 기계는 파킹 화면으로 짐작 — 직접 판단하라' if snapshot.parking else ''})\n"
         + (f"제목: {snapshot.title}\n" if snapshot.title else "")
-        + snapshot.text[:SCREEN_TEXT_LIMIT]
+        + render_snapshot(snapshot, SCREEN_TEXT_LIMIT)
         + "\n\n# 지시\n이 한 장만 보고 스키마대로 한국어 JSON을 채워라. "
         "확정적인 스팸 증거가 이 화면에 보일 때만 spam으로 답하고, "
         "그 근거를 quotes에 본문 그대로 옮겨라. 애매하면 unclear."
@@ -378,11 +425,19 @@ def _chunk_context(context: dict, chunk: list[SnapshotContent], i: int, total: i
     return scoped
 
 
+# 묶음 하나를 읽고 나온 결과에서 통합 판정으로 넘길 항목들.
+# `recommended_topics` 도 넘긴다 — 예전에는 빼 두어서, 본문이 많아 여러 묶음으로 나눠
+# 읽은 도메인은 묶음마다 나온 추천 주제가 통째로 버려지고 마지막 통합 호출이 요약본만
+# 보고 새로 지어냈다(부채 대장 3번). 비슷한 추천이 쌓이는 것은 통합 호출이 뜻을 보고
+# 추리게 한다 — 낱말이 겹치는지 세는 기계식 거르개를 두지 않는다.
 _PARTIAL_KEYS = (
     "topic_history", "topic_periods", "spam", "transition", "transition_risk",
-    "content_quality", "trademark", "trademark_risk", "one_liner",
-    "verdict", "buy_score", "verdict_reason",
+    "content_quality", "trademark", "trademark_risk", "recommended_topics",
+    "one_liner", "verdict", "buy_score", "verdict_reason",
 )
+# 묶음 하나가 통합 프롬프트에 실어 보낼 추천 주제 수 — 묶음이 열 개면 추천만 수십 개가
+# 되어 통합 호출의 입력 예산을 잡아먹는다. 묶음마다 앞의 몇 개면 그 시대를 대표한다.
+_PARTIAL_TOPIC_LIMIT = 3
 
 
 def build_merge_prompt(domain: str, partials: list[dict], context: dict | None = None) -> str:
@@ -404,7 +459,10 @@ def build_merge_prompt(domain: str, partials: list[dict], context: dict | None =
         "결과(JSON 목록)다. 전부 합쳐 전체 역사에 대한 최종 판정을 같은 스키마로 내려라. "
         "spam은 가장 심한 구간의 판정을 따르고 quotes에는 그 구간의 인용을 그대로 옮겨라. "
         "topic_periods는 구간들을 이어 붙여 정리하라. 어느 한 구간에라도 위험 운영 증거가 "
-        "있으면 전체 판정에 반드시 반영하라(좋은 시기가 나쁜 시기를 덮지 못한다)."
+        "있으면 전체 판정에 반드시 반영하라(좋은 시기가 나쁜 시기를 덮지 못한다). "
+        "recommended_topics 는 구간별로 나온 추천을 다 훑어보고, 뜻이 겹치는 것끼리 "
+        "하나로 합쳐 서로 다른 3~5개만 남겨라 — 말만 바꾼 같은 주제를 여러 줄로 늘어놓지 "
+        "말고, 이유에는 어느 시기의 무엇을 잇는지 적어라."
     )
     body = json.dumps(partials, ensure_ascii=False)
     return "\n\n".join(header) + "\n\n# 구간별 분석 결과\n" + body
@@ -473,7 +531,11 @@ async def analyze(
                     )
                     return result
                 fallback = fallback or fb
-                partials.append({k: part.get(k) for k in _PARTIAL_KEYS})
+                partial = {k: part.get(k) for k in _PARTIAL_KEYS}
+                topics = partial.get("recommended_topics")
+                if isinstance(topics, list):
+                    partial["recommended_topics"] = topics[:_PARTIAL_TOPIC_LIMIT]
+                partials.append(partial)
             data, model, fb = await client.complete_json(
                 SYSTEM_PROMPT,
                 build_merge_prompt(domain, partials, context),

@@ -18,8 +18,14 @@ def prose(vocab: list[str], lines: int = 20) -> str:
 
 
 def snap(timestamp="20150101000000", **kwargs) -> SnapshotContent:
+    """시험용 화면 한 장.
+
+    `text`(화면 글자 전부)와 `body_text`(링크 글귀를 뺀 글)는 따로 담긴다. 여기서는
+    따로 주지 않으면 둘이 같다고 본다 — "이 화면은 링크 글귀가 섞여 있지 않다"는 뜻.
+    """
     base = {"text": prose(VOCAB_BAKERY), "lang": "ko"}
     base.update(kwargs)
+    base.setdefault("body_text", base["text"])
     return SnapshotContent(timestamp=timestamp, **base)
 
 
@@ -48,8 +54,17 @@ def test_hidden_text_is_flagged():
 
 
 def test_link_farm_is_flagged():
-    findings = analyze([snap(external_links=120, external_hosts=45)])
+    findings = analyze([snap(external_links=120, external_hosts=45, internal_links=1)])
     assert findings.link_farm is True
+
+
+def test_a_front_page_with_many_outbound_links_is_not_a_link_farm():
+    """제 페이지가 많으면 바깥 링크가 아무리 많아도 링크 농장이 아니다.
+
+    실측: 네이버 2001·슬래시닷 2001 첫 화면이 이 조건 없이는 전부 링크 농장이었다.
+    """
+    findings = analyze([snap(external_links=155, external_hosts=48, internal_links=12)])
+    assert findings.link_farm is False
 
 
 def test_keyword_stuffing_is_doorway():
@@ -93,3 +108,126 @@ def test_language_shift_is_detected():
         ]
     )
     assert findings.language_shift is True
+
+
+# ── 오차단 시험 — 멀쩡한 사이트를 도어웨이로 찍지 않는가 ──────────────────────
+# 예전에는 본문에 "전국"·"지역별"·"cheap" 같은 낱말이 있고 링크가 40개를 넘으면
+# 도어웨이로 찍었다. 그 낱말은 멀쩡한 사이트가 늘 쓰는 말이다.
+
+
+def varied_links(n: int = 45) -> list[str]:
+    """서로 다른 링크 글귀 — '같은 글귀 반복' 규칙에는 걸리지 않는다."""
+    return [f"상품{i}" for i in range(n)]
+
+
+def varied_targets(n: int = 45) -> list[str]:
+    """서로 다른 주소 — 링크 글귀와 짝을 이룬다."""
+    return [f"/item/{i}" for i in range(n)]
+
+
+def test_a_shop_saying_nationwide_delivery_is_not_a_doorway():
+    from domainchecker.analyze.rules import doorway_reason
+
+    ordinary = snap(
+        text="저희 쇼핑몰은 전국 배송을 합니다. 신선한 과일을 산지에서 바로 보내 드립니다.",
+        link_texts=varied_links(),
+    )
+    assert doorway_reason(ordinary) == ""
+
+
+def test_an_english_shop_saying_cheap_is_not_a_doorway():
+    from domainchecker.analyze.rules import doorway_reason
+
+    ordinary = snap(
+        text="We sell cheap and reliable running shoes for everyday athletes.",
+        link_texts=varied_links(),
+    )
+    assert doorway_reason(ordinary) == ""
+
+
+def test_a_review_site_saying_recommended_ranking_is_not_a_doorway():
+    from domainchecker.analyze.rules import doorway_reason
+
+    ordinary = snap(
+        text="노트북 추천 순위를 성능과 가격으로 비교했습니다. 실제로 두 달 써 본 후기입니다.",
+        link_texts=varied_links(),
+    )
+    assert doorway_reason(ordinary) == ""
+
+
+def test_a_real_doorway_is_still_caught_by_structure():
+    """낱말 목록을 걷어내도 진짜 도어웨이는 구조 규칙이 그대로 잡는다."""
+    from domainchecker.analyze.rules import doorway_reason
+
+    stuffed = snap(
+        text="강남치과, 서초치과, 송파치과, 강동치과, 마포치과, 용산치과, 성동치과, 광진치과, 노원치과, ",
+        link_texts=varied_links(),
+    )
+    assert doorway_reason(stuffed) != ""
+
+    # 같은 미끼 글귀를 서로 다른 돈벌이 주소마다 붙인 화면 = 도어웨이.
+    repeated = snap(
+        text="여기를 클릭하세요.",
+        link_texts=["지금 신청"] * 45,
+        link_targets=varied_targets(),
+    )
+    assert doorway_reason(repeated) != ""
+
+
+def test_a_board_listing_repeating_one_link_is_not_a_doorway():
+    """같은 글귀가 **같은 주소**로 수십 줄 그려지는 건 게시판 목록의 생김새다.
+
+    photodiary.co.kr 2001년 '선생님께' 목록이 바로 이 모양이었다(같은 주소 28줄).
+    """
+    from domainchecker.analyze.rules import doorway_reason
+
+    listing = snap(
+        text="선생님께 편지 목록입니다.",
+        link_texts=["홍선생님께"] * 45,
+        link_targets=["tboard.phtml?table=1"] * 45,
+    )
+    assert doorway_reason(listing) == ""
+
+
+# ── 키 없이 돌 때(AI 없음) 기계식 층이 그대로 제 일을 하는가 ─────────────────
+# 낱말 목록을 걷어낸 뒤에도 "키가 없으면 그 검사가 아예 없어지는" 구조가 되면 안 된다.
+
+
+def test_without_ai_a_clean_site_is_not_rejected():
+    """멀쩡한 사이트는 AI 없이도 제외 도장을 맞지 않는다(오차단 시험)."""
+    from domainchecker.analyze.scoring import fatal_reasons
+    from domainchecker.models import CheckState, CheckStatus, DomainResult
+
+    findings = analyze(
+        [
+            snap("20150101000000", text=prose(VOCAB_BAKERY), link_texts=varied_links()),
+            snap("20190101000000", text=prose(VOCAB_HIKING), link_texts=varied_links()),
+        ]
+    )
+    result = DomainResult(domain="bakery.co.kr", rules=findings)
+    result.ai.check = CheckState(status=CheckStatus.NOT_RUN, note="키 없음")
+    assert fatal_reasons(result) == []
+
+
+def test_without_ai_the_machine_veto_still_rejects_a_spam_site():
+    """흔적이 3종 겹치면 AI 없이도 기계 거부권이 그대로 선다."""
+    from domainchecker.analyze.scoring import fatal_reasons
+    from domainchecker.models import CheckState, CheckStatus, DomainResult
+
+    findings = analyze(
+        [
+            snap(
+                "20150101000000",
+                text="강남치과, 서초치과, 송파치과, 강동치과, 마포치과, 용산치과, 성동치과, 광진치과, 노원치과, ",
+                link_texts=["지금 신청"] * 60,
+                hidden_marks=["display:none"],
+                external_links=80,
+                external_hosts=40,
+            ),
+            snap("20160101000000", text=prose(VOCAB_BAKERY)),
+            snap("20170101000000", text=prose(VOCAB_BAKERY)),
+        ]
+    )
+    result = DomainResult(domain="spam.example", rules=findings)
+    result.ai.check = CheckState(status=CheckStatus.NOT_RUN, note="키 없음")
+    assert fatal_reasons(result), "AI 없이 기계적 흔적만으로도 제외가 나와야 한다"

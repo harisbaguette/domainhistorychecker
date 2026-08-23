@@ -22,31 +22,8 @@ from urllib.parse import quote, unquote, urlsplit
 
 import httpx
 
-from ..analyze.extract import extract_text
+from ..analyze.extract import PARKING_VENDORS, extract_body_text, extract_text, parking_marks
 from ..models import CheckState, CheckStatus, IndexInfo
-
-# 파킹 표지 — 영문은 단어 경계로만 맞춘다.
-# 부분 문자열로 세면 "Sedona"가 sedo로, "parking lot"이 parking으로 잘못 잡힌다.
-# 그래서 홀로 쓰이면 뜻이 넓은 낱말(parking)은 파킹 문맥 구(句)로만 남겼다.
-PARKING_TERMS = (
-    "this domain is for sale",
-    "domain for sale",
-    "buy this domain",
-    "domain parking",
-    "parking page",
-    "parked",
-    "sedo",
-    "afternic",
-    "dan.com",
-)
-
-# 한국어는 낱말 경계(\b)가 통하지 않아 구 전체 포함으로 맞춘다.
-PARKING_PHRASES_KO = (
-    "도메인 판매",
-    "판매 중인 도메인",
-    "도메인 팝니다",
-)
-
 
 COLLINFO_URL = "https://index.commoncrawl.org/collinfo.json"
 COLLINFO_TTL = 24 * 3600  # 크롤 회차는 하루에 한 번만 다시 확인한다
@@ -62,33 +39,8 @@ BROWSER_UA = (
 )
 
 # 도메인 판매·주차 업체. 현재 페이지가 이쪽으로 넘어가면 파킹으로 본다.
-PARKING_HOSTS = (
-    "sedo.com",
-    "sedoparking.com",
-    "afternic.com",
-    "dan.com",
-    "hugedomains.com",
-    "bodis.com",
-    "parkingcrew.net",
-    "parklogic.com",
-    "above.com",
-    "undeveloped.com",
-    "domainmarket.com",
-    "buydomains.com",
-    "namedrive.com",
-    "skenzo.com",
-    "voodoo.com",
-)
-
-# 살아 있는 페이지 본문(수천 자)에는 낱말 하나짜리 표지를 쓰지 않는다.
-# "Where I parked my car" 같은 평범한 문장이 파킹으로 잡히기 때문이다.
-# 업체 이름(sedo·afternic)은 PARKING_HOSTS 에서 주소로 잡으므로 여기서 뺀다.
-_LIVE_PARKING_RE = re.compile(
-    "|".join(
-        rf"\b{re.escape(term)}\b" for term in PARKING_TERMS if " " in term or "." in term
-    ),
-    re.IGNORECASE,
-)
+# 목록은 analyze/extract.py 한 벌만 쓴다 — 예전에는 여기에 사본이 하나 더 있었다.
+PARKING_HOSTS = PARKING_VENDORS
 
 # 사설망·내 컴퓨터를 가리키는 이름. 넘겨보내기를 타고 집 안 기기를 긁지 않게 막는다.
 _LOCAL_SUFFIXES = (".local", ".localhost", ".internal", ".home", ".lan")
@@ -240,12 +192,15 @@ async def _fetch(url: str, http: httpx.AsyncClient) -> dict:
             "final_url": url,
             "title": _WS.sub(" ", found.group(1)).strip()[:200] if found else "",
             "text": extract_text(html, TEXT_LIMIT),
+            # 링크 글귀를 뺀 글 — "글은 없고 광고 딱지만 깔린 화면"을 옛 화면 판정과
+            # 똑같은 잣대로 재기 위해 함께 넘긴다.
+            "body": extract_body_text(html, TEXT_LIMIT),
         }
     return {}
 
 
 def _failed_page(status: int, url: str) -> dict:
-    return {"ok": False, "status": status, "final_url": url, "title": "", "text": ""}
+    return {"ok": False, "status": status, "final_url": url, "title": "", "text": "", "body": ""}
 
 
 def parking_host(url: str) -> str:
@@ -257,11 +212,14 @@ def parking_host(url: str) -> str:
     return ""
 
 
-def is_parking_page(text: str) -> bool:
-    """살아 있는 페이지 본문이 '이 도메인 팝니다' 화면으로 읽히는가."""
-    if _LIVE_PARKING_RE.search(text):
-        return True
-    return any(phrase in text for phrase in PARKING_PHRASES_KO)
+def is_parking_page(text: str, body_text: str | None = None) -> bool:
+    """살아 있는 페이지 본문이 '이 도메인 팝니다' 화면으로 읽히는가.
+
+    옛 화면 판정(analyze/extract.py)과 **같은 목록·같은 잣대**로 본다. 예전에는 이
+    파일이 자기만의 목록을 따로 들고 있어, 같은 글을 놓고 두 곳이 서로 다른 답을 냈다.
+    `body_text`(링크 글귀를 뺀 글)를 주면 "글이 거의 없다"를 그것으로 잰다.
+    """
+    return bool(parking_marks(text, body_text=body_text))
 
 
 def _short_path(url: str) -> str:
@@ -293,11 +251,13 @@ async def check(domain: str, http: httpx.AsyncClient) -> IndexInfo:
 
     result.indexed_count = len(urls)
     live_text = ""
+    live_body = ""
     if page.get("ok"):
         if page["title"]:
             result.titles = [page["title"]]
         live_text = f"{page['title']} {page['text']}"
-    result.current_parking = bool(seller) or is_parking_page(live_text)
+        live_body = f"{page['title']} {page.get('body', '')}"
+    result.current_parking = bool(seller) or is_parking_page(live_text, live_body)
     # 남은 주소 흔적 표본 — 위험한지의 '뜻 읽기'는 AI 몫이다.
     result.sample_paths = [p for p in (_short_path(u) for u in urls) if p.strip("/ ")][:15]
 
