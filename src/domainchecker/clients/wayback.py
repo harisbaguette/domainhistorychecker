@@ -115,6 +115,34 @@ class WaybackClient:
         captures.sort(key=lambda c: c.timestamp)
         return captures
 
+    async def latest_capture(self, domain: str) -> Snapshot | None:
+        """앞페이지의 **진짜** 최신 저장분 한 장. None = 조회 실패이거나 없음.
+
+        `url=도메인/*` 조회로는 알아낼 수 없다: CDX 는 주소 사전순으로 앞에서부터
+        잘라 주므로(limit=2000), 주소가 많은 도메인은 알파벳 뒤쪽 주소의 최근
+        저장분이 통째로 잘려 나간다. 3단은 이 한 장만 보고 탈락을 정하니, 잘린
+        목록에서 고른 장으로 판정하면 이력이 두꺼운 도메인일수록 엉뚱하게 떨어진다.
+        앞페이지 주소 하나만 정확히 물으면서 limit 을 음수로 주면(뒤에서부터 세기)
+        한 행으로 끝난다 — 실측 2026-08-22: iana.org 20260820221136 반환.
+        """
+        rows = await self._cdx_rows(
+            {
+                "url": domain,
+                "output": "json",
+                "fl": "timestamp,original,statuscode,mimetype,digest",
+                "filter": "statuscode:200",
+                "limit": "-1",
+                "fastLatest": "true",
+            }
+        )
+        if not rows:
+            return None
+        latest = rows[-1]
+        # 앞페이지인데도 사진·스크립트가 걸려 오면 "모습"이 아니다 — 안 쓴다.
+        if latest.mimetype and not latest.mimetype.startswith("text/html"):
+            return None
+        return latest
+
     async def timeline(self, domain: str) -> WaybackHistory:
         """Single CDX query giving the year distribution, gaps and status codes."""
         history = WaybackHistory()
@@ -174,8 +202,10 @@ class WaybackClient:
         history.total_captures = len(captures)
         history.first_seen = captures[0].timestamp
         history.last_seen = captures[-1].timestamp
-        # 3단이 "가장 최근 모습"으로 받아 볼 딱 한 장 — 같은 조회에서 그냥 나온다.
-        history.latest = captures[-1]
+        # 3단이 "가장 최근 모습"으로 받아 볼 딱 한 장. 이 목록은 사전순으로 잘려 있어
+        # 진짜 최신이 빠져 있을 수 있으므로 앞페이지를 한 번 더 정확히 묻고,
+        # 그 조회가 실패하면 잘린 목록에서 가장 나중 것으로 대신한다.
+        history.latest = await self.latest_capture(domain) or captures[-1]
         # 같은 조회로 함께 나온 내용 지문(digest)을 세어 둔다 — 달마다 저장은 됐는데
         # 내용이 한 가지뿐이면 여러 해 동안 빈 화면만 걸려 있었다는 뜻이다.
         history.unique_digests = len({c.digest for c in captures if c.digest})

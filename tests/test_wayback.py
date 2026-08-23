@@ -148,6 +148,50 @@ async def test_timeline_counts_how_many_different_contents_there_were(http):
 
 
 @respx.mock
+async def test_latest_screen_comes_from_the_front_page_not_the_truncated_list(http):
+    """3단이 보는 '가장 최근 화면'은 잘린 목록의 마지막이 아니라 앞페이지의 최신본이다.
+
+    주소 목록 조회는 사전순으로 앞에서 2000행만 잘라 주므로, 주소가 많은 도메인은
+    진짜 최신 저장분이 통째로 빠진다. 그 잘린 목록에서 고른 장으로 탈락을 정하면
+    이력이 두꺼운(=살 가치가 큰) 도메인일수록 엉뚱하게 떨어진다.
+    """
+    truncated = rows([["20200101000000", "http://x.com/a", "200", "text/html", "OLD"]])
+    real_latest = rows([["20260820221136", "http://x.com/", "200", "text/html", "NEW"]])
+
+    def respond(request):
+        # 앞페이지를 정확히 물으면서 뒤에서부터 세는 조회(limit 음수)만 진짜 최신을 준다
+        if request.url.params.get("limit", "").startswith("-"):
+            return httpx.Response(200, json=real_latest)
+        return httpx.Response(200, json=truncated)
+
+    respx.get(url__startswith="https://web.archive.org/cdx").mock(side_effect=respond)
+
+    history = await WaybackClient(http, fast_limiter()).timeline("x.com")
+
+    assert history.latest is not None
+    assert history.latest.timestamp == "20260820221136"
+
+
+@respx.mock
+async def test_latest_screen_falls_back_when_the_front_page_query_fails(http):
+    """앞페이지 조회가 실패해도 '최근 화면'이 통째로 없어지면 안 된다 — 있는 것으로 대신한다."""
+
+    def respond(request):
+        if request.url.params.get("limit", "").startswith("-"):
+            return httpx.Response(503)
+        return httpx.Response(
+            200, json=rows([["20200101000000", "http://x.com/a", "200", "text/html", "OLD"]])
+        )
+
+    respx.get(url__startswith="https://web.archive.org/cdx").mock(side_effect=respond)
+
+    history = await WaybackClient(http, fast_limiter()).timeline("x.com")
+
+    assert history.latest is not None
+    assert history.latest.timestamp == "20200101000000"
+
+
+@respx.mock
 async def test_reading_stops_where_the_machine_veto_lands(http):
     """제외가 확정된 뒤의 옛 화면 받기는 판정을 못 바꾼다 — 그 자리에서 멈춘다."""
     snaps = [
@@ -250,12 +294,17 @@ async def test_429_triggers_rate_drop_and_retry(http):
                     ]
                 ),
             ),
+            # 목록 조회 뒤에 앞페이지 최신본을 한 번 더 묻는다(가장 최근 화면 확정용)
+            httpx.Response(
+                200,
+                json=rows([["20200101000000", "http://x.com/", "200", "text/html", "B"]]),
+            ),
         ]
     )
     limiter = fast_limiter()
     history = await WaybackClient(http, limiter).timeline("x.com")
 
-    assert route.call_count == 2
+    assert route.call_count == 3
     assert limiter.rpm == 12  # 429 한 번에 분당 12건으로 하향
     assert history.check.status is CheckStatus.OK
     assert history.total_captures == 2
@@ -270,6 +319,9 @@ async def test_503_gets_retried_before_giving_up():
     route = respx.get(CDX_URL)
     route.side_effect = [
         httpx.Response(503),
+        httpx.Response(200, json=[["timestamp", "original", "statuscode", "mimetype", "digest"],
+                                  ["20200101000000", "http://x.com/", "200", "text/html", "AA"]]),
+        # 앞페이지 최신본을 확정하는 두 번째 조회
         httpx.Response(200, json=[["timestamp", "original", "statuscode", "mimetype", "digest"],
                                   ["20200101000000", "http://x.com/", "200", "text/html", "AA"]]),
     ]

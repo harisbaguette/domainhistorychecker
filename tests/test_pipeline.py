@@ -454,7 +454,12 @@ def body_calls() -> list[str]:
 
 @respx.mock
 async def test_stage1_taken_domain_ends_before_the_blocklist_is_even_checked(config, tmp_path):
-    """1단 — 주인이 있으면 명단 대조조차 하지 않는다. 살 수 없는 도메인이다."""
+    """1단 — 주인이 있으면 그 도메인의 판정은 여기서 끝난다. 살 수 없는 도메인이다.
+
+    명단 대조 자체는 판 시작 때 목록 전체를 한 번에 훑으므로 이 도메인도 그 훑기에는
+    들어가지만(바깥 요청 0회), 결과에는 "안 봤음"으로 정직하게 남고 웨이백·AI 는
+    한 번도 건드리지 않는다.
+    """
     mock_all()
     put_blacklist(tmp_path / "data", "gambling", [DOMAIN])
     respx.post(gabia.CHECK_URL).mock(
