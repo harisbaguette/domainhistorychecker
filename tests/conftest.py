@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pytest
 
+import domainchecker.clients as clients
+from domainchecker.clients import openrouter
 from domainchecker.clients.offline_lists import OfflineLists
 from domainchecker.models import (
     AIAnalysis,
@@ -35,6 +37,18 @@ def _offline_lists_stay_offline(monkeypatch):
         return False
 
     monkeypatch.setattr(OfflineLists, "_download", no_download)
+
+
+@pytest.fixture(autouse=True)
+def _no_waiting_between_retries(monkeypatch):
+    """다시 묻기 전의 '쉬는 시간'을 시험에서는 0으로 둔다.
+
+    운영에서는 남의 서버가 숨 돌릴 틈을 줘야 하지만, 시험은 가짜 서버라 그 시간이
+    통째로 낭비다(실측: 이 자리를 안 줄이면 전체 시험이 3분 42초). 몇 번 다시
+    두드리는지 자체는 각 시험이 횟수로 확인한다.
+    """
+    monkeypatch.setattr(clients, "RETRY_WAITS", (0.0, 0.0))
+    monkeypatch.setattr(openrouter, "RETRY_WAITS", (0.0, 0.0))
 
 
 def blacklist_bytes(category: str, domains: list[str]) -> bytes:

@@ -74,7 +74,13 @@ def judge(result: DomainResult) -> DomainResult:
         if _check_of(result, name).status.value == "NOT_RUN"
     ]
 
-    required_all_ok = all(_check_of(result, name).ok for name in REQUIRED_CHECKS)
+    # 필수 검사 다섯이 전부 확인돼야 초록 도장이 나간다. 단, 이 컴퓨터의 인터넷
+    # 환경 때문에 아예 못 도는 검사(optional 표가 붙은 것)는 그 자리만 빼고 센다 —
+    # 그러지 않으면 우리 쪽 사정 하나로 모든 도메인이 영원히 노랑에 갇힌다.
+    required_all_ok = all(
+        _check_of(result, name).ok or _check_of(result, name).optional
+        for name in REQUIRED_CHECKS
+    )
     no_history = result.wayback.check.ok and not result.wayback.has_history
 
     # 1. 기계 거부권(사실 기반 치명)
@@ -210,7 +216,9 @@ def warn_reasons(result: DomainResult) -> list[str]:
         if name == "rules" and no_history:
             continue
         check = _check_of(result, name)
-        if not check.ok:
+        # 이 컴퓨터 환경 때문에 못 도는 검사는 노랑으로 끌어내리지 않는다 — 그 사실은
+        # "안 돌림" 목록(result.not_run)에 이름과 이유가 그대로 남아 화면에 보인다.
+        if not check.ok and not check.optional:
             reasons.append(
                 f"{UNCHECKED_PREFIX}{CHECK_LABEL[name]}: {check.note or '확인하지 못했습니다.'}"
             )

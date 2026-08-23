@@ -21,7 +21,7 @@ import json
 import httpx
 
 from ..models import CheckState, CheckStatus, Reputation
-from . import http_reason
+from . import get_retry, http_reason
 
 URL = "https://transparencyreport.google.com/transparencyreport/api/v3/safebrowsing/status"
 
@@ -48,9 +48,10 @@ def _parse(text: str) -> tuple[int, list[bool]] | None:
 
 async def check(domain: str, http: httpx.AsyncClient) -> Reputation:
     result = Reputation()
-    try:
-        response = await http.get(URL, params={"site": domain})
-    except httpx.HTTPError:
+    # 구글은 붐빌 때 429·5xx 를 던진다 — 한 번 받았다고 접으면 멀쩡한 도메인이
+    # 우리 사정 때문에 미확인이 된다(실측 2026-08-23: 미확인 3건이 곧바로 정상 응답).
+    response = await get_retry(http, URL, params={"site": domain})
+    if response is None:
         result.check = CheckState(status=CheckStatus.UNCHECKED, note="세이프 브라우징 접속 실패.")
         return result
     if response.status_code != 200:

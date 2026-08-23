@@ -24,6 +24,7 @@ import httpx
 
 from ..analyze.extract import PARKING_VENDORS, extract_body_text, extract_text, parking_marks
 from ..models import CheckState, CheckStatus, IndexInfo
+from . import get_retry
 
 COLLINFO_URL = "https://index.commoncrawl.org/collinfo.json"
 COLLINFO_TTL = 24 * 3600  # 크롤 회차는 하루에 한 번만 다시 확인한다
@@ -65,11 +66,8 @@ async def latest_collection(http: httpx.AsyncClient) -> str:
         stamped = float(_collection_cache.get("at", 0) or 0)
         if cached and (time.time() - stamped) < COLLINFO_TTL:
             return cached
-        try:
-            response = await http.get(COLLINFO_URL, timeout=20.0)
-        except httpx.HTTPError:
-            return cached
-        if response.status_code != 200:
+        response = await get_retry(http, COLLINFO_URL, timeout=20.0)
+        if response is None or response.status_code != 200:
             return cached
         try:
             rows = response.json()
@@ -92,9 +90,9 @@ async def crawl_urls(domain: str, http: httpx.AsyncClient) -> tuple[list[str], b
         return [], False
     # `*` 를 그대로 보내면 400 이 떨어진다 — 반드시 %2A 로 적어야 한다.
     query = f"{api}?url={quote(domain, safe='')}%2F%2A&output=json&limit={CRAWL_LIMIT}"
-    try:
-        response = await http.get(query, timeout=40.0)
-    except httpx.HTTPError:
+    # 커먼크롤도 붐빌 때 5xx·503 을 던진다 — 쉬었다 다시 묻는다.
+    response = await get_retry(http, query, timeout=40.0)
+    if response is None:
         return [], False
     if response.status_code == 404:
         return [], True  # 색인에 없다는 정상 답 = 0건

@@ -194,6 +194,41 @@ def test_unchecked_required_check_is_listed_as_unchecked():
     assert result.unchecked and "스팸하우스" in result.unchecked[0]
 
 
+# ── 우리 쪽 인터넷 사정으로 못 도는 검사는 판정을 막지 않는다(2026-08-23) ──
+# 스팸하우스가 이 컴퓨터에서 100% 막히던 때, 필수 검사 한 칸이 영원히 비어
+# 모든 도메인이 노랑에 갇혔다 — 운영자 눈에는 "전체가 고장 난 화면"이었다.
+
+
+def test_a_check_blocked_by_our_own_network_does_not_hold_the_verdict_hostage():
+    result = judge(
+        healthy(
+            spamhaus=Reputation(
+                check=CheckState(
+                    status=CheckStatus.NOT_RUN,
+                    note="이 컴퓨터의 인터넷 환경 때문에 확인하지 못했습니다.",
+                    optional=True,
+                )
+            )
+        )
+    )
+    assert result.verdict is Verdict.BUY  # 나머지 필수 검사만으로 판정이 끝까지 났다
+    assert not any("필수 검사 미확인" in reason for reason in result.warn_reasons)
+    # 그래도 못 봤다는 사실은 화면에 그대로 남는다 — 깨끗함으로 읽히지 않게.
+    assert any("스팸하우스" in label for label in result.not_run)
+
+
+def test_a_normal_failure_still_blocks_the_green_stamp():
+    """optional 표가 없는 실패는 예전 그대로 노랑으로 내린다(구멍을 넓히지 않는다)."""
+    result = judge(
+        healthy(
+            spamhaus=Reputation(
+                check=CheckState(status=CheckStatus.NOT_RUN, note="안 돌렸습니다.")
+            )
+        )
+    )
+    assert result.verdict is Verdict.REVIEW
+
+
 def test_no_history_is_warn_not_reject():
     result = judge(
         healthy(

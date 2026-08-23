@@ -12,6 +12,7 @@ import ssl
 import httpx
 
 from ..models import CheckState, CheckStatus, Registration
+from . import post_retry
 
 CHECK_URL = "https://domain.gabia.com/ajax_lib/check/regist.php"
 
@@ -42,15 +43,14 @@ def ssl_context() -> ssl.SSLContext:
 async def check(domain: str, timeout: float = 15.0) -> Registration:
     """한 도메인의 구매 가능 여부. 실패하면 UNCHECKED로 내려간다."""
     result = Registration(source="gabia")
-    try:
-        async with httpx.AsyncClient(
-            timeout=timeout, verify=ssl_context(), headers=HEADERS
-        ) as http:
-            response = await http.post(CHECK_URL, data={"domain": domain})
-    except httpx.HTTPError as exc:
-        result.check = CheckState(
-            status=CheckStatus.UNCHECKED, note=f"가비아 접속 실패({type(exc).__name__})."
-        )
+    # 1단은 깔때기의 첫 칸이라 여기서 미끄러지면 그 도메인은 뒤 단계를 전부
+    # 헛돈다 — 잠깐 막힌 것(끊김·429·5xx)은 쉬었다 다시 묻는다.
+    async with httpx.AsyncClient(
+        timeout=timeout, verify=ssl_context(), headers=HEADERS
+    ) as http:
+        response = await post_retry(http, CHECK_URL, data={"domain": domain})
+    if response is None:
+        result.check = CheckState(status=CheckStatus.UNCHECKED, note="가비아 접속 실패.")
         return result
     if response.status_code != 200:
         result.check = CheckState(

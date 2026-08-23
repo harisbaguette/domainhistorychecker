@@ -73,6 +73,11 @@ class CheckState(BaseModel):
 
     status: CheckStatus = CheckStatus.NOT_RUN
     note: str = ""
+    # 이 검사를 못 한 이유가 **도메인 사정이 아니라 이 컴퓨터의 인터넷 환경**일 때 참.
+    # 그런 검사는 최종 판정(초록/노랑/빨강)을 막지 않는다 — 우리 도구 사정 하나로
+    # 모든 도메인이 영원히 노랑에 갇히면 그게 곧 "전체가 고장 난 것처럼 보이는" 상태다.
+    # 대신 "안 돌림" 목록에는 그대로 남아, 못 본 것이 깨끗한 것으로 읽히지 않는다.
+    optional: bool = False
 
     @property
     def ok(self) -> bool:
