@@ -204,8 +204,13 @@ def test_results_detail_and_report_after_a_run(client, fake_run, tmp_path):
 
     detail = client.get("/api/detail/example.com")
     assert detail.status_code == 200
-    assert "나이와 등록 정보" in detail.json()["html"]
-    assert 'src="/captures/' in detail.json()["html"] or "저장된 캡쳐가 없습니다" in detail.json()["html"]
+    body = detail.json()["html"]
+    assert "얼마나 오래 굴러갔나" in body
+    # 과거 화면 칸은 절대 조용히 비지 않는다 — 사진을 걸거나, 왜 없는지를 적는다.
+    # (한 장도 못 찍은 것과 찍을 것 자체가 없던 것은 문구가 다르다.)
+    assert 'src="/captures/' in body or "dw-empty-state-title" in body
+    # 화면 시트는 제 판정 도장을 이미 찍어 두었으므로 이 덩어리에는 도장이 없다.
+    assert '<div class="app-call"' not in body
 
     built = client.post("/api/report")
     assert built.status_code == 200

@@ -635,8 +635,16 @@ def create_app(config_path: Path | None = None) -> FastAPI:
 
     @app.get("/api/detail/{domain}")
     async def detail(domain: str) -> dict:
-        """The same evidence view the static report uses."""
-        return {"html": report_html.detail_fragment(one_result(domain), capture_base="/captures")}
+        """The same evidence view the static report uses.
+
+        화면 쪽 시트는 머리에 제 판정 도장을 이미 찍어 두어서 여기서는 도장을 뺀다 —
+        안 그러면 같은 판정이 한 화면에 두 번 선다.
+        """
+        return {
+            "html": report_html.detail_fragment(
+                one_result(domain), capture_base="/captures", stamp=False
+            )
+        }
 
     @app.get("/api/config")
     async def get_config() -> dict:

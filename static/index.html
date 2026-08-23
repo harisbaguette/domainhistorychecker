@@ -329,6 +329,7 @@
 
     <div class="app-sheet-body">
       <div class="app-call" id="detailCall">
+        <span class="app-call-icon" id="detailIcon" aria-hidden="true"></span>
         <span class="app-call-mark" id="detailMark"></span>
         <p class="app-call-sub" id="detailSub"></p>
       </div>
@@ -337,21 +338,12 @@
       <button type="button" class="dw-button" data-variant="secondary" data-block
               id="detailPick" hidden>매입 예정에 담기</button>
 
-      <ol class="app-why" id="detailWhy"></ol>
-
-      <div class="dw-collapsible" id="detailMoreBox" data-open="false">
-        <button type="button" class="dw-collapsible-trigger" aria-expanded="false" aria-controls="detailMore">
-          자세한 근거 · 못 본 검사 보기
-          <svg class="dw-collapsible-chevron" xmlns="http://www.w3.org/2000/svg" width="20" height="20"
-               viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
-        </button>
-        <div class="dw-collapsible-region" id="detailMore" inert>
-          <div class="dw-collapsible-content">
-            <div id="detailBody" class="dw-prose"></div>
-          </div>
-        </div>
-      </div>
+      <!-- 판정 근거와 과거 화면 사진은 처음부터 펼쳐져 있다. 예전에는 이 자리에
+           "자세한 근거 · 못 본 검사 보기" 접는 줄이 있었는데, 그러면 검사를 마친
+           프로그램이 답을 감추고 사람에게 다시 확인하라고 떠넘기는 꼴이었다
+           (2026-08-23 운영자 지시로 걷어냄). 접는 것은 안쪽 '더 보기' 하나뿐이고,
+           그 안에는 검사 항목별 원자료만 들어간다. -->
+      <div id="detailBody" class="dw-prose"></div>
     </div>
   </div>
 </div>
@@ -1206,8 +1198,22 @@ $("csvTop").onclick = exportCsv;
 $("csvPlanned").onclick = exportCsv;  // visibleRows 가 화면을 보고 매입 예정 목록을 내보낸다
 
 /* ---------- 상세 ----------
-   맨 위 한 마디가 답이다. 이유는 최대 셋. 자세한 근거와 못 본 검사는 접어 둔다. */
+   맨 위 한 마디가 답이고, 그 아래로 판정 근거 뱃지와 과거 화면 사진이 곧바로 펼쳐진다.
+   이유 줄·근거·사진은 전부 서버가 그리는 한 덩어리(detail_fragment)가 들고 온다 —
+   같은 것을 화면에서 또 그리면 두 곳이 서로 다른 말을 하게 된다. */
 const CALL_MARK = {buy: "사라", no: "사지 마라", maybe: "애매하다", hold: "지금은 못 산다"};
+/* 도장 안의 그림 — 색을 못 보는 사람에게는 이 모양이 색을 대신한다(lucide 원본 path) */
+const CALL_ICON_PATH = {
+  buy: '<path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/>',
+  no: '<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>',
+  maybe: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>',
+  hold: '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>'
+};
+function callIcon(call) {
+  return '<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 24 24"'
+    + ' fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"'
+    + ' stroke-linejoin="round" aria-hidden="true">' + CALL_ICON_PATH[call] + "</svg>";
+}
 function callOf(d) {
   if (d.verdict === "REJECT") return "no";
   if (d.verdict === "BUY" && BUYABLE[d.availability]) return "buy";
@@ -1215,29 +1221,10 @@ function callOf(d) {
   if (d.availability === "taken") return "hold";
   return "maybe";
 }
-/* 이유 자리에는 그 도메인 얘기가 먼저 온다. "검사를 못 했다"류(키 없음·조회 막힘)는
-   이 도구의 사정이라 맨 뒤로 미룬다.
-   가르는 기준은 **만드는 자리에서 붙인 표식**이다(scoring.UNCHECKED_PREFIX).
-   예전에는 낱말 목록 정규식(차단·미확인·DNS…)으로 문장의 뜻을 넘겨짚었는데,
-   그러면 "웨이백 열람이 차단되어 과거를 볼 수 없습니다" 같은 진짜 도메인 신호가
-   도구 사정으로 밀려나고, AI가 써 보낸 인용문에 그 낱말이 우연히 들어가면
-   사면 안 되는 이유까지 뒤로 밀렸다. */
-const EXCUSE_PREFIX = "필수 검사 미확인 — ";
-function whyLines(d) {
-  const all = [...(d.fatal_reasons || []), ...(d.warn_reasons || [])];
-  const isExcuse = (t) => String(t).startsWith(EXCUSE_PREFIX);
-  const real = all.filter((t) => !isExcuse(t));
-  const excuses = all.filter(isExcuse);
-  const out = [...real];
-  if (!out.length) {
-    // 사면 안 될 이유도 조심할 이유도 없다는 것 자체가 답이다. 예전에는 여기서
-    // 점수 내역(감점표) 항목을 대신 적었는데, 그 표는 2026-08-12에 폐지됐다.
-    const good = (d.ai && d.ai.verdict_reason) || d.one_liner;
-    if (good) out.push(good);
-  }
-  excuses.forEach((t) => { if (out.length < 3) out.push(t); });
-  return out.slice(0, 3).map(freshen);
-}
+/* 이유 줄을 만드는 일은 서버(report/html.py 의 _reason_lines)로 옮겼다.
+   "검사를 못 했다"류(키 없음·조회 막힘)를 도메인 얘기 뒤로 미루는 규칙도 그쪽에 있고,
+   가르는 표식도 만드는 자리에서 붙인 것(scoring.UNCHECKED_PREFIX)을 그대로 본다.
+   화면과 보고서가 같은 덩어리를 받아 쓰므로 두 곳이 서로 다른 말을 할 수 없다. */
 /* 지금 상세로 보고 있는 도메인 — 다음/이전 넘기기의 기준점 */
 let detailDomain = null;
 function stepDetail(dir) {
@@ -1276,14 +1263,12 @@ async function openDetail(domain) {
   $("detailTitle").textContent = domain;
   const call = callOf(d);
   $("detailCall").dataset.call = call;
+  $("detailIcon").innerHTML = callIcon(call);
   $("detailMark").textContent = CALL_MARK[call];
   $("detailSub").textContent =
     [d.availability_label, expiresText(d), scoreText(d), when(d.finished_at) + " 분석"]
       .filter(Boolean).join(" · ");
-  $("detailWhy").innerHTML = whyLines(d).map((t, i) =>
-    '<li><span class="app-why-no">' + (i + 1) + "</span><span>" + escapeHtml(t) + "</span></li>").join("");
   paintDetailPick(domain);
-  setOpen($("detailMoreBox"), false);
   $("detailBody").innerHTML = '<p class="muted">불러오는 중…</p>';
   openSheet("sheetDetail", "closeDetail");
   const res = await fetch("/api/detail/" + encodeURIComponent(domain));
