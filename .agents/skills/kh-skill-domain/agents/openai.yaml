@@ -1,0 +1,4 @@
+interface:
+  display_name: "도메인 검토"
+  short_description: "낙장·신규 도메인의 이력, 이름, 비용과 보유 관리를 검토합니다"
+  default_prompt: "$kh-skill-domain 으로 내 목적에 맞는 도메인을 조사하고 구매 전에 비교해 줘. 구매는 내가 할게."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "브랜드 전략과 이름"
+  short_description: "브랜드 방향과 이름부터 말투, 시각 체계, 출시 적용까지 설계합니다"
+  default_prompt: "$kh-skill-branding 으로 내 사업의 브랜드 방향, 이름과 도메인 후보, 슬로건과 시각 방향을 함께 잡아 줘."

@@ -1,0 +1,325 @@
+{
+  "reviewedAt": "2026-10-08T02:56:48.380592+00:00",
+  "method": "현재 모델이 스킬을 직접 적용하고 공개 HTTP·브라우저 결과를 대조함",
+  "notClaimed": [
+    "운영자 본인의 사용 시험",
+    "독립 모델 평가",
+    "개별 후보 구매·상표 안전 보장",
+    "앱 구현의 모든 외부 API 수정"
+  ],
+  "records": [
+    {
+      "target": "example.com",
+      "check": "RDAP",
+      "status": "확인됨",
+      "source": "https://rdap.verisign.com/com/v1/domain/example.com",
+      "checkedAt": "2026-10-08T02:27:52.929797+00:00",
+      "observed": {
+        "httpStatus": 200,
+        "sha256": "54ac1f07e988ad2aca6d18487cab1d9cdb482d00faca9ff1debc4f500a749b6d",
+        "ldhName": "EXAMPLE.COM",
+        "domainStatus": [
+          "client delete prohibited",
+          "client transfer prohibited",
+          "client update prohibited"
+        ],
+        "events": [
+          {
+            "eventAction": "registration",
+            "eventDate": "1995-08-14T04:00:00Z"
+          },
+          {
+            "eventAction": "expiration",
+            "eventDate": "2027-08-13T04:00:00Z"
+          },
+          {
+            "eventAction": "last changed",
+            "eventDate": "2026-08-14T08:01:43Z"
+          },
+          {
+            "eventAction": "last update of RDAP database",
+            "eventDate": "2026-10-08T02:27:34Z"
+          }
+        ]
+      },
+      "scope": "IANA 부트스트랩에 지정된 해당 TLD의 공개 RDAP 서버",
+      "limitation": "판매처 재고·예약·매물·가격 조회가 아님",
+      "judgment": "등록 레코드 확인",
+      "nextAction": "매입 검토 대상일 때 해당 판매처의 정확한 후보 검색"
+    },
+    {
+      "target": "icann.org",
+      "check": "RDAP",
+      "status": "확인됨",
+      "source": "https://rdap.publicinterestregistry.org/rdap/domain/icann.org",
+      "checkedAt": "2026-10-08T02:27:52.930121+00:00",
+      "observed": {
+        "httpStatus": 200,
+        "sha256": "a9fbbd5ce414e5efb0c2c7fee670c5da8d2865efff5d665a4b52bb51cc82decd",
+        "ldhName": "icann.org",
+        "domainStatus": [
+          "server delete prohibited",
+          "client transfer prohibited",
+          "server transfer prohibited",
+          "server update prohibited"
+        ],
+        "events": [
+          {
+            "eventAction": "transfer",
+            "eventDate": "2023-09-21T16:31:12.97Z"
+          },
+          {
+            "eventAction": "expiration",
+            "eventDate": "2028-12-07T17:04:26Z"
+          },
+          {
+            "eventAction": "registration",
+            "eventDate": "1998-09-14T04:00:00.707Z"
+          },
+          {
+            "eventAction": "last changed",
+            "eventDate": "2026-08-12T03:12:50.825Z"
+          },
+          {
+            "eventAction": "last update of RDAP database",
+            "eventDate": "2026-10-08T02:27:53.646Z"
+          }
+        ]
+      },
+      "scope": "IANA 부트스트랩에 지정된 해당 TLD의 공개 RDAP 서버",
+      "limitation": "판매처 재고·예약·매물·가격 조회가 아님",
+      "judgment": "등록 레코드 확인",
+      "nextAction": "매입 검토 대상일 때 해당 판매처의 정확한 후보 검색"
+    },
+    {
+      "target": "kh-domain-skill-review-20261008-8ac941.com",
+      "check": "RDAP",
+      "status": "미확인",
+      "source": "https://rdap.verisign.com/com/v1/domain/kh-domain-skill-review-20261008-8ac941.com",
+      "checkedAt": "2026-10-08T02:27:52.930203+00:00",
+      "observed": {
+        "httpStatus": 404
+      },
+      "scope": "IANA 부트스트랩에 지정된 해당 TLD의 공개 RDAP 서버",
+      "limitation": "판매처 재고·예약·매물·가격 조회가 아님",
+      "judgment": "RDAP 레코드 미발견; 등록 가능 미확인",
+      "nextAction": "매입 검토 대상일 때 해당 판매처의 정확한 후보 검색"
+    },
+    {
+      "target": "example.com",
+      "check": "예약 규칙",
+      "status": "확인됨",
+      "source": "https://www.iana.org/domains/reserved",
+      "checkedAt": "2026-10-08T02:56:48.305764+00:00",
+      "observed": {
+        "reserved": true,
+        "sha256": "e5cbcb8eafa0417efa96e0aafb525d99b75e84983b6696e48e2ffe6d1cd8b58e"
+      },
+      "scope": "IANA Example domains 문단",
+      "limitation": "일반 신규 구매 후보가 아님",
+      "judgment": "구매 후보 제외",
+      "nextAction": "추가 구매 조회 불필요"
+    },
+    {
+      "target": "example.com",
+      "check": "스냅샷 위치",
+      "status": "확인됨",
+      "source": "https://archive.org/wayback/available?url=example.com",
+      "checkedAt": "2026-10-08T02:27:11.984690+00:00",
+      "observed": {
+        "status": "200",
+        "available": true,
+        "url": "http://web.archive.org/web/20261008020119/https://example.com/",
+        "timestamp": "20261008020119"
+      },
+      "scope": "Availability의 최근접 스냅샷 1개",
+      "limitation": "스냅샷 본문 열람 여부와 별개",
+      "judgment": "보관된 주소를 반환받음",
+      "nextAction": "본문 확인"
+    },
+    {
+      "target": "example.com",
+      "check": "아카이브 본문",
+      "status": "확인됨",
+      "source": "https://web.archive.org/web/20261008020119/https://example.com/",
+      "checkedAt": "2026-10-08T02:54:34.130605+00:00",
+      "observed": {
+        "httpStatus": 200,
+        "error": null,
+        "sha256": "cc4c069a79bc1aca8e47786f4e1ec1e3602620a1340f58f61d379b579ff631d1",
+        "summary": "문서용 예시 도메인 안내"
+      },
+      "scope": "각 도메인 스냅샷 1개",
+      "limitation": "다른 날짜·하위 페이지·전체 사이트는 미열람",
+      "judgment": "읽은 본문에서 예시 안내 확인; 전체 안전 판정 아님",
+      "nextAction": "실제 매입 업무라면 다른 시기·페이지의 공식 아카이브 확인"
+    },
+    {
+      "target": "icann.org",
+      "check": "스냅샷 위치",
+      "status": "확인됨",
+      "source": "https://archive.org/wayback/available?url=icann.org",
+      "checkedAt": "2026-10-08T02:27:11.984753+00:00",
+      "observed": {
+        "status": "204",
+        "available": true,
+        "url": "http://web.archive.org/web/20261007190614/https://www.icann.org/",
+        "timestamp": "20261007190614"
+      },
+      "scope": "Availability의 최근접 스냅샷 1개",
+      "limitation": "스냅샷 본문 열람 여부와 별개",
+      "judgment": "보관된 주소를 반환받음",
+      "nextAction": "본문 확인"
+    },
+    {
+      "target": "icann.org",
+      "check": "아카이브 본문",
+      "status": "미확인",
+      "source": "https://web.archive.org/web/20261007190614/https://www.icann.org/",
+      "checkedAt": "2026-10-08T02:51:57.154577+00:00",
+      "observed": {
+        "httpStatus": null,
+        "error": "HTTP Error 403: Forbidden",
+        "sha256": null,
+        "summary": null
+      },
+      "scope": "각 도메인 스냅샷 1개",
+      "limitation": "다른 날짜·하위 페이지·전체 사이트는 미열람",
+      "judgment": "403으로 본문 이력 확인 실패",
+      "nextAction": "실제 매입 업무라면 다른 시기·페이지의 공식 아카이브 확인"
+    },
+    {
+      "target": "example.com",
+      "check": "Safe Browsing 공개 상태",
+      "status": "확인됨",
+      "source": "https://transparencyreport.google.com/safe-browsing/search?url=example.com&hl=en",
+      "checkedAt": "2026-10-08T02:51:56.548511+00:00",
+      "observed": {
+        "input": "example.com",
+        "statusLabel": "No unsafe content found",
+        "httpStatus": 200
+      },
+      "scope": "공개 브라우저 화면의 example.com 현재 상태",
+      "limitation": "과거·백링크·검색 수동 조치·상표의 판정은 아님",
+      "judgment": "현재 조회 화면의 유해 콘텐츠 미발견",
+      "nextAction": "다른 항목과 구분해 해석"
+    },
+    {
+      "target": ".com",
+      "check": "일반 요금표",
+      "status": "확인됨",
+      "source": "https://porkbun.com/products/domains",
+      "checkedAt": "2026-10-08T02:27:12.516922+00:00",
+      "observed": {
+        "currency": "USD",
+        "unit": "cent",
+        "initial": 1108,
+        "renewal": 1108,
+        "threeYears": 3324,
+        "initialYears": 1,
+        "premium": false
+      },
+      "scope": "비프리미엄 일반 연간 요금표",
+      "limitation": "개별 후보 견적 아님; 미래 요금 유지·선택 상품 없음 가정; 결제 세금·환전 조건 미확인",
+      "judgment": "현재 표로 3년 예산 계산",
+      "nextAction": "후보 확정 후 정확한 이름의 최종 금액 재조회"
+    },
+    {
+      "target": ".xyz",
+      "check": "일반 요금표",
+      "status": "확인됨",
+      "source": "https://porkbun.com/products/domains",
+      "checkedAt": "2026-10-08T02:27:12.516922+00:00",
+      "observed": {
+        "currency": "USD",
+        "unit": "cent",
+        "initial": 204,
+        "renewal": 1421,
+        "threeYears": 3046,
+        "initialYears": 1,
+        "premium": false
+      },
+      "scope": "비프리미엄 일반 연간 요금표",
+      "limitation": "개별 후보 견적 아님; 미래 요금 유지·선택 상품 없음 가정; 결제 세금·환전 조건 미확인",
+      "judgment": "현재 표로 3년 예산 계산",
+      "nextAction": "후보 확정 후 정확한 이름의 최종 금액 재조회"
+    },
+    {
+      "target": "example.com",
+      "check": "Spamhaus",
+      "status": "미실시",
+      "source": null,
+      "checkedAt": null,
+      "observed": null,
+      "scope": "공개 대표 사례와 기존 이름 유지 적용",
+      "limitation": "이 사례에서 실시하지 않음",
+      "judgment": "결과 추정 금지",
+      "nextAction": "실제 요청에 해당 단계가 포함되면 수행"
+    },
+    {
+      "target": "icann.org",
+      "check": "백링크",
+      "status": "미실시",
+      "source": null,
+      "checkedAt": null,
+      "observed": null,
+      "scope": "공개 대표 사례와 기존 이름 유지 적용",
+      "limitation": "이 사례에서 실시하지 않음",
+      "judgment": "결과 추정 금지",
+      "nextAction": "실제 요청에 해당 단계가 포함되면 수행"
+    },
+    {
+      "target": "도메인 퀄리티 체커",
+      "check": "상표",
+      "status": "미실시",
+      "source": null,
+      "checkedAt": null,
+      "observed": null,
+      "scope": "공개 대표 사례와 기존 이름 유지 적용",
+      "limitation": "이 사례에서 실시하지 않음",
+      "judgment": "결과 추정 금지",
+      "nextAction": "실제 요청에 해당 단계가 포함되면 수행"
+    },
+    {
+      "target": "도메인 퀄리티 체커",
+      "check": "고객 선호 시험",
+      "status": "미실시",
+      "source": null,
+      "checkedAt": null,
+      "observed": null,
+      "scope": "공개 대표 사례와 기존 이름 유지 적용",
+      "limitation": "이 사례에서 실시하지 않음",
+      "judgment": "결과 추정 금지",
+      "nextAction": "실제 요청에 해당 단계가 포함되면 수행"
+    },
+    {
+      "target": "도메인 퀄리티 체커",
+      "check": "시각 에셋 제작",
+      "status": "미실시",
+      "source": null,
+      "checkedAt": null,
+      "observed": null,
+      "scope": "공개 대표 사례와 기존 이름 유지 적용",
+      "limitation": "이 사례에서 실시하지 않음",
+      "judgment": "결과 추정 금지",
+      "nextAction": "실제 요청에 해당 단계가 포함되면 수행"
+    }
+  ],
+  "branding": {
+    "input": "기존 프로젝트 이름과 사용자의 낙장·신규·브랜딩 지원 요청",
+    "preservedName": "도메인 퀄리티 체커",
+    "customerAssumption": true,
+    "newNameFinalized": false,
+    "purchaseExecuted": false
+  },
+  "assertions": {
+    "authoritativeRdapRegistered": 2,
+    "rdap404NotClaimedAvailable": true,
+    "reservedDomainExcluded": true,
+    "snapshotPointerNotContentReview": true,
+    "archiveContentRead": 1,
+    "archiveContent403RemainsUnknown": true,
+    "safeBrowsingExactInputVerified": true,
+    "priceCentsAndRenewalFormulaVerified": true
+  }
+}
